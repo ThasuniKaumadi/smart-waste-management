@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import Link from 'next/link'
 
-export default async function CitizenDashboard() {
+export default async function ResidentDashboard() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -24,7 +25,7 @@ export default async function CitizenDashboard() {
         </div>
         <div className="flex items-center gap-4">
           <span className="text-blue-100 text-sm">{profile?.full_name}</span>
-          <span className="bg-blue-600 text-xs px-2 py-1 rounded-full">Citizen</span>
+          <span className="bg-blue-600 text-xs px-2 py-1 rounded-full">Resident</span>
         </div>
       </nav>
 
@@ -34,14 +35,16 @@ export default async function CitizenDashboard() {
         </h1>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-blue-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Collection Schedule</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">View your area's waste collection schedule</p>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/resident/schedules">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-blue-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700">Collection Schedule</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">View your area waste collection schedule</p>
+              </CardContent>
+            </Card>
+          </Link>
 
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
             <CardHeader className="pb-2">
@@ -52,23 +55,27 @@ export default async function CitizenDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-orange-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Report Issue</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Report missed collections or complaints</p>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/resident/complaints">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-orange-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700">Report Issue</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">Report missed collections or complaints</p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-purple-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">My Complaints</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Track status of your submitted complaints</p>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/resident/complaints">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-purple-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700">My Complaints</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">Track status of your submitted complaints</p>
+              </CardContent>
+            </Card>
+          </Link>
 
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-teal-500">
             <CardHeader className="pb-2">
@@ -79,14 +86,16 @@ export default async function CitizenDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-red-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Report Dumping</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Report illegal dumping in your area</p>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/resident/report-dumping">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-red-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700">Report Dumping</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">Report illegal dumping in your area</p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
