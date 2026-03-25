@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import Link from 'next/link'
 
 export default async function ContractorDashboard() {
   const supabase = await createServerSupabaseClient()
@@ -31,10 +32,16 @@ export default async function ContractorDashboard() {
             <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Fleet Overview</CardTitle></CardHeader>
             <CardContent><p className="text-slate-500 text-sm">View all vehicles status and locations</p></CardContent>
           </Card>
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
-            <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Assign Routes</CardTitle></CardHeader>
-            <CardContent><p className="text-slate-500 text-sm">Assign drivers and vehicles to routes</p></CardContent>
-          </Card>
+         <Link href="/dashboard/contractor/routes">
+  <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
+    <CardHeader className="pb-2">
+      <CardTitle className="text-base text-slate-700">Assign Routes</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="text-slate-500 text-sm">Assign drivers and vehicles to routes</p>
+    </CardContent>
+  </Card>
+</Link>
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-orange-500">
             <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Compliance Score</CardTitle></CardHeader>
             <CardContent><p className="text-slate-500 text-sm">View your contractor compliance rating</p></CardContent>
