@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import LogoutButton from '@/components/LogoutButton'
 
 export default async function RecyclerDashboard() {
   const supabase = await createServerSupabaseClient()
@@ -22,6 +23,7 @@ export default async function RecyclerDashboard() {
         <div className="flex items-center gap-4">
           <span className="text-blue-100 text-sm">{profile?.full_name}</span>
           <span className="bg-green-600 text-xs px-2 py-1 rounded-full">Recycling Partner</span>
+          <LogoutButton />
         </div>
       </nav>
       <div className="max-w-6xl mx-auto p-6">

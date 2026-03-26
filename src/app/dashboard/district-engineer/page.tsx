@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
+import LogoutButton from '@/components/LogoutButton'
 
 export default async function DistrictEngineerDashboard() {
   const supabase = await createServerSupabaseClient()
@@ -34,6 +35,7 @@ export default async function DistrictEngineerDashboard() {
         <div className="flex items-center gap-4">
           <span className="text-blue-100 text-sm">{profile?.full_name}</span>
           <span className="bg-blue-600 text-xs px-2 py-1 rounded-full">District Engineer</span>
+          <LogoutButton />
         </div>
       </nav>
 

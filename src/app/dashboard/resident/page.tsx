@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
+import LogoutButton from '@/components/LogoutButton'
 
 export default async function ResidentDashboard() {
   const supabase = await createServerSupabaseClient()
@@ -26,10 +27,10 @@ export default async function ResidentDashboard() {
         <div className="flex items-center gap-4">
           <span className="text-blue-100 text-sm">{profile?.full_name}</span>
           <span className="bg-blue-600 text-xs px-2 py-1 rounded-full">Resident</span>
+        <LogoutButton />
         </div>
       </nav>
-
-      <div className="max-w-6xl mx-auto p-6">
+      <div className="max-w-6xl mx-auto p-6"> 
         <h1 className="text-2xl font-bold text-slate-800 mb-6">
           Welcome, {profile?.full_name}
         </h1>
