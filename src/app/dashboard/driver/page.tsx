@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import Link from 'next/link'
 
 export default async function DriverDashboard() {
   const supabase = await createServerSupabaseClient()
@@ -27,26 +28,36 @@ export default async function DriverDashboard() {
       <div className="max-w-6xl mx-auto p-6">
         <h1 className="text-2xl font-bold text-slate-800 mb-6">Driver Dashboard</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-blue-500">
-            <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Today's Route</CardTitle></CardHeader>
-            <CardContent><p className="text-slate-500 text-sm">View your assigned collection route and stops</p></CardContent>
-          </Card>
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
-            <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Confirm Collections</CardTitle></CardHeader>
-            <CardContent><p className="text-slate-500 text-sm">Mark stops as completed or skipped</p></CardContent>
-          </Card>
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-orange-500">
-            <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Fuel Log</CardTitle></CardHeader>
-            <CardContent><p className="text-slate-500 text-sm">Record fuel refill data and odometer readings</p></CardContent>
-          </Card>
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-red-500">
-            <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Report Breakdown</CardTitle></CardHeader>
-            <CardContent><p className="text-slate-500 text-sm">Report vehicle breakdown in real-time</p></CardContent>
-          </Card>
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-purple-500">
-            <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Collection History</CardTitle></CardHeader>
-            <CardContent><p className="text-slate-500 text-sm">View your past collection records</p></CardContent>
-          </Card>
+          <Link href="/dashboard/driver/routes">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-blue-500">
+              <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Today's Route</CardTitle></CardHeader>
+              <CardContent><p className="text-slate-500 text-sm">View your assigned collection route and stops</p></CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/driver/routes">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
+              <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Confirm Collections</CardTitle></CardHeader>
+              <CardContent><p className="text-slate-500 text-sm">Mark stops as completed or skipped</p></CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/driver/fuel">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-orange-500">
+              <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Fuel Log</CardTitle></CardHeader>
+              <CardContent><p className="text-slate-500 text-sm">Record fuel refill data and odometer readings</p></CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/driver/breakdown">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-red-500">
+              <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Report Breakdown</CardTitle></CardHeader>
+              <CardContent><p className="text-slate-500 text-sm">Report vehicle breakdown in real-time</p></CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/driver/routes">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-purple-500">
+              <CardHeader className="pb-2"><CardTitle className="text-base text-slate-700">Collection History</CardTitle></CardHeader>
+              <CardContent><p className="text-slate-500 text-sm">View your past collection records</p></CardContent>
+            </Card>
+          </Link>
         </div>
       </div>
     </div>

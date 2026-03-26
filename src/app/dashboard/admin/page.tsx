@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import Link from 'next/link'
 
 export default async function AdminDashboard() {
   const supabase = await createServerSupabaseClient()
@@ -77,14 +78,16 @@ export default async function AdminDashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-blue-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Manage Users</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Create, update and deactivate staff accounts</p>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/admin/users">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-blue-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700">Manage Users</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">Create, update and deactivate staff accounts</p>
+              </CardContent>
+            </Card>
+          </Link>
 
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
             <CardHeader className="pb-2">
