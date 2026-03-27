@@ -47,14 +47,16 @@ export default async function ResidentDashboard() {
             </Card>
           </Link>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
-            <CardHeader className="pb-2">
+          <Link href="/dashboard/resident/tracking">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
+              <CardHeader className="pb-2">
               <CardTitle className="text-base text-slate-700">Track Collection</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">See real-time location of collection vehicle</p>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">See real-time location of collection vehicle</p>
+              </CardContent>
+            </Card>
+          </Link>
 
           <Link href="/dashboard/resident/complaints">
             <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-orange-500">
