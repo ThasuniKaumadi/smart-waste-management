@@ -113,14 +113,16 @@ export default async function DistrictEngineerDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-red-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Waste Reports</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Review crowdsourced waste incident reports</p>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/district-engineer/waste-reports">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-red-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700">Waste Reports</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">Review crowdsourced waste incident reports</p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       </div>
     </div>
