@@ -1,0 +1,94 @@
+{
+    "nav": {
+        "title": "Smart Waste Management",
+        "logout": "Logout"
+    },
+    "auth": {
+        "login": "Login",
+        "register": "Register",
+        "email": "Email",
+        "password": "Password",
+        "fullName": "Full Name",
+        "role": "Role",
+        "district": "District",
+        "loginButton": "Sign In",
+        "registerButton": "Create Account",
+        "noAccount": "Don't have an account?",
+        "hasAccount": "Already have an account?",
+        "signUp": "Sign up",
+        "signIn": "Sign in"
+    },
+    "dashboard": {
+        "welcome": "Welcome",
+        "resident": "Resident",
+        "commercial": "Commercial Establishment",
+        "driver": "Driver",
+        "supervisor": "Supervisor",
+        "engineer": "Engineer",
+        "districtEngineer": "District Engineer",
+        "contractor": "Contractor",
+        "admin": "Admin",
+        "recycler": "Recycling Partner",
+        "facility": "Facility Operator"
+    },
+    "schedules": {
+        "title": "Collection Schedules",
+        "district": "District",
+        "wasteType": "Waste Type",
+        "day": "Collection Day",
+        "time": "Time",
+        "frequency": "Frequency",
+        "noSchedules": "No schedules published yet",
+        "organic": "Organic Waste",
+        "nonRecyclable": "Non-Recyclable Waste",
+        "recyclable": "Recyclable Waste",
+        "eWaste": "E-Waste",
+        "bulk": "Bulk Waste"
+    },
+    "complaints": {
+        "title": "My Complaints",
+        "newComplaint": "New Complaint",
+        "type": "Complaint Type",
+        "description": "Description",
+        "submit": "Submit Complaint",
+        "submitted": "Submitted",
+        "inProgress": "In Progress",
+        "resolved": "Resolved",
+        "missedCollection": "Missed Collection",
+        "delayedCollection": "Delayed Collection",
+        "illegalDumping": "Illegal Dumping",
+        "blockedDrainage": "Blocked Drainage",
+        "collectionRefusal": "Collection Refusal",
+        "other": "Other",
+        "noComplaints": "No complaints submitted yet"
+    },
+    "wasteReport": {
+        "title": "Report Waste Issue",
+        "type": "Report Type",
+        "description": "Description",
+        "photo": "Photo",
+        "location": "Location",
+        "useMyLocation": "Use My Location",
+        "submit": "Submit Report",
+        "illegalDumping": "Illegal Dumping",
+        "missedCollection": "Missed Collection",
+        "blockedDrainage": "Blocked Drainage"
+    },
+    "tracking": {
+        "title": "Track Collection Vehicle",
+        "noVehicle": "No active vehicle in your area right now"
+    },
+    "common": {
+        "loading": "Loading...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "edit": "Edit",
+        "delete": "Delete",
+        "back": "Back",
+        "yes": "Yes",
+        "no": "No",
+        "status": "Status",
+        "date": "Date",
+        "actions": "Actions"
+    }
+}

@@ -1,0 +1,94 @@
+{
+    "nav": {
+        "title": "கழிவு மேலாண்மை அமைப்பு",
+        "logout": "வெளியேறு"
+    },
+    "auth": {
+        "login": "உள்நுழைவு",
+        "register": "பதிவு செய்",
+        "email": "மின்னஞ்சல்",
+        "password": "கடவுச்சொல்",
+        "fullName": "முழு பெயர்",
+        "role": "பங்கு",
+        "district": "மாவட்டம்",
+        "loginButton": "உள்நுழைக",
+        "registerButton": "கணக்கு உருவாக்கு",
+        "noAccount": "கணக்கு இல்லையா?",
+        "hasAccount": "ஏற்கனவே கணக்கு உள்ளதா?",
+        "signUp": "பதிவு செய்யுங்கள்",
+        "signIn": "உள்நுழையுங்கள்"
+    },
+    "dashboard": {
+        "welcome": "வரவேற்கிறோம்",
+        "resident": "குடியிருப்பாளர்",
+        "commercial": "வணிக நிறுவனம்",
+        "driver": "ஓட்டுநர்",
+        "supervisor": "மேற்பார்வையாளர்",
+        "engineer": "பொறியாளர்",
+        "districtEngineer": "மாவட்ட பொறியாளர்",
+        "contractor": "ஒப்பந்தக்காரர்",
+        "admin": "நிர்வாகி",
+        "recycler": "மறுசுழற்சி கூட்டாளர்",
+        "facility": "வசதி இயக்குநர்"
+    },
+    "schedules": {
+        "title": "சேகரிப்பு அட்டவணைகள்",
+        "district": "மாவட்டம்",
+        "wasteType": "கழிவு வகை",
+        "day": "சேகரிப்பு நாள்",
+        "time": "நேரம்",
+        "frequency": "அதிர்வெண்",
+        "noSchedules": "அட்டவணைகள் இன்னும் வெளியிடப்படவில்லை",
+        "organic": "கரிம கழிவு",
+        "nonRecyclable": "மறுசுழற்சி செய்ய முடியாத கழிவு",
+        "recyclable": "மறுசுழற்சி கழிவு",
+        "eWaste": "மின்னணு கழிவு",
+        "bulk": "மொத்த கழிவு"
+    },
+    "complaints": {
+        "title": "என் புகார்கள்",
+        "newComplaint": "புதிய புகார்",
+        "type": "புகார் வகை",
+        "description": "விவரம்",
+        "submit": "புகார் சமர்ப்பி",
+        "submitted": "சமர்ப்பிக்கப்பட்டது",
+        "inProgress": "செயலில் உள்ளது",
+        "resolved": "தீர்க்கப்பட்டது",
+        "missedCollection": "தவறிய சேகரிப்பு",
+        "delayedCollection": "தாமதமான சேகரிப்பு",
+        "illegalDumping": "சட்டவிரோத கழிவு",
+        "blockedDrainage": "தடைபட்ட வடிகால்",
+        "collectionRefusal": "சேகரிப்பு மறுப்பு",
+        "other": "மற்றவை",
+        "noComplaints": "இன்னும் புகார்கள் சமர்ப்பிக்கப்படவில்லை"
+    },
+    "wasteReport": {
+        "title": "கழிவு சிக்கலை புகாரளி",
+        "type": "அறிக்கை வகை",
+        "description": "விவரம்",
+        "photo": "புகைப்படம்",
+        "location": "இடம்",
+        "useMyLocation": "என் இடத்தை பயன்படுத்து",
+        "submit": "அறிக்கையை சமர்ப்பி",
+        "illegalDumping": "சட்டவிரோத கழிவு",
+        "missedCollection": "தவறிய சேகரிப்பு",
+        "blockedDrainage": "தடைபட்ட வடிகால்"
+    },
+    "tracking": {
+        "title": "சேகரிப்பு வாகனத்தை கண்காணி",
+        "noVehicle": "இப்போது உங்கள் பகுதியில் செயலில் வாகனம் இல்லை"
+    },
+    "common": {
+        "loading": "ஏற்றுகிறது...",
+        "save": "சேமி",
+        "cancel": "ரத்து செய்",
+        "edit": "திருத்து",
+        "delete": "நீக்கு",
+        "back": "பின்னால்",
+        "yes": "ஆம்",
+        "no": "இல்லை",
+        "status": "நிலை",
+        "date": "தேதி",
+        "actions": "செயல்கள்"
+    }
+}
