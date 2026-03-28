@@ -86,15 +86,16 @@ export default async function DistrictEngineerDashboard() {
             </Card>
           </Link>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">District Performance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">View collection rates and compliance scores</p>
-            </CardContent>
-          </Card>
-
+          <Link href="/dashboard/district-engineer/performance">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700">District Performance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">View collection rates and compliance scores</p>
+              </CardContent>
+            </Card>
+          </Link>
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-purple-500">
             <CardHeader className="pb-2">
               <CardTitle className="text-base text-slate-700">Track Vehicles</CardTitle>
