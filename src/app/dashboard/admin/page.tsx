@@ -89,14 +89,16 @@ export default async function AdminDashboard() {
             </Card>
           </Link>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">System Overview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">View performance across all districts</p>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/admin/performance">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700">System Overview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">View performance across all districts</p>
+              </CardContent>
+            </Card>
+          </Link>
 
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-orange-500">
             <CardHeader className="pb-2">
