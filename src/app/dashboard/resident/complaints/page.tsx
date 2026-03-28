@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import Link from 'next/link'
+import { logComplaintOnChain } from '@/lib/blockchain'
 
 const COMPLAINT_TYPES = [
   { value: 'missed_collection', label: 'Missed Collection' },
@@ -98,13 +99,26 @@ export default function ResidentComplaintsPage() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const { error } = await supabase.from('complaints').insert({
+    const { data: complaintData, error } = await supabase.from('complaints').insert({
       submitted_by: user?.id,
       district: profile?.district,
       complaint_type: formData.complaint_type,
       description: formData.description,
       status: 'submitted',
-    })
+    }).select().single()
+
+    if (!error && complaintData) {
+      const txHash = await logComplaintOnChain(
+        complaintData.id,
+        profile?.district || ''
+      )
+      if (txHash) {
+        await supabase
+          .from('complaints')
+          .update({ blockchain_tx: txHash })
+          .eq('id', complaintData.id)
+      }
+    }
 
     if (error) {
       setMessage('Error: ' + error.message)
@@ -153,11 +167,10 @@ export default function ResidentComplaintsPage() {
         </div>
 
         {message && (
-          <div className={`p-3 rounded-lg mb-4 text-sm ${
-            message.startsWith('Error')
-              ? 'bg-red-50 text-red-600 border border-red-200'
-              : 'bg-green-50 text-green-600 border border-green-200'
-          }`}>
+          <div className={`p-3 rounded-lg mb-4 text-sm ${message.startsWith('Error')
+            ? 'bg-red-50 text-red-600 border border-red-200'
+            : 'bg-green-50 text-green-600 border border-green-200'
+            }`}>
             {message}
           </div>
         )}

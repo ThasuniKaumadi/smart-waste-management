@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import Link from 'next/link'
+import { logCollectionOnChain } from '@/lib/blockchain'
 
 const SKIP_REASONS = [
   { value: 'wrong_waste_type', label: 'Wrong waste type for today' },
@@ -118,16 +119,34 @@ export default function DriverRoutesPage() {
       .eq('id', stop.id)
 
     if (!error) {
+      const txHash = await logCollectionOnChain(
+        selectedRoute?.id || '',
+        user?.id || '',
+        status
+      )
+
       await supabase.from('collection_events').insert({
         route_id: selectedRoute?.id,
         driver_id: user?.id,
         address: stop.address,
         status,
         skip_reason: status === 'skipped' ? selectedSkipReason[stop.id] : null,
+        blockchain_tx: txHash,
       })
 
+      if (txHash) {
+        await supabase
+          .from('collection_stops')
+          .update({ blockchain_tx: txHash })
+          .eq('id', stop.id)
+      }
+
       if (selectedRoute) loadStops(selectedRoute)
-      setMessage(status === 'completed' ? '✓ Collection marked as completed' : '✓ Stop skipped')
+      setMessage(
+        txHash
+          ? `✓ Collection logged on blockchain! TX: ${txHash.slice(0, 20)}...`
+          : status === 'completed' ? '✓ Collection marked as completed' : '✓ Stop skipped'
+      )
     }
 
     setUpdatingStop(null)
@@ -162,11 +181,10 @@ export default function DriverRoutesPage() {
         <h1 className="text-2xl font-bold text-slate-800 mb-6">My Routes</h1>
 
         {message && (
-          <div className={`p-3 rounded-lg mb-4 text-sm ${
-            message.startsWith('Please')
+          <div className={`p-3 rounded-lg mb-4 text-sm ${message.startsWith('Please')
               ? 'bg-red-50 text-red-600 border border-red-200'
               : 'bg-green-50 text-green-600 border border-green-200'
-          }`}>
+            }`}>
             {message}
           </div>
         )}
@@ -240,11 +258,10 @@ export default function DriverRoutesPage() {
 
             <div className="space-y-3">
               {stops.map((stop) => (
-                <Card key={stop.id} className={`border-0 shadow-sm border-l-4 ${
-                  stop.status === 'completed' ? 'border-l-green-500' :
-                  stop.status === 'skipped' ? 'border-l-red-500' :
-                  'border-l-slate-300'
-                }`}>
+                <Card key={stop.id} className={`border-0 shadow-sm border-l-4 ${stop.status === 'completed' ? 'border-l-green-500' :
+                    stop.status === 'skipped' ? 'border-l-red-500' :
+                      'border-l-slate-300'
+                  }`}>
                   <CardContent className="py-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
@@ -253,11 +270,10 @@ export default function DriverRoutesPage() {
                             Stop {stop.stop_order}
                           </span>
                           {stop.status !== 'pending' && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              stop.status === 'completed'
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${stop.status === 'completed'
                                 ? 'bg-green-100 text-green-700'
                                 : 'bg-red-100 text-red-700'
-                            }`}>
+                              }`}>
                               {stop.status === 'completed' ? 'Completed' : 'Skipped'}
                             </span>
                           )}
