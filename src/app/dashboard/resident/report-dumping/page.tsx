@@ -53,6 +53,10 @@ export default function ReportDumpingPage() {
         location_address: '',
     })
 
+    const [latitude, setLatitude] = useState<number | null>(null)
+    const [longitude, setLongitude] = useState<number | null>(null)
+    const [locationLoading, setLocationLoading] = useState(false)
+    const [locationError, setLocationError] = useState('')
     useEffect(() => {
         loadData()
     }, [])
@@ -123,7 +127,6 @@ export default function ReportDumpingPage() {
                 photoUrl = urlData.publicUrl
             }
         }
-
         const { error } = await supabase.from('waste_reports').insert({
             submitted_by: user?.id,
             report_type: formData.report_type,
@@ -132,8 +135,9 @@ export default function ReportDumpingPage() {
             district: profile?.district,
             photo_url: photoUrl,
             status: 'pending',
+            latitude: latitude,
+            longitude: longitude,
         })
-
         if (error) {
             setMessage('Error: ' + error.message)
         } else {
@@ -145,6 +149,26 @@ export default function ReportDumpingPage() {
             loadData()
         }
         setSaving(false)
+    }
+    function getLocation() {
+        setLocationLoading(true)
+        setLocationError('')
+        if (!navigator.geolocation) {
+            setLocationError('Geolocation is not supported by your browser')
+            setLocationLoading(false)
+            return
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setLatitude(position.coords.latitude)
+                setLongitude(position.coords.longitude)
+                setLocationLoading(false)
+            },
+            () => {
+                setLocationError('Unable to get your location. Please allow location access.')
+                setLocationLoading(false)
+            }
+        )
     }
 
     return (
@@ -187,8 +211,8 @@ export default function ReportDumpingPage() {
 
                 {message && (
                     <div className={`p-3 rounded-lg mb-4 text-sm ${message.startsWith('Error')
-                            ? 'bg-red-50 text-red-600 border border-red-200'
-                            : 'bg-green-50 text-green-600 border border-green-200'
+                        ? 'bg-red-50 text-red-600 border border-red-200'
+                        : 'bg-green-50 text-green-600 border border-green-200'
                         }`}>
                         {message}
                     </div>
@@ -209,8 +233,8 @@ export default function ReportDumpingPage() {
                                                 key={type.value}
                                                 onClick={() => setFormData({ ...formData, report_type: type.value })}
                                                 className={`cursor-pointer rounded-xl border-2 p-4 transition-all ${formData.report_type === type.value
-                                                        ? 'border-blue-600 bg-blue-50'
-                                                        : 'border-slate-200 hover:border-blue-300'
+                                                    ? 'border-blue-600 bg-blue-50'
+                                                    : 'border-slate-200 hover:border-blue-300'
                                                     }`}
                                             >
                                                 <span className="text-2xl">{type.icon}</span>
@@ -276,7 +300,28 @@ export default function ReportDumpingPage() {
                                         )}
                                     </div>
                                 </div>
-
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-slate-700">Location</label>
+                                    <button
+                                        type="button"
+                                        onClick={getLocation}
+                                        className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm px-4 py-2 rounded-lg transition-colors"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        {locationLoading ? 'Getting location...' : 'Use My Location'}
+                                    </button>
+                                    {latitude && longitude && (
+                                        <p className="text-green-600 text-xs">
+                                            ✓ Location captured: {latitude.toFixed(4)}, {longitude.toFixed(4)}
+                                        </p>
+                                    )}
+                                    {locationError && (
+                                        <p className="text-red-500 text-xs">{locationError}</p>
+                                    )}
+                                </div>
                                 <Button
                                     type="submit"
                                     className="bg-blue-600 hover:bg-blue-700"
