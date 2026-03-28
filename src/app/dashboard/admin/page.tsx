@@ -116,14 +116,16 @@ export default async function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-teal-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Blockchain Logs</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">View all on-chain transaction records</p>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/admin/blockchain">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-teal-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700">Blockchain Logs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-500 text-sm">View all on-chain transaction records</p>
+              </CardContent>
+            </Card>
+          </Link>
 
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-red-500">
             <CardHeader className="pb-2">
