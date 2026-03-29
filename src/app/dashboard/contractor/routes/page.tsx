@@ -48,7 +48,7 @@ export default function ContractorRoutesPage() {
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<any>(null)
   const [message, setMessage] = useState('')
-  const [stops, setStops] = useState([''])
+  const [stops, setStops] = useState([{ address: '', is_commercial: false }])
   const [formData, setFormData] = useState({
     route_name: '',
     district: '',
@@ -92,7 +92,7 @@ export default function ContractorRoutesPage() {
   }
 
   function addStop() {
-    setStops([...stops, ''])
+    setStops([...stops, { address: '', is_commercial: false }])
   }
 
   function removeStop(index: number) {
@@ -101,7 +101,13 @@ export default function ContractorRoutesPage() {
 
   function updateStop(index: number, value: string) {
     const updated = [...stops]
-    updated[index] = value
+    updated[index] = { ...updated[index], address: value }
+    setStops(updated)
+  }
+
+  function toggleCommercial(index: number) {
+    const updated = [...stops]
+    updated[index] = { ...updated[index], is_commercial: !updated[index].is_commercial }
     setStops(updated)
   }
 
@@ -113,7 +119,7 @@ export default function ContractorRoutesPage() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const validStops = stops.filter(s => s.trim() !== '')
+    const validStops = stops.filter(s => s.address.trim() !== '')
     if (validStops.length === 0) {
       setMessage('Please add at least one collection stop')
       setSaving(false)
@@ -136,11 +142,12 @@ export default function ContractorRoutesPage() {
       return
     }
 
-    const stopsToInsert = validStops.map((address, index) => ({
+    const stopsToInsert = validStops.map((stop, index) => ({
       route_id: routeData.id,
-      address,
+      address: stop.address,
       stop_order: index + 1,
       status: 'pending',
+      is_commercial: stop.is_commercial,
     }))
 
     const { error: stopsError } = await supabase
@@ -159,7 +166,7 @@ export default function ContractorRoutesPage() {
         vehicle_number: '',
         date: new Date().toISOString().split('T')[0],
       })
-      setStops([''])
+      setStops([{ address: '', is_commercial: false }])
       loadData()
     }
     setSaving(false)
@@ -207,11 +214,10 @@ export default function ContractorRoutesPage() {
         </div>
 
         {message && (
-          <div className={`p-3 rounded-lg mb-4 text-sm ${
-            message.startsWith('Error')
-              ? 'bg-red-50 text-red-600 border border-red-200'
-              : 'bg-green-50 text-green-600 border border-green-200'
-          }`}>
+          <div className={`p-3 rounded-lg mb-4 text-sm ${message.startsWith('Error')
+            ? 'bg-red-50 text-red-600 border border-red-200'
+            : 'bg-green-50 text-green-600 border border-green-200'
+            }`}>
             {message}
           </div>
         )}
@@ -300,15 +306,26 @@ export default function ContractorRoutesPage() {
                       + Add Stop
                     </Button>
                   </div>
+
                   {stops.map((stop, index) => (
                     <div key={index} className="flex items-center gap-2">
                       <span className="text-slate-400 text-sm w-6">{index + 1}.</span>
                       <Input
                         placeholder={`Stop ${index + 1} address`}
-                        value={stop}
+                        value={stop.address}
                         onChange={(e) => updateStop(index, e.target.value)}
                         className="flex-1"
                       />
+                      <button
+                        type="button"
+                        onClick={() => toggleCommercial(index)}
+                        className={`text-xs px-2 py-1 rounded-lg border transition-colors whitespace-nowrap ${stop.is_commercial
+                          ? 'bg-orange-100 text-orange-700 border-orange-300'
+                          : 'bg-slate-100 text-slate-500 border-slate-200'
+                          }`}
+                      >
+                        {stop.is_commercial ? '🏢 Commercial' : 'Residential'}
+                      </button>
                       {stops.length > 1 && (
                         <Button
                           type="button"
@@ -322,15 +339,15 @@ export default function ContractorRoutesPage() {
                       )}
                     </div>
                   ))}
-                </div>
 
-                <Button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700"
-                  disabled={saving}
-                >
-                  {saving ? 'Creating...' : 'Create Route'}
-                </Button>
+                  <Button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={saving}
+                  >
+                    {saving ? 'Creating...' : 'Create Route'}
+                  </Button>
+                </div>
               </form>
             </CardContent>
           </Card>
@@ -346,12 +363,11 @@ export default function ContractorRoutesPage() {
         ) : (
           <div className="space-y-4">
             {routes.map((route) => (
-              <Card key={route.id} className={`border-0 shadow-sm border-l-4 ${
-                route.status === 'completed' ? 'border-l-green-500' :
+              <Card key={route.id} className={`border-0 shadow-sm border-l-4 ${route.status === 'completed' ? 'border-l-green-500' :
                 route.status === 'active' ? 'border-l-blue-500' :
-                route.status === 'cancelled' ? 'border-l-red-500' :
-                'border-l-yellow-500'
-              }`}>
+                  route.status === 'cancelled' ? 'border-l-red-500' :
+                    'border-l-yellow-500'
+                }`}>
                 <CardContent className="py-4">
                   <div className="flex items-center justify-between">
                     <div>

@@ -30,6 +30,7 @@ interface Stop {
   skip_reason: string
   bin_count: number
   blockchain_tx: string
+  is_commercial: boolean
 }
 
 interface Route {
@@ -50,6 +51,7 @@ export default function DriverRoutesPage() {
   const [updatingStop, setUpdatingStop] = useState<string | null>(null)
   const [selectedSkipReason, setSelectedSkipReason] = useState<Record<string, string>>({})
   const [message, setMessage] = useState('')
+  const [binCounts, setBinCounts] = useState<Record<string, number>>({})
 
   useEffect(() => {
     loadData()
@@ -107,6 +109,7 @@ export default function DriverRoutesPage() {
     const updateData: any = {
       status,
       completed_at: new Date().toISOString(),
+      bin_count: binCounts[stop.id] || 0,
     }
 
     if (status === 'skipped') {
@@ -182,8 +185,8 @@ export default function DriverRoutesPage() {
 
         {message && (
           <div className={`p-3 rounded-lg mb-4 text-sm ${message.startsWith('Please')
-              ? 'bg-red-50 text-red-600 border border-red-200'
-              : 'bg-green-50 text-green-600 border border-green-200'
+            ? 'bg-red-50 text-red-600 border border-red-200'
+            : 'bg-green-50 text-green-600 border border-green-200'
             }`}>
             {message}
           </div>
@@ -259,8 +262,8 @@ export default function DriverRoutesPage() {
             <div className="space-y-3">
               {stops.map((stop) => (
                 <Card key={stop.id} className={`border-0 shadow-sm border-l-4 ${stop.status === 'completed' ? 'border-l-green-500' :
-                    stop.status === 'skipped' ? 'border-l-red-500' :
-                      'border-l-slate-300'
+                  stop.status === 'skipped' ? 'border-l-red-500' :
+                    'border-l-slate-300'
                   }`}>
                   <CardContent className="py-4">
                     <div className="flex items-start justify-between gap-4">
@@ -271,8 +274,8 @@ export default function DriverRoutesPage() {
                           </span>
                           {stop.status !== 'pending' && (
                             <span className={`text-xs px-2 py-0.5 rounded-full ${stop.status === 'completed'
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-700'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
                               }`}>
                               {stop.status === 'completed' ? 'Completed' : 'Skipped'}
                             </span>
@@ -288,6 +291,19 @@ export default function DriverRoutesPage() {
 
                       {stop.status === 'pending' && (
                         <div className="flex flex-col gap-2 min-w-48">
+                          {stop.is_commercial && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-slate-500 whitespace-nowrap">Bin count:</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={binCounts[stop.id] || ''}
+                                onChange={(e) => setBinCounts({ ...binCounts, [stop.id]: parseInt(e.target.value) || 0 })}
+                                className="w-16 border border-slate-200 rounded px-2 py-1 text-xs text-center"
+                                placeholder="0"
+                              />
+                            </div>
+                          )}
                           <Select
                             onValueChange={(v) => setSelectedSkipReason({
                               ...selectedSkipReason,
