@@ -13,11 +13,11 @@ export function useTranslations(namespace: string) {
 
         import(`@/messages/${locale}.json`)
             .then(mod => {
-                setMessages(mod.default[namespace] || {})
+                setMessages((mod.default as Messages)[namespace] || {})
             })
             .catch(() => {
                 import(`@/messages/en.json`)
-                    .then(mod => setMessages(mod.default[namespace] || {}))
+                    .then(mod => setMessages((mod.default as Messages)[namespace] || {}))
             })
     }, [namespace])
 

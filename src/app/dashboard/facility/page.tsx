@@ -1,128 +1,225 @@
-import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import LogoutButton from '@/components/LogoutButton'
+'use client'
 
-export default async function FacilityDashboard() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase'
+import Link from 'next/link'
+import DashboardLayout from '@/components/DashboardLayout'
 
-  const { data: profile } = await supabase
-    .from('profiles').select('*').eq('id', user.id).single()
+const FACILITY_NAV = [
+  { label: 'Overview', href: '/dashboard/facility-operator', icon: 'dashboard' },
+  { label: 'Collections', href: '/dashboard/facility-operator/collections', icon: 'delete_sweep' },
+  { label: 'Schedules', href: '/dashboard/facility-operator/schedules', icon: 'calendar_month' },
+]
 
-  if (profile?.role !== 'facility_operator') redirect('/login')
+export default function FacilityOperatorDashboardPage() {
+  const [profile, setProfile] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalCollections: 0,
+    completedCollections: 0,
+    totalSchedules: 0,
+    totalRoutes: 0,
+    totalReports: 0,
+  })
+
+  useEffect(() => { loadData() }, [])
+
+  async function loadData() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    setProfile(p)
+
+    const [
+      { count: totalCollections },
+      { count: completedCollections },
+      { count: totalSchedules },
+      { count: totalRoutes },
+      { count: totalReports },
+    ] = await Promise.all([
+      supabase.from('collection_events').select('*', { count: 'exact', head: true }),
+      supabase.from('collection_events').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
+      supabase.from('schedules').select('*', { count: 'exact', head: true }),
+      supabase.from('routes').select('*', { count: 'exact', head: true }),
+      supabase.from('waste_reports').select('*', { count: 'exact', head: true }),
+    ])
+
+    setStats({
+      totalCollections: totalCollections || 0,
+      completedCollections: completedCollections || 0,
+      totalSchedules: totalSchedules || 0,
+      totalRoutes: totalRoutes || 0,
+      totalReports: totalReports || 0,
+    })
+
+    setLoading(false)
+  }
+
+  const completionRate = stats.totalCollections > 0
+    ? Math.round((stats.completedCollections / stats.totalCollections) * 100) : 0
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-slate-700 text-white px-6 py-4 flex items-center justify-between shadow">
-        <div className="flex items-center gap-3">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
-          <span className="font-semibold text-lg">Smart Waste Management</span>
+    <DashboardLayout
+      role="Facility Operator"
+      userName={profile?.full_name || ''}
+      navItems={FACILITY_NAV}
+    >
+      <style>{`
+        .material-symbols-outlined {
+          font-family: 'Material Symbols Outlined';
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+          display: inline-block; vertical-align: middle; line-height: 1;
+        }
+        .font-headline { font-family: 'Manrope', sans-serif; }
+        .bento-card {
+          background: white; border-radius: 16px;
+          box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08);
+          border: 1px solid rgba(0,69,13,0.04);
+          transition: all 0.4s cubic-bezier(0.05,0.7,0.1,1.0); overflow: hidden;
+        }
+        .bento-card:hover { transform: translateY(-4px); box-shadow: 0 20px 50px -15px rgba(24,28,34,0.12); }
+        .bento-card-green {
+          background: #00450d; border-radius: 16px; color: white;
+          transition: all 0.4s cubic-bezier(0.05,0.7,0.1,1.0); overflow: hidden; position: relative;
+        }
+        .quick-link {
+          background: white; border-radius: 16px; padding: 24px;
+          border: 1px solid rgba(0,69,13,0.06);
+          transition: all 0.35s cubic-bezier(0.05,0.7,0.1,1.0); text-decoration: none; display: block;
+        }
+        .quick-link:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -15px rgba(0,69,13,0.12); border-color: rgba(0,69,13,0.15); }
+        @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        .s1 { animation: staggerIn 0.5s ease 0.05s both; }
+        .s2 { animation: staggerIn 0.5s ease 0.1s both; }
+        .s3 { animation: staggerIn 0.5s ease 0.15s both; }
+      `}</style>
+
+      <section className="mb-10 s1">
+        <span className="text-xs font-bold uppercase block mb-2"
+          style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
+          Facility Operations Console · ClearPath
+        </span>
+        <h1 className="font-headline font-extrabold tracking-tight"
+          style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
+          Facility <span style={{ color: '#1b5e20' }}>Control</span>
+        </h1>
+      </section>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-24">
+          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-slate-100 text-sm">{profile?.full_name}</span>
-          <span className="bg-slate-600 text-xs px-2 py-1 rounded-full">Facility Operator</span>
-          <LogoutButton />
-        </div>
-      </nav>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
+            <div className="bento-card-green md:col-span-8 p-8 s2">
+              <div className="absolute top-0 right-0 w-56 h-56 rounded-full -mr-20 -mt-20"
+                style={{ background: 'rgba(163,246,156,0.06)' }} />
+              <div className="relative z-10">
+                <div className="flex items-start justify-between mb-8">
+                  <div>
+                    <span className="text-xs font-bold uppercase block mb-2"
+                      style={{ letterSpacing: '0.2em', color: 'rgba(163,246,156,0.6)', fontFamily: 'Manrope, sans-serif' }}>
+                      Facility Overview
+                    </span>
+                    <h2 className="font-headline font-extrabold text-3xl tracking-tight">Operations Status</h2>
+                    <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', marginTop: '4px' }}>
+                      {profile?.organisation_name || profile?.full_name} · CMC Network
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '28px' }}>factory</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Collections', value: stats.totalCollections, icon: 'delete_sweep' },
+                    { label: 'Completed', value: stats.completedCollections, icon: 'check_circle' },
+                    { label: 'Schedules', value: stats.totalSchedules, icon: 'calendar_month' },
+                    { label: 'Waste Reports', value: stats.totalReports, icon: 'report' },
+                  ].map(m => (
+                    <div key={m.label} className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <span className="material-symbols-outlined mb-2 block"
+                        style={{ color: 'rgba(163,246,156,0.7)', fontSize: '18px' }}>{m.icon}</span>
+                      <p className="font-headline font-bold text-2xl">{m.value}</p>
+                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{m.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-      <div className="max-w-6xl mx-auto p-6">
-        <h1 className="text-2xl font-bold text-slate-800 mb-2">Facility Dashboard</h1>
-        <p className="text-slate-500 text-sm mb-6">
-          Facility: {profile?.organisation_name || profile?.full_name}
-        </p>
+            <div className="bento-card md:col-span-4 p-8 s2 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>Throughput</h2>
+                  <span className="material-symbols-outlined" style={{ color: '#717a6d', fontSize: '20px' }}>insights</span>
+                </div>
+                <div className="flex flex-col items-center mb-4">
+                  <div className="relative w-32 h-32 mb-3">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="#f0fdf4" strokeWidth="8" />
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="#00450d" strokeWidth="8"
+                        strokeLinecap="round" strokeDasharray={`${completionRate * 2.51} 251`} />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="font-headline font-extrabold text-2xl" style={{ color: '#181c22' }}>{completionRate}%</span>
+                      <span className="text-xs" style={{ color: '#717a6d' }}>processed</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-center" style={{ color: '#717a6d' }}>
+                  {stats.completedCollections} of {stats.totalCollections} processed
+                </p>
+              </div>
+              <div className="mt-4 p-4 rounded-xl" style={{ background: '#f0fdf4' }}>
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '16px' }}>verified</span>
+                  <span className="text-xs font-medium" style={{ color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>
+                    Blockchain verified · Polygon Amoy
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-slate-600 text-white border-0">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-100">Today's Intake (kg)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">0</p>
-              <p className="text-slate-300 text-xs mt-1">Waste received today</p>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6 s3">
+            {[
+              { label: 'Collections', value: stats.totalCollections, sub: `${completionRate}% done`, icon: 'delete_sweep', color: '#00450d' },
+              { label: 'Completed', value: stats.completedCollections, sub: 'Processed items', icon: 'check_circle', color: '#1b5e20' },
+              { label: 'Schedules', value: stats.totalSchedules, sub: 'Active schedules', icon: 'calendar_month', color: '#2e7d32' },
+              { label: 'Routes', value: stats.totalRoutes, sub: 'Total routes', icon: 'route', color: '#388e3c' },
+            ].map(m => (
+              <div key={m.label} className="bento-card p-6">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: `${m.color}12` }}>
+                  <span className="material-symbols-outlined" style={{ color: m.color, fontSize: '20px' }}>{m.icon}</span>
+                </div>
+                <p className="font-headline font-extrabold text-3xl tracking-tight mb-1" style={{ color: '#181c22' }}>{m.value}</p>
+                <p className="text-xs font-bold uppercase mb-1" style={{ letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>{m.label}</p>
+                <p className="text-xs font-semibold" style={{ color: m.color }}>{m.sub}</p>
+              </div>
+            ))}
+          </div>
 
-          <Card className="bg-green-600 text-white border-0">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-green-100">Capacity Used</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">0%</p>
-              <p className="text-green-200 text-xs mt-1">Current capacity</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-blue-600 text-white border-0">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-blue-100">Vehicles Today</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">0</p>
-              <p className="text-blue-200 text-xs mt-1">Collection trucks received</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-slate-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Intake Log</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Record incoming waste tonnage by vehicle</p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Capacity Monitor</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Monitor facility storage capacity levels</p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-blue-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Vehicle Log</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Track incoming and outgoing vehicles</p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-orange-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Processing Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Update waste processing and sorting status</p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-purple-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Monthly Reports</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Generate monthly facility reports for CMC</p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-teal-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-700">Blockchain Verify</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Verify delivery records on blockchain</p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 s3">
+            {[
+              { label: 'View Collections', desc: 'Browse all collection events', icon: 'delete_sweep', href: '/dashboard/facility-operator/collections', color: '#00450d' },
+              { label: 'Schedules', desc: 'View upcoming collection schedules', icon: 'calendar_month', href: '/dashboard/facility-operator/schedules', color: '#1b5e20' },
+              { label: 'CMC Network', desc: 'Connected to Colombo Municipal Council', icon: 'hub', href: '/dashboard/facility-operator', color: '#2e7d32' },
+            ].map(link => (
+              <Link key={link.href} href={link.href} className="quick-link">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: `${link.color}12` }}>
+                  <span className="material-symbols-outlined" style={{ color: link.color, fontSize: '22px' }}>{link.icon}</span>
+                </div>
+                <p className="font-bold text-sm mb-1" style={{ color: '#181c22', fontFamily: 'Manrope, sans-serif' }}>{link.label}</p>
+                <p className="text-xs" style={{ color: '#717a6d' }}>{link.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+    </DashboardLayout>
   )
 }
