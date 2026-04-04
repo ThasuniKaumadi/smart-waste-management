@@ -1,18 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import Link from 'next/link'
 import { logCollectionOnChain } from '@/lib/blockchain'
+import { createExceptionAlert } from '@/lib/alerts'
 
 const SKIP_REASONS = [
   { value: 'wrong_waste_type', label: 'Wrong waste type for today' },
@@ -31,6 +24,7 @@ interface Stop {
   bin_count: number
   blockchain_tx: string
   is_commercial: boolean
+  commercial_id: string | null
 }
 
 interface Route {
@@ -40,9 +34,11 @@ interface Route {
   vehicle_number: string
   date: string
   status: string
+  waste_type: string
 }
 
 export default function DriverRoutesPage() {
+  const router = useRouter()
   const [routes, setRoutes] = useState<Route[]>([])
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   const [stops, setStops] = useState<Stop[]>([])
@@ -50,33 +46,30 @@ export default function DriverRoutesPage() {
   const [profile, setProfile] = useState<any>(null)
   const [updatingStop, setUpdatingStop] = useState<string | null>(null)
   const [selectedSkipReason, setSelectedSkipReason] = useState<Record<string, string>>({})
-  const [message, setMessage] = useState('')
+  const [toast, setToast] = useState('')
+  const [toastType, setToastType] = useState<'success' | 'error' | 'chain'>('success')
   const [binCounts, setBinCounts] = useState<Record<string, number>>({})
+  const [dispatchingRoute, setDispatchingRoute] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  useEffect(() => { loadData() }, [])
+
+  function showToast(msg: string, type: 'success' | 'error' | 'chain' = 'success') {
+    setToast(msg); setToastType(type)
+    setTimeout(() => setToast(''), 4000)
+  }
 
   async function loadData() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-
+    if (!user) { router.push('/login'); return }
+    const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    if (!profileData || profileData.role !== 'driver') { router.push('/login'); return }
     setProfile(profileData)
-
     const { data: routesData } = await supabase
-      .from('routes')
-      .select('*')
+      .from('routes').select('*')
       .eq('driver_id', user.id)
       .in('status', ['pending', 'active'])
       .order('date', { ascending: true })
-
     setRoutes(routesData || [])
     setLoading(false)
   }
@@ -84,271 +77,319 @@ export default function DriverRoutesPage() {
   async function loadStops(route: Route) {
     setSelectedRoute(route)
     const supabase = createClient()
-
     const { data: stopsData } = await supabase
-      .from('collection_stops')
-      .select('*')
-      .eq('route_id', route.id)
-      .order('stop_order', { ascending: true })
-
+      .from('collection_stops').select('*')
+      .eq('route_id', route.id).order('stop_order', { ascending: true })
     setStops(stopsData || [])
+    const routeDate = new Date(route.date)
+    const hoursPast = (Date.now() - routeDate.getTime()) / (1000 * 60 * 60)
+    if (route.status === 'pending' && hoursPast > 2) {
+      await createExceptionAlert({
+        type: 'route_not_started', title: 'Route Not Started On Time',
+        message: `Route "${route.route_name}" in ${route.district} has not been started.`,
+        severity: 'high', route_id: route.id, driver_id: profile?.id,
+      })
+    }
+  }
+
+  async function handleDispatch(e: React.MouseEvent, route: Route) {
+    e.stopPropagation()
+    setDispatchingRoute(route.id)
+    try {
+      const res = await fetch('/api/handoff/create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route_id: route.id, driver_id: profile?.id, waste_type: route.waste_type || 'General', estimated_quantity: 0 }),
+      })
+      const data = await res.json()
+      if (data.handoff) alert(`📦 Handoff Code: ${data.handoff.handoff_code}\n\nShare this 6-digit code with the facility operator.\nExpires in 30 minutes.`)
+      else alert('Failed to generate handoff code.')
+    } catch { alert('Something went wrong.') }
+    setDispatchingRoute(null)
   }
 
   async function markStop(stop: Stop, status: 'completed' | 'skipped') {
-    if (status === 'skipped' && !selectedSkipReason[stop.id]) {
-      setMessage('Please select a reason before skipping')
-      return
-    }
-
+    if (status === 'skipped' && !selectedSkipReason[stop.id]) { showToast('Please select a skip reason first', 'error'); return }
     setUpdatingStop(stop.id)
-    setMessage('')
-
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-
-    const updateData: any = {
-      status,
-      completed_at: new Date().toISOString(),
-      bin_count: binCounts[stop.id] || 0,
-    }
-
-    if (status === 'skipped') {
-      updateData.skip_reason = selectedSkipReason[stop.id]
-    }
-
-    const { error } = await supabase
-      .from('collection_stops')
-      .update(updateData)
-      .eq('id', stop.id)
-
+    const bins = binCounts[stop.id] || 0
+    const updateData: any = { status, completed_at: new Date().toISOString(), bin_count: bins }
+    if (status === 'skipped') updateData.skip_reason = selectedSkipReason[stop.id]
+    const { error } = await supabase.from('collection_stops').update(updateData).eq('id', stop.id)
     if (!error) {
-      const txHash = await logCollectionOnChain(
-        selectedRoute?.id || '',
-        user?.id || '',
-        status
-      )
-
-      await supabase.from('collection_events').insert({
-        route_id: selectedRoute?.id,
-        driver_id: user?.id,
-        address: stop.address,
-        status,
-        skip_reason: status === 'skipped' ? selectedSkipReason[stop.id] : null,
-        blockchain_tx: txHash,
-      })
-
-      if (txHash) {
-        await supabase
-          .from('collection_stops')
-          .update({ blockchain_tx: txHash })
-          .eq('id', stop.id)
+      const txHash = await logCollectionOnChain(selectedRoute?.id || '', user?.id || '', status)
+      const { data: eventData } = await supabase.from('collection_events').insert({
+        route_id: selectedRoute?.id, driver_id: user?.id, address: stop.address,
+        status, skip_reason: status === 'skipped' ? selectedSkipReason[stop.id] : null, blockchain_tx: txHash,
+      }).select().single()
+      if (txHash) await supabase.from('collection_stops').update({ blockchain_tx: txHash }).eq('id', stop.id)
+      if (status === 'completed' && stop.is_commercial && stop.commercial_id) {
+        try {
+          await fetch('/api/payhere/create-order', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ collection_event_id: eventData?.id, commercial_id: stop.commercial_id, bin_count: bins }),
+          })
+        } catch (err) { console.error('Billing trigger failed:', err) }
       }
-
+      if (status === 'skipped') {
+        const skipReason = selectedSkipReason[stop.id]
+        const skipLabel = SKIP_REASONS.find(r => r.value === skipReason)?.label || skipReason
+        const severity = skipReason === 'vehicle_breakdown' ? 'critical' : skipReason === 'access_denied' ? 'high' : 'medium'
+        await createExceptionAlert({ type: 'stop_skipped', title: 'Collection Stop Skipped', message: `Stop ${stop.stop_order} at "${stop.address}" skipped. Reason: ${skipLabel}.`, severity, route_id: selectedRoute?.id, driver_id: user?.id, collection_event_id: eventData?.id })
+        const updatedStops = stops.map(s => s.id === stop.id ? { ...s, status: 'skipped' } : s)
+        if (updatedStops.every(s => s.status === 'skipped')) {
+          await createExceptionAlert({ type: 'all_stops_skipped', title: 'All Stops Skipped', message: `All stops on "${selectedRoute?.route_name}" skipped.`, severity: 'critical', route_id: selectedRoute?.id, driver_id: user?.id })
+        }
+        if (skipReason === 'vehicle_breakdown') {
+          await createExceptionAlert({ type: 'breakdown_reported', title: 'Vehicle Breakdown Indicated', message: `Breakdown at stop ${stop.stop_order} on route "${selectedRoute?.route_name}". Vehicle: ${selectedRoute?.vehicle_number}.`, severity: 'critical', route_id: selectedRoute?.id, driver_id: user?.id, collection_event_id: eventData?.id })
+        }
+      }
       if (selectedRoute) loadStops(selectedRoute)
-      setMessage(
-        txHash
-          ? `✓ Collection logged on blockchain! TX: ${txHash.slice(0, 20)}...`
-          : status === 'completed' ? '✓ Collection marked as completed' : '✓ Stop skipped'
-      )
+      if (txHash) showToast(`Logged on blockchain · TX: ${txHash.slice(0, 16)}...`, 'chain')
+      else if (status === 'completed') showToast(stop.is_commercial && stop.commercial_id ? 'Completed · Invoice generated' : 'Stop marked as completed')
+      else showToast('Stop skipped · Supervisor notified')
     }
-
     setUpdatingStop(null)
   }
 
   const completedCount = stops.filter(s => s.status === 'completed').length
   const skippedCount = stops.filter(s => s.status === 'skipped').length
   const pendingCount = stops.filter(s => s.status === 'pending').length
+  const progress = stops.length > 0 ? Math.round(((completedCount + skippedCount) / stops.length) * 100) : 0
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-blue-700 text-white px-6 py-4 flex items-center justify-between shadow">
-        <div className="flex items-center gap-3">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          <span className="font-semibold text-lg">Smart Waste Management</span>
+    <div style={{ minHeight: '100vh', background: '#f4f6f3', fontFamily: "'Inter', sans-serif" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Manrope:wght@400;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+        .material-symbols-outlined { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+        .nav-link { transition:color 0.2s,background 0.2s; text-decoration:none; }
+        .nav-link:hover { background:rgba(0,69,13,0.07); color:#00450d; }
+        .route-card { transition:transform 0.18s,box-shadow 0.18s; cursor:pointer; }
+        .route-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09); }
+        .stop-card { transition:box-shadow 0.15s; }
+        .stop-card:hover { box-shadow:0 4px 16px rgba(0,0,0,0.07); }
+        .done-btn { flex:1; background:linear-gradient(135deg,#00450d,#1b5e20); color:white; border:none; border-radius:8px; padding:9px 12px; font-family:'Manrope',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:4px; box-shadow:0 2px 8px rgba(0,69,13,0.2); }
+        .done-btn:hover:not(:disabled) { box-shadow:0 4px 14px rgba(0,69,13,0.3); transform:translateY(-1px); }
+        .done-btn:disabled { opacity:0.5; cursor:not-allowed; }
+        .skip-btn { flex:1; background:rgba(220,38,38,0.07); color:#dc2626; border:1.5px solid rgba(220,38,38,0.18); border-radius:8px; padding:9px 12px; font-family:'Manrope',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:4px; }
+        .skip-btn:hover:not(:disabled) { background:rgba(220,38,38,0.12); }
+        .skip-btn:disabled { opacity:0.5; cursor:not-allowed; }
+        .dispatch-btn { background:rgba(124,58,237,0.07); color:#7c3aed; border:1.5px solid rgba(124,58,237,0.18); border-radius:8px; padding:7px 12px; font-family:'Manrope',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:4px; }
+        .dispatch-btn:hover:not(:disabled) { background:rgba(124,58,237,0.12); }
+        .dispatch-btn:disabled { opacity:0.5; cursor:not-allowed; }
+        .start-btn { background:#00450d; color:white; border:none; border-radius:8px; padding:8px 16px; font-family:'Manrope',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:5px; }
+        .start-btn:hover { background:#1b5e20; box-shadow:0 3px 10px rgba(0,69,13,0.25); }
+        .back-btn { background:rgba(0,0,0,0.05); color:#717a6d; border:none; border-radius:8px; padding:7px 12px; font-family:'Manrope',sans-serif; font-weight:600; font-size:12px; cursor:pointer; transition:background 0.2s; display:inline-flex; align-items:center; gap:4px; }
+        .back-btn:hover { background:rgba(0,0,0,0.09); }
+        .skip-select { width:100%; border:1.5px solid #e4ede4; border-radius:8px; padding:8px 28px 8px 10px; font-size:12px; color:#41493e; font-family:'Inter',sans-serif; outline:none; background:#f9fbf9; cursor:pointer; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2341493e'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; background-size:12px; }
+        .skip-select:focus { border-color:#00450d; background-color:white; }
+        .bin-input { width:52px; border:1.5px solid #e4ede4; border-radius:6px; padding:6px 8px; font-size:12px; text-align:center; color:#181c22; outline:none; background:#f9fbf9; }
+        .bin-input:focus { border-color:#00450d; background:white; }
+        .toast { animation:slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform:translateY(12px) translateX(-50%); opacity:0; } to { transform:translateY(0) translateX(-50%); opacity:1; } }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .progress-bar { height:6px; background:#e4ede4; border-radius:3px; overflow:hidden; }
+        .progress-fill { height:100%; background:linear-gradient(90deg,#00450d,#43a047); border-radius:3px; transition:width 0.5s ease; }
+      `}</style>
+
+      {toast && (
+        <div className="toast" style={{ position: 'fixed', bottom: '24px', left: '50%', background: toastType === 'error' ? '#dc2626' : toastType === 'chain' ? '#1d4ed8' : '#181c22', color: 'white', padding: '10px 20px', borderRadius: '9999px', fontSize: '13px', fontWeight: 500, zIndex: 1000, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '16px', color: toastType === 'error' ? '#fca5a5' : toastType === 'chain' ? '#93c5fd' : '#4ade80' }}>
+            {toastType === 'error' ? 'error' : toastType === 'chain' ? 'link' : 'check_circle'}
+          </span>
+          {toast}
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-blue-100 text-sm">{profile?.full_name}</span>
-          <span className="bg-blue-600 text-xs px-2 py-1 rounded-full">Driver</span>
+      )}
+
+      <nav style={{ background: 'white', borderBottom: '1px solid rgba(0,0,0,0.06)', padding: '0 32px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40, boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <Link href="/dashboard/driver" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '22px', color: '#00450d' }}>eco</span>
+            <span style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800, fontSize: '16px', color: '#00450d', letterSpacing: '-0.02em' }}>EcoLedger</span>
+          </Link>
+          <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.1)' }} />
+          <Link href="/dashboard/driver" className="nav-link" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px', borderRadius: '8px', color: '#717a6d', fontSize: '13px', fontWeight: 500 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_back</span>
+            Driver Dashboard
+          </Link>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: 0 }}>{profile?.full_name}</p>
+            <p style={{ fontSize: '11px', color: '#717a6d', margin: 0 }}>Driver</p>
+          </div>
+          <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'linear-gradient(135deg,#00450d,#1b5e20)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '13px', fontWeight: 700 }}>
+            {profile?.full_name?.charAt(0) || 'D'}
+          </div>
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <Link href="/dashboard/driver" className="text-blue-600 hover:underline text-sm">
-            ← Back to Dashboard
-          </Link>
-        </div>
-
-        <h1 className="text-2xl font-bold text-slate-800 mb-6">My Routes</h1>
-
-        {message && (
-          <div className={`p-3 rounded-lg mb-4 text-sm ${message.startsWith('Please')
-            ? 'bg-red-50 text-red-600 border border-red-200'
-            : 'bg-green-50 text-green-600 border border-green-200'
-            }`}>
-            {message}
-          </div>
-        )}
+      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '32px 24px' }}>
 
         {!selectedRoute ? (
-          loading ? (
-            <div className="text-center py-12 text-slate-400">Loading routes...</div>
-          ) : routes.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
-              <p className="text-lg">No active routes assigned</p>
-              <p className="text-sm mt-1">Your contractor will assign routes to you</p>
+          <>
+            <div style={{ marginBottom: '28px' }}>
+              <p style={{ fontSize: '11px', color: '#717a6d', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 4px' }}>Driver Tools</p>
+              <h1 style={{ fontFamily: 'Manrope,sans-serif', fontSize: '26px', fontWeight: 800, color: '#181c22', margin: 0, letterSpacing: '-0.02em' }}>My Routes</h1>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {routes.map((route) => (
-                <Card
-                  key={route.id}
-                  className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-blue-500"
-                  onClick={() => loadStops(route)}
-                >
-                  <CardContent className="py-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-slate-800">{route.route_name}</p>
-                        <p className="text-slate-500 text-sm">{route.district}</p>
-                        <p className="text-slate-400 text-xs mt-1">
-                          {new Date(route.date).toLocaleDateString('en-GB', {
-                            day: 'numeric', month: 'short', year: 'numeric'
-                          })} | Vehicle: {route.vehicle_number}
-                        </p>
+
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: '#717a6d', fontSize: '13px' }}>
+                <div style={{ width: '28px', height: '28px', border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 0.8s linear infinite' }} />
+                Loading routes...
+              </div>
+            ) : routes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px', background: 'white', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '44px', color: '#c4c9c0', display: 'block', marginBottom: '12px' }}>route</span>
+                <p style={{ fontSize: '15px', fontWeight: 600, color: '#41493e', margin: '0 0 4px' }}>No active routes assigned</p>
+                <p style={{ fontSize: '13px', color: '#717a6d', margin: 0 }}>Your contractor will assign routes to you</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {routes.map(route => {
+                  const isActive = route.status === 'active'
+                  return (
+                    <div key={route.id} className="route-card" onClick={() => loadStops(route)} style={{ background: 'white', borderRadius: '16px', padding: '20px 24px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div style={{ width: '48px', height: '48px', borderRadius: '13px', flexShrink: 0, background: 'rgba(0,69,13,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '24px', color: '#00450d' }}>route</span>
                       </div>
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                        Start Route →
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )
-        ) : (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">{selectedRoute.route_name}</h2>
-                <p className="text-slate-500 text-sm">{selectedRoute.district} | {selectedRoute.vehicle_number}</p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedRoute(null)}
-              >
-                ← Back to Routes
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-green-700">{completedCount}</p>
-                <p className="text-xs text-green-600">Completed</p>
-              </div>
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-red-700">{skippedCount}</p>
-                <p className="text-xs text-red-600">Skipped</p>
-              </div>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-yellow-700">{pendingCount}</p>
-                <p className="text-xs text-yellow-600">Remaining</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {stops.map((stop) => (
-                <Card key={stop.id} className={`border-0 shadow-sm border-l-4 ${stop.status === 'completed' ? 'border-l-green-500' :
-                  stop.status === 'skipped' ? 'border-l-red-500' :
-                    'border-l-slate-300'
-                  }`}>
-                  <CardContent className="py-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-slate-400 text-xs font-medium">
-                            Stop {stop.stop_order}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '15px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>{route.route_name}</span>
+                          <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: isActive ? 'rgba(0,69,13,0.08)' : 'rgba(180,83,9,0.08)', color: isActive ? '#00450d' : '#b45309', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                            {route.status}
                           </span>
-                          {stop.status !== 'pending' && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${stop.status === 'completed'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-red-100 text-red-700'
-                              }`}>
-                              {stop.status === 'completed' ? 'Completed' : 'Skipped'}
-                            </span>
-                          )}
                         </div>
-                        <p className="text-slate-800 text-sm font-medium">{stop.address}</p>
-                        {stop.skip_reason && (
-                          <p className="text-red-500 text-xs mt-1">
-                            Reason: {SKIP_REASONS.find(r => r.value === stop.skip_reason)?.label}
-                          </p>
-                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                          {[
+                            { icon: 'location_on', text: route.district },
+                            { icon: 'directions_car', text: route.vehicle_number },
+                            { icon: 'calendar_today', text: new Date(route.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) },
+                          ].map(m => (
+                            <span key={m.icon} style={{ fontSize: '12px', color: '#717a6d', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>{m.icon}</span>
+                              {m.text}
+                            </span>
+                          ))}
+                        </div>
                       </div>
+                      <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                        <button className="dispatch-btn" disabled={dispatchingRoute === route.id} onClick={e => handleDispatch(e, route)}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>inventory_2</span>
+                          {dispatchingRoute === route.id ? '...' : 'Dispatch'}
+                        </button>
+                        <button className="start-btn" onClick={e => { e.stopPropagation(); loadStops(route) }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>play_arrow</span>
+                          Start
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: '24px' }}>
+              <button className="back-btn" style={{ marginBottom: '12px' }} onClick={() => setSelectedRoute(null)}>
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_back</span>
+                All Routes
+              </button>
+              <h2 style={{ fontFamily: 'Manrope,sans-serif', fontSize: '22px', fontWeight: 800, color: '#181c22', margin: '0 0 4px', letterSpacing: '-0.02em' }}>{selectedRoute.route_name}</h2>
+              <p style={{ fontSize: '13px', color: '#717a6d', margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>{selectedRoute.district}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>directions_car</span>{selectedRoute.vehicle_number}</span>
+              </p>
+            </div>
+
+            {/* Progress */}
+            <div style={{ background: 'white', borderRadius: '16px', padding: '20px 24px', marginBottom: '20px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#41493e', fontFamily: 'Manrope,sans-serif' }}>Route Progress</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#00450d', fontFamily: 'Manrope,sans-serif' }}>{progress}%</span>
+              </div>
+              <div className="progress-bar" style={{ marginBottom: '16px' }}>
+                <div className="progress-fill" style={{ width: `${progress}%` }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
+                {[
+                  { label: 'Completed', value: completedCount, color: '#00450d', bg: 'rgba(0,69,13,0.07)' },
+                  { label: 'Skipped', value: skippedCount, color: '#dc2626', bg: 'rgba(220,38,38,0.07)' },
+                  { label: 'Remaining', value: pendingCount, color: '#b45309', bg: 'rgba(180,83,9,0.07)' },
+                ].map(s => (
+                  <div key={s.label} style={{ textAlign: 'center', padding: '12px', borderRadius: '10px', background: s.bg }}>
+                    <p style={{ fontSize: '24px', fontFamily: 'Manrope,sans-serif', fontWeight: 800, color: s.color, margin: '0 0 2px', lineHeight: 1 }}>{s.value}</p>
+                    <p style={{ fontSize: '11px', color: s.color, fontWeight: 600, margin: 0, opacity: 0.8 }}>{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Stops */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {stops.map(stop => (
+                <div key={stop.id} className="stop-card" style={{ background: 'white', borderRadius: '14px', padding: '16px 20px', border: `1px solid ${stop.status === 'completed' ? 'rgba(0,69,13,0.12)' : stop.status === 'skipped' ? 'rgba(220,38,38,0.12)' : 'rgba(0,0,0,0.05)'}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0, background: stop.status === 'completed' ? 'rgba(0,69,13,0.1)' : stop.status === 'skipped' ? 'rgba(220,38,38,0.1)' : '#f0f4f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope,sans-serif', color: stop.status === 'completed' ? '#00450d' : stop.status === 'skipped' ? '#dc2626' : '#717a6d' }}>
+                      {stop.status === 'completed'
+                        ? <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>check</span>
+                        : stop.status === 'skipped'
+                          ? <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
+                          : stop.stop_order}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 600, color: '#181c22' }}>{stop.address}</span>
+                        {stop.is_commercial && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(37,99,235,0.08)', color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Commercial</span>}
+                        {stop.status === 'completed' && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(0,69,13,0.08)', color: '#00450d', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Completed</span>}
+                        {stop.status === 'skipped' && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(220,38,38,0.08)', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Skipped</span>}
+                        {stop.status === 'completed' && stop.is_commercial && stop.commercial_id && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(124,58,237,0.08)', color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Invoiced</span>}
+                      </div>
+                      {stop.skip_reason && <p style={{ fontSize: '12px', color: '#dc2626', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>info</span>{SKIP_REASONS.find(r => r.value === stop.skip_reason)?.label}</p>}
+                      {stop.blockchain_tx && <p style={{ fontSize: '11px', color: '#2563eb', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px', fontFamily: "'Material Symbols Outlined'" }}>link</span>{stop.blockchain_tx.slice(0, 22)}...</p>}
 
                       {stop.status === 'pending' && (
-                        <div className="flex flex-col gap-2 min-w-48">
+                        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {stop.is_commercial && (
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs text-slate-500 whitespace-nowrap">Bin count:</label>
-                              <input
-                                type="number"
-                                min="0"
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '12px', color: '#717a6d', whiteSpace: 'nowrap' }}>Bins collected:</span>
+                              <input type="number" min="0" className="bin-input"
                                 value={binCounts[stop.id] || ''}
-                                onChange={(e) => setBinCounts({ ...binCounts, [stop.id]: parseInt(e.target.value) || 0 })}
-                                className="w-16 border border-slate-200 rounded px-2 py-1 text-xs text-center"
-                                placeholder="0"
-                              />
+                                onChange={e => setBinCounts({ ...binCounts, [stop.id]: parseInt(e.target.value) || 0 })}
+                                placeholder="0" />
+                              {!stop.commercial_id && <span style={{ fontSize: '11px', color: '#f97316', display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>warning</span>No billing linked</span>}
                             </div>
                           )}
-                          <Select
-                            onValueChange={(v) => setSelectedSkipReason({
-                              ...selectedSkipReason,
-                              [stop.id]: v
-                            })}
-                          >
-                            <SelectTrigger className="text-xs h-8">
-                              <SelectValue placeholder="Skip reason (if needed)" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {SKIP_REASONS.map(r => (
-                                <SelectItem key={r.value} value={r.value}>
-                                  {r.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => markStop(stop, 'completed')}
-                              disabled={updatingStop === stop.id}
-                              className="flex-1 bg-green-600 hover:bg-green-700 text-xs h-8"
-                            >
-                              ✓ Done
-                            </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => markStop(stop, 'skipped')}
-                              disabled={updatingStop === stop.id}
-                              className="flex-1 bg-red-500 hover:bg-red-600 text-xs h-8"
-                            >
-                              ✕ Skip
-                            </Button>
+                          <select className="skip-select"
+                            value={selectedSkipReason[stop.id] || ''}
+                            onChange={e => setSelectedSkipReason({ ...selectedSkipReason, [stop.id]: e.target.value })}>
+                            <option value="">Skip reason (select if skipping)</option>
+                            {SKIP_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          </select>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button className="done-btn" onClick={() => markStop(stop, 'completed')} disabled={updatingStop === stop.id}>
+                              {updatingStop === stop.id
+                                ? <svg style={{ width: '14px', height: '14px', animation: 'spin 0.8s linear infinite' }} fill="none" viewBox="0 0 24 24"><circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                                : <><span className="material-symbols-outlined" style={{ fontSize: '15px' }}>check</span>Done</>}
+                            </button>
+                            <button className="skip-btn" onClick={() => markStop(stop, 'skipped')} disabled={updatingStop === stop.id}>
+                              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>close</span>Skip
+                            </button>
                           </div>
                         </div>
                       )}
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
+          </>
         )}
-      </div>
+      </main>
     </div>
   )
 }

@@ -10,6 +10,7 @@ const COMMERCIAL_NAV = [
   { label: 'Schedule', href: '/dashboard/commercial/schedule', icon: 'calendar_month' },
   { label: 'Track Vehicle', href: '/dashboard/commercial/track', icon: 'location_on' },
   { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
+  { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
 ]
 
 export default function CommercialDashboardPage() {

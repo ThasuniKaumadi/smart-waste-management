@@ -2,136 +2,263 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import Link from 'next/link'
-import { DISTRICTS, ROLE_LABELS } from '@/lib/types'
+import DashboardLayout from '@/components/DashboardLayout'
+import { ROLE_LABELS } from '@/lib/types'
+import { CMC_DISTRICTS, getWardsForDistrict } from '@/lib/districts'
 
-const ADMIN_ROLES = [
-  'contractor',
-  'recycling_partner',
-  'facility_operator',
-  'district_engineer',
-  'engineer',
-  'supervisor',
-  'driver',
+const ADMIN_NAV = [
+  { label: 'Overview', href: '/dashboard/admin', icon: 'dashboard' },
+  { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts' },
+  { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
+  { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
 ]
+
+const STAFF_ROLES = [
+  { value: 'district_engineer', label: 'District Engineer', icon: 'person' },
+  { value: 'engineer', label: 'Municipal Engineer', icon: 'person' },
+  { value: 'contractor', label: 'Contractor', icon: 'local_shipping' },
+  { value: 'recycling_partner', label: 'Recycler / Facility', icon: 'recycling' },
+  { value: 'supervisor', label: 'Supervisor', icon: 'supervisor_account' },
+  { value: 'driver', label: 'Driver', icon: 'drive_eta' },
+]
+
+const FACILITY_TYPES = [
+  { value: 'recyclable', label: 'Recyclable Waste' },
+  { value: 'non_recyclable', label: 'Non-Recyclable Waste' },
+  { value: 'glass', label: 'Glass' },
+  { value: 'e_waste', label: 'E-Waste' },
+  { value: 'organic', label: 'Organic Waste' },
+  { value: 'custom', label: 'Other / Custom' },
+]
+
+const ROLE_STYLE: Record<string, { color: string; bg: string }> = {
+  contractor: { color: '#1d4ed8', bg: '#eff6ff' },
+  recycling_partner: { color: '#00450d', bg: '#f0fdf4' },
+  district_engineer: { color: '#d97706', bg: '#fefce8' },
+  engineer: { color: '#d97706', bg: '#fefce8' },
+  supervisor: { color: '#0891b2', bg: '#ecfeff' },
+  driver: { color: '#64748b', bg: '#f8fafc' },
+  resident: { color: '#ec4899', bg: '#fdf2f8' },
+  commercial_establishment: { color: '#6366f1', bg: '#eef2ff' },
+  admin: { color: '#ba1a1a', bg: '#fef2f2' },
+}
 
 interface Profile {
   id: string
   full_name: string
   role: string
   district: string
-  email?: string
   is_approved: boolean
   created_at: string
   organisation_name?: string
+  phone?: string
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  contractor: 'bg-blue-100 text-blue-700',
-  recycling_partner: 'bg-green-100 text-green-700',
-  facility_operator: 'bg-purple-100 text-purple-700',
-  district_engineer: 'bg-orange-100 text-orange-700',
-  engineer: 'bg-yellow-100 text-yellow-700',
-  supervisor: 'bg-teal-100 text-teal-700',
-  driver: 'bg-slate-100 text-slate-700',
-  resident: 'bg-pink-100 text-pink-700',
-  commercial_establishment: 'bg-indigo-100 text-indigo-700',
-  admin: 'bg-red-100 text-red-700',
+function WardMultiSelect({ selected, onChange, district }: {
+  selected: string[]
+  onChange: (wards: string[]) => void
+  district: string
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const wards = district ? getWardsForDistrict(district) : []
+  const filtered = wards.filter(w => w.toLowerCase().includes(query.toLowerCase()))
+
+  function toggle(ward: string) {
+    onChange(selected.includes(ward)
+      ? selected.filter(w => w !== ward)
+      : [...selected, ward])
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div onClick={() => setOpen(!open)} style={{
+        width: '100%', padding: '11px 14px', border: '1.5px solid #e5e7eb',
+        borderRadius: '10px', fontSize: '14px', color: '#181c22',
+        fontFamily: 'Inter, sans-serif', background: '#fafafa', cursor: 'pointer',
+        minHeight: '44px', display: 'flex', flexWrap: 'wrap', gap: '4px',
+        alignItems: 'center', boxSizing: 'border-box',
+      }}>
+        {selected.length === 0
+          ? <span style={{ color: '#9ca3af' }}>Select wards (optional)</span>
+          : selected.map(w => (
+            <span key={w} style={{ background: '#f0fdf4', color: '#00450d', padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {w}
+              <span onClick={e => { e.stopPropagation(); toggle(w) }} style={{ cursor: 'pointer', opacity: 0.6 }}>×</span>
+            </span>
+          ))
+        }
+      </div>
+
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1px solid rgba(0,69,13,0.1)', borderRadius: '12px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.12)', zIndex: 100, maxHeight: '220px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '8px', borderBottom: '1px solid #f1f5f9' }}>
+            <input type="text" placeholder="Search wards..." value={query}
+              onChange={e => setQuery(e.target.value)} onClick={e => e.stopPropagation()}
+              style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {!district ? (
+              <div style={{ padding: '12px', textAlign: 'center', fontSize: '13px', color: '#94a3b8' }}>Select a district first</div>
+            ) : filtered.length === 0 ? (
+              <div style={{ padding: '12px', textAlign: 'center', fontSize: '13px', color: '#94a3b8' }}>No wards found</div>
+            ) : filtered.map(ward => (
+              <div key={ward} onClick={() => toggle(ward)} style={{
+                padding: '9px 14px', fontSize: '13px', fontFamily: 'Inter, sans-serif',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                background: selected.includes(ward) ? '#f0fdf4' : 'white',
+                color: selected.includes(ward) ? '#00450d' : '#181c22',
+              }}>
+                <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: `2px solid ${selected.includes(ward) ? '#00450d' : '#e5e7eb'}`, background: selected.includes(ward) ? '#00450d' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {selected.includes(ward) && (
+                    <svg style={{ width: '9px', height: '9px' }} fill="none" stroke="white" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                {ward}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function AdminUsersPage() {
+  const [profile, setProfile] = useState<any>(null)
   const [users, setUsers] = useState<Profile[]>([])
+  const [contractors, setContractors] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [filterRole, setFilterRole] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [assignedWards, setAssignedWards] = useState<string[]>([])
   const [formData, setFormData] = useState({
-    full_name: '',
-    email: '',
-    password: '',
-    role: '',
-    district: '',
-    address: '',
-    organisation_name: '',
-    phone: '',
+    firstName: '', lastName: '', email: '', password: '', role: '',
+    district: '', phone: '',
+    // Contractor
+    contractor_name: '', contractor_address: '', contractor_email: '', contractor_phone: '',
+    // Recycler
+    facility_name: '', facility_type: '', facility_type_custom: '',
+    facility_address: '', facility_email: '', facility_phone: '',
+    // Driver
+    license_number: '', license_expiry: '', contractor_id: '',
   })
 
-  useEffect(() => {
-    loadUsers()
-  }, [])
+  useEffect(() => { loadData() }, [])
 
-  async function loadUsers() {
+  async function loadData() {
     const supabase = createClient()
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    setUsers(data || [])
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    setProfile(p)
+    const { data: usersData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+    setUsers(usersData || [])
+    const { data: contractorData } = await supabase.from('profiles').select('id, full_name, organisation_name').eq('role', 'contractor')
+    setContractors(contractorData || [])
     setLoading(false)
+  }
+
+  function resetForm() {
+    setFormData({
+      firstName: '', lastName: '', email: '', password: '', role: '',
+      district: '', phone: '', contractor_name: '', contractor_address: '',
+      contractor_email: '', contractor_phone: '', facility_name: '', facility_type: '',
+      facility_type_custom: '', facility_address: '', facility_email: '', facility_phone: '',
+      license_number: '', license_expiry: '', contractor_id: '',
+    })
+    setAssignedWards([])
   }
 
   async function handleCreateUser(e: React.FormEvent) {
     e.preventDefault()
+    if (!formData.role) { setMessage('Please select a user type'); return }
+
+    const isPersonRole = ['district_engineer', 'engineer', 'supervisor', 'driver'].includes(formData.role)
+    if (isPersonRole && !formData.firstName.trim()) { setMessage('Please enter first name'); return }
+    if (isPersonRole && !formData.lastName.trim()) { setMessage('Please enter last name'); return }
+    if (formData.role === 'district_engineer' && !formData.district) { setMessage('Please select a district'); return }
+    if (formData.role === 'driver' && !formData.license_number) { setMessage('Please enter the license number'); return }
+
     setSaving(true)
     setMessage('')
 
     const supabase = createClient()
 
+    const loginEmail = formData.role === 'contractor'
+      ? formData.contractor_email
+      : formData.role === 'recycling_partner'
+        ? formData.facility_email
+        : formData.email
+
     const { data, error: signUpError } = await supabase.auth.signUp({
-      email: formData.email,
+      email: loginEmail,
       password: formData.password,
     })
 
-    if (signUpError) {
-      setMessage('Error: ' + signUpError.message)
-      setSaving(false)
-      return
-    }
+    if (signUpError) { setMessage('Error: ' + signUpError.message); setSaving(false); return }
 
     if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          full_name: formData.full_name,
-          role: formData.role,
-          district: formData.district,
-          address: formData.address,
-          organisation_name: formData.organisation_name,
-          phone: formData.phone,
-          is_approved: true,
-        })
+      const isPersonRole = ['district_engineer', 'engineer', 'supervisor', 'driver'].includes(formData.role)
+      const fullName = isPersonRole
+        ? `${formData.firstName.trim()} ${formData.lastName.trim()}`
+        : formData.role === 'contractor'
+          ? formData.contractor_name
+          : formData.facility_name
+
+      const facilityTypeValue = formData.facility_type === 'custom'
+        ? formData.facility_type_custom
+        : formData.facility_type
+
+      const profileInsert: any = {
+        id: data.user.id,
+        full_name: fullName,
+        role: formData.role,
+        is_approved: true,
+      }
+
+      if (formData.role === 'district_engineer' || formData.role === 'supervisor') {
+        profileInsert.district = formData.district || null
+      }
+      if (formData.role === 'supervisor') {
+        profileInsert.assigned_wards = assignedWards.length > 0 ? assignedWards : null
+        profileInsert.phone = formData.phone || null
+      }
+      if (['district_engineer', 'engineer'].includes(formData.role)) {
+        profileInsert.phone = formData.phone || null
+      }
+      if (formData.role === 'contractor') {
+        profileInsert.organisation_name = formData.contractor_name || null
+        profileInsert.address = formData.contractor_address || null
+        profileInsert.phone = formData.contractor_phone || null
+      }
+      if (formData.role === 'recycling_partner') {
+        profileInsert.organisation_name = formData.facility_name || null
+        profileInsert.facility_type = facilityTypeValue || null
+        profileInsert.address = formData.facility_address || null
+        profileInsert.phone = formData.facility_phone || null
+      }
+      if (formData.role === 'driver') {
+        profileInsert.phone = formData.phone || null
+        profileInsert.license_number = formData.license_number || null
+        profileInsert.license_expiry = formData.license_expiry || null
+        profileInsert.contractor_id = formData.contractor_id || null
+      }
+
+      const { error: profileError } = await supabase.from('profiles').insert(profileInsert)
 
       if (profileError) {
         setMessage('Error creating profile: ' + profileError.message)
       } else {
-        setMessage('User created successfully!')
+        setMessage('Staff account created successfully!')
         setShowForm(false)
-        setFormData({
-          full_name: '',
-          email: '',
-          password: '',
-          role: '',
-          district: '',
-          address: '',
-          organisation_name: '',
-          phone: '',
-        })
-        loadUsers()
+        resetForm()
+        loadData()
       }
     }
     setSaving(false)
@@ -139,249 +266,519 @@ export default function AdminUsersPage() {
 
   async function toggleApproval(user: Profile) {
     const supabase = createClient()
-    await supabase
-      .from('profiles')
-      .update({ is_approved: !user.is_approved })
-      .eq('id', user.id)
-    loadUsers()
+    await supabase.from('profiles').update({ is_approved: !user.is_approved }).eq('id', user.id)
+    loadData()
   }
 
   const filteredUsers = users.filter(u => {
     const matchesRole = filterRole === 'all' || u.role === filterRole
-    const matchesSearch = u.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesSearch = !searchQuery || u.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesRole && matchesSearch
   })
 
+  const isDE = formData.role === 'district_engineer'
+  const isEngineer = formData.role === 'engineer'
+  const isSupervisor = formData.role === 'supervisor'
+  const isDriver = formData.role === 'driver'
+  const isContractor = formData.role === 'contractor'
+  const isRecycler = formData.role === 'recycling_partner'
+  const isPersonRole = isDE || isEngineer || isSupervisor || isDriver
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-blue-700 text-white px-6 py-4 flex items-center justify-between shadow">
-        <div className="flex items-center gap-3">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          <span className="font-semibold text-lg">Smart Waste Management</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="bg-red-500 text-xs px-2 py-1 rounded-full">System Administrator</span>
-        </div>
-      </nav>
+    <DashboardLayout
+      role="Admin"
+      userName={profile?.full_name || ''}
+      navItems={ADMIN_NAV}
+      primaryAction={{ label: 'Create Staff Account', href: '#', icon: 'person_add' }}
+    >
+      <style>{`
+        .material-symbols-outlined {
+          font-family: 'Material Symbols Outlined';
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+          display: inline-block; vertical-align: middle; line-height: 1;
+        }
+        .font-headline { font-family: 'Manrope', sans-serif; }
+        .bento-card {
+          background: white; border-radius: 16px;
+          box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08);
+          border: 1px solid rgba(0,69,13,0.04); overflow: hidden;
+        }
+        .form-field {
+          width: 100%; padding: 11px 14px;
+          border: 1.5px solid #e5e7eb; border-radius: 10px;
+          font-size: 14px; color: #181c22; font-family: 'Inter', sans-serif;
+          background: #fafafa; transition: all 0.2s ease; outline: none; box-sizing: border-box;
+        }
+        .form-field:focus { border-color: #00450d; background: white; box-shadow: 0 0 0 3px rgba(0,69,13,0.08); }
+        .form-field::placeholder { color: #9ca3af; }
+        .select-field {
+          width: 100%; padding: 11px 14px;
+          border: 1.5px solid #e5e7eb; border-radius: 10px;
+          font-size: 14px; color: #181c22; font-family: 'Inter', sans-serif;
+          background: #fafafa; transition: all 0.2s ease; outline: none;
+          cursor: pointer; appearance: none; box-sizing: border-box;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23717a6d'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+          background-repeat: no-repeat; background-position: right 12px center; background-size: 14px;
+        }
+        .select-field:focus { border-color: #00450d; background-color: white; box-shadow: 0 0 0 3px rgba(0,69,13,0.08); }
+        .field-label {
+          display: block; font-size: 11px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.1em; color: #374151; font-family: 'Manrope', sans-serif; margin-bottom: 7px;
+        }
+        .submit-btn {
+          background: #00450d; color: white; border: none; border-radius: 10px; padding: 13px 24px;
+          font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 14px;
+          cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px;
+        }
+        .submit-btn:hover { background: #1b5e20; box-shadow: 0 4px 16px rgba(0,69,13,0.25); }
+        .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .role-chip {
+          display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
+          border-radius: 99px; font-size: 10px; font-weight: 700;
+          font-family: 'Manrope', sans-serif; letter-spacing: 0.06em;
+          text-transform: uppercase; white-space: nowrap;
+        }
+        .role-pill {
+          display: flex; align-items: center; gap: 8px; padding: 9px 14px;
+          border-radius: 10px; border: 1.5px solid #e5e7eb; cursor: pointer;
+          transition: all 0.2s ease; background: #fafafa;
+          font-size: 13px; font-family: 'Manrope', sans-serif; font-weight: 600;
+          color: #64748b; white-space: nowrap;
+        }
+        .role-pill:hover { border-color: #00450d; background: #f9fdf9; color: #181c22; }
+        .role-pill.selected { border-color: #00450d; background: #f0fdf4; color: #00450d; }
+        .user-row {
+          padding: 16px 24px; border-bottom: 1px solid rgba(0,69,13,0.04);
+          display: flex; align-items: center; gap: 16px; transition: background 0.2s ease;
+        }
+        .user-row:hover { background: #f9f9ff; }
+        .user-row:last-child { border-bottom: none; }
+        .filter-btn {
+          padding: 6px 16px; border-radius: 99px; font-size: 12px; font-weight: 700;
+          font-family: 'Manrope', sans-serif; border: none; cursor: pointer; transition: all 0.2s ease;
+        }
+        .filter-btn.active { background: #00450d; color: white; }
+        .filter-btn:not(.active) { background: #f1f5f9; color: #64748b; }
+        .filter-btn:not(.active):hover { background: #e2e8f0; }
+        .action-btn {
+          padding: 6px 14px; border-radius: 99px; font-size: 11px; font-weight: 700;
+          font-family: 'Manrope', sans-serif; cursor: pointer; transition: all 0.2s ease;
+          border: 1.5px solid; white-space: nowrap;
+        }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        @media (max-width: 768px) { .form-grid { grid-template-columns: 1fr; } }
+        @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        .s1 { animation: staggerIn 0.5s ease 0.05s both; }
+        .s2 { animation: staggerIn 0.5s ease 0.1s both; }
+        .s3 { animation: staggerIn 0.5s ease 0.15s both; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        .slide-down { animation: slideDown 0.3s ease both; }
+      `}</style>
 
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <Link href="/dashboard/admin" className="text-blue-600 hover:underline text-sm">
-            ← Back to Dashboard
-          </Link>
+      {/* Hero */}
+      <section className="mb-10 s1">
+        <span className="text-xs font-bold uppercase block mb-2"
+          style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
+          System Administration · Staff Management
+        </span>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <h1 className="font-headline font-extrabold tracking-tight"
+            style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
+            User <span style={{ color: '#1b5e20' }}>Management</span>
+          </h1>
+          <button onClick={() => { setShowForm(!showForm); if (showForm) resetForm() }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', background: showForm ? '#f1f5f9' : '#00450d', color: showForm ? '#64748b' : 'white', border: 'none', cursor: 'pointer', fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', transition: 'all 0.2s ease' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+              {showForm ? 'close' : 'person_add'}
+            </span>
+            {showForm ? 'Cancel' : 'Create Staff Account'}
+          </button>
         </div>
+      </section>
 
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">User Management</h1>
-            <p className="text-slate-500 text-sm mt-1">
-              {users.length} total users in the system
-            </p>
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8 s2">
+        {[
+          { label: 'Total Users', value: users.length, icon: 'group', color: '#00450d', bg: '#f0fdf4' },
+          { label: 'Staff', value: users.filter(u => !['resident', 'commercial_establishment'].includes(u.role)).length, icon: 'badge', color: '#1d4ed8', bg: '#eff6ff' },
+          { label: 'Active', value: users.filter(u => u.is_approved).length, icon: 'check_circle', color: '#16a34a', bg: '#f0fdf4' },
+          { label: 'Inactive', value: users.filter(u => !u.is_approved).length, icon: 'cancel', color: '#ba1a1a', bg: '#fef2f2' },
+        ].map(m => (
+          <div key={m.label} className="bento-card p-5">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: m.bg }}>
+              <span className="material-symbols-outlined" style={{ color: m.color, fontSize: '18px' }}>{m.icon}</span>
+            </div>
+            <p className="font-headline font-extrabold text-2xl tracking-tight mb-0.5" style={{ color: '#181c22' }}>{m.value}</p>
+            <p style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'Manrope, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{m.label}</p>
           </div>
-          <Button
-            onClick={() => setShowForm(!showForm)}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {showForm ? 'Cancel' : '+ Create Staff Account'}
-          </Button>
+        ))}
+      </div>
+
+      {/* Message */}
+      {message && (
+        <div className="mb-6 flex items-center gap-3 p-4 rounded-xl text-sm"
+          style={{ background: message.startsWith('Error') ? '#fef2f2' : '#f0fdf4', border: `1px solid ${message.startsWith('Error') ? 'rgba(186,26,26,0.2)' : 'rgba(0,69,13,0.15)'}`, color: message.startsWith('Error') ? '#ba1a1a' : '#00450d' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+            {message.startsWith('Error') ? 'error' : 'check_circle'}
+          </span>
+          {message}
         </div>
+      )}
 
-        {message && (
-          <div className={`p-3 rounded-lg mb-4 text-sm ${
-            message.startsWith('Error')
-              ? 'bg-red-50 text-red-600 border border-red-200'
-              : 'bg-green-50 text-green-600 border border-green-200'
-          }`}>
-            {message}
+      {/* CREATE FORM */}
+      {showForm && (
+        <div className="bento-card mb-8 slide-down">
+          <div className="px-8 py-6" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
+            <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>Create Staff Account</h3>
+            <p className="text-sm mt-1" style={{ color: '#717a6d' }}>Select a user type then fill in the details.</p>
           </div>
-        )}
 
-        {showForm && (
-          <Card className="mb-6 border-blue-200 shadow-md">
-            <CardHeader>
-              <CardTitle className="text-lg text-slate-800">Create Staff Account</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Full Name</Label>
-                  <Input
-                    placeholder="Full name"
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    required
-                  />
+          <form onSubmit={handleCreateUser} className="p-8">
+
+            {/* USER TYPE */}
+            <div style={{ marginBottom: '28px' }}>
+              <label className="field-label">User Type *</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '2px' }}>
+                {STAFF_ROLES.map(role => (
+                  <div key={role.value}
+                    onClick={() => { setFormData({ ...formData, role: role.value, district: '' }); setAssignedWards([]) }}
+                    className={`role-pill ${formData.role === role.value ? 'selected' : ''}`}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>{role.icon}</span>
+                    {role.label}
+                    {formData.role === role.value && (
+                      <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: '#00450d', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg style={{ width: '8px', height: '8px' }} fill="none" stroke="white" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* PERSON ROLES: DE, Engineer, Supervisor, Driver */}
+            {isPersonRole && (
+              <div className="form-grid slide-down">
+                <div>
+                  <label className="field-label">First Name *</label>
+                  <input type="text" className="form-field" placeholder="e.g. Kasun"
+                    value={formData.firstName}
+                    onChange={e => setFormData({ ...formData, firstName: e.target.value })} required />
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    placeholder="email@example.com"
+                <div>
+                  <label className="field-label">Last Name *</label>
+                  <input type="text" className="form-field" placeholder="e.g. Perera"
+                    value={formData.lastName}
+                    onChange={e => setFormData({ ...formData, lastName: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="field-label">Work Email *</label>
+                  <input type="email" className="form-field" placeholder="name@cmc.lk"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    required
-                  />
+                    onChange={e => setFormData({ ...formData, email: e.target.value })} required />
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Password</Label>
-                  <Input
-                    type="password"
-                    placeholder="Min. 8 characters"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                    minLength={8}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <Select onValueChange={(v) => setFormData({ ...formData, role: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ADMIN_ROLES.map(role => (
-                        <SelectItem key={role} value={role}>
-                          {ROLE_LABELS[role as keyof typeof ROLE_LABELS]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>District</Label>
-                  <Select onValueChange={(v) => setFormData({ ...formData, district: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select district" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DISTRICTS.map(d => (
-                        <SelectItem key={d} value={d}>{d}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input
-                    placeholder="+94 77 000 0000"
+                <div>
+                  <label className="field-label">Phone</label>
+                  <input type="text" className="form-field" placeholder="+94 77 000 0000"
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  />
+                    onChange={e => setFormData({ ...formData, phone: e.target.value })} />
                 </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Address</Label>
-                  <Input
-                    placeholder="Address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  />
+                <div>
+                  <label className="field-label">Password *</label>
+                  <input type="password" className="form-field" placeholder="Min. 8 characters"
+                    value={formData.password} minLength={8}
+                    onChange={e => setFormData({ ...formData, password: e.target.value })} required />
                 </div>
+              </div>
+            )}
 
-                <div className="md:col-span-2">
-                  <Button
-                    type="submit"
-                    className="bg-blue-600 hover:bg-blue-700"
-                    disabled={saving}
-                  >
-                    {saving ? 'Creating...' : 'Create Account'}
-                  </Button>
+            {/* DE — district only, no wards */}
+            {isDE && (
+              <div style={{ marginBottom: '20px' }} className="slide-down">
+                <label className="field-label">Assigned District *</label>
+                <select className="select-field" value={formData.district}
+                  onChange={e => setFormData({ ...formData, district: e.target.value })} required>
+                  <option value="">Select district</option>
+                  {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <p style={{ fontSize: '12px', color: '#717a6d', marginTop: '5px' }}>
+                  The DE will only manage data for this district.
+                </p>
+              </div>
+            )}
+
+            {/* SUPERVISOR — district + wards */}
+            {isSupervisor && (
+              <div className="form-grid slide-down">
+                <div>
+                  <label className="field-label">District (Optional)</label>
+                  <select className="select-field" value={formData.district}
+                    onChange={e => { setFormData({ ...formData, district: e.target.value }); setAssignedWards([]) }}>
+                    <option value="">Select district</option>
+                    {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
                 </div>
-              </form>
-            </CardContent>
-          </Card>
-        )}
+                <div>
+                  <label className="field-label">
+                    Assigned Wards <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(Optional)</span>
+                  </label>
+                  <WardMultiSelect selected={assignedWards} onChange={setAssignedWards} district={formData.district} />
+                  <p style={{ fontSize: '12px', color: '#717a6d', marginTop: '5px' }}>
+                    Blank = all wards in district.
+                  </p>
+                </div>
+              </div>
+            )}
 
-        <div className="flex gap-4 mb-6">
-          <Input
-            placeholder="Search by name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="max-w-xs"
-          />
-          <Select onValueChange={setFilterRole} defaultValue="all">
-            <SelectTrigger className="max-w-xs">
-              <SelectValue placeholder="Filter by role" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Roles</SelectItem>
-              {ADMIN_ROLES.map(role => (
-                <SelectItem key={role} value={role}>
-                  {ROLE_LABELS[role as keyof typeof ROLE_LABELS]}
-                </SelectItem>
+            {/* DRIVER — license + contractor */}
+            {isDriver && (
+              <div className="form-grid slide-down">
+                <div>
+                  <label className="field-label">Driving License Number *</label>
+                  <input type="text" className="form-field" placeholder="e.g. B1234567"
+                    value={formData.license_number}
+                    onChange={e => setFormData({ ...formData, license_number: e.target.value })} />
+                </div>
+                <div>
+                  <label className="field-label">License Expiry Date</label>
+                  <input type="date" className="form-field"
+                    value={formData.license_expiry}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={e => setFormData({ ...formData, license_expiry: e.target.value })} />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label className="field-label">Assigned Contractor</label>
+                  {contractors.length === 0 ? (
+                    <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#fefce8', border: '1px solid rgba(217,119,6,0.2)', fontSize: '13px', color: '#92400e' }}>
+                      ⚠ No contractor accounts found. Create a contractor account first.
+                    </div>
+                  ) : (
+                    <select className="select-field" value={formData.contractor_id}
+                      onChange={e => setFormData({ ...formData, contractor_id: e.target.value })}>
+                      <option value="">Select contractor</option>
+                      {contractors.map(c => (
+                        <option key={c.id} value={c.id}>{c.organisation_name || c.full_name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* CONTRACTOR */}
+            {isContractor && (
+              <div className="form-grid slide-down">
+                <div>
+                  <label className="field-label">Contractor / Company Name *</label>
+                  <input type="text" className="form-field" placeholder="e.g. Lanka Waste Services Ltd"
+                    value={formData.contractor_name}
+                    onChange={e => setFormData({ ...formData, contractor_name: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="field-label">Company Email *</label>
+                  <input type="email" className="form-field" placeholder="company@example.com"
+                    value={formData.contractor_email}
+                    onChange={e => setFormData({ ...formData, contractor_email: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="field-label">Phone</label>
+                  <input type="text" className="form-field" placeholder="+94 11 000 0000"
+                    value={formData.contractor_phone}
+                    onChange={e => setFormData({ ...formData, contractor_phone: e.target.value })} />
+                </div>
+                <div>
+                  <label className="field-label">Password *</label>
+                  <input type="password" className="form-field" placeholder="Min. 8 characters"
+                    value={formData.password} minLength={8}
+                    onChange={e => setFormData({ ...formData, password: e.target.value })} required />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label className="field-label">Company Address</label>
+                  <input type="text" className="form-field" placeholder="123 Main Street, Colombo 03"
+                    value={formData.contractor_address}
+                    onChange={e => setFormData({ ...formData, contractor_address: e.target.value })} />
+                </div>
+              </div>
+            )}
+
+            {/* RECYCLER / FACILITY */}
+            {isRecycler && (
+              <div className="form-grid slide-down">
+                <div>
+                  <label className="field-label">Facility / Organisation Name *</label>
+                  <input type="text" className="form-field" placeholder="e.g. EcoRecycle Lanka Pvt Ltd"
+                    value={formData.facility_name}
+                    onChange={e => setFormData({ ...formData, facility_name: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="field-label">Facility Email *</label>
+                  <input type="email" className="form-field" placeholder="facility@example.com"
+                    value={formData.facility_email}
+                    onChange={e => setFormData({ ...formData, facility_email: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="field-label">Facility Type</label>
+                  <select className="select-field" value={formData.facility_type}
+                    onChange={e => setFormData({ ...formData, facility_type: e.target.value })}>
+                    <option value="">Select type</option>
+                    {FACILITY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+                {formData.facility_type === 'custom' ? (
+                  <div>
+                    <label className="field-label">Custom Type Description</label>
+                    <input type="text" className="form-field" placeholder="Describe the facility type"
+                      value={formData.facility_type_custom}
+                      onChange={e => setFormData({ ...formData, facility_type_custom: e.target.value })} />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="field-label">Phone</label>
+                    <input type="text" className="form-field" placeholder="+94 11 000 0000"
+                      value={formData.facility_phone}
+                      onChange={e => setFormData({ ...formData, facility_phone: e.target.value })} />
+                  </div>
+                )}
+                {formData.facility_type === 'custom' && (
+                  <div>
+                    <label className="field-label">Phone</label>
+                    <input type="text" className="form-field" placeholder="+94 11 000 0000"
+                      value={formData.facility_phone}
+                      onChange={e => setFormData({ ...formData, facility_phone: e.target.value })} />
+                  </div>
+                )}
+                <div>
+                  <label className="field-label">Password *</label>
+                  <input type="password" className="form-field" placeholder="Min. 8 characters"
+                    value={formData.password} minLength={8}
+                    onChange={e => setFormData({ ...formData, password: e.target.value })} required />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label className="field-label">Facility Address</label>
+                  <input type="text" className="form-field" placeholder="123 Industrial Zone, Colombo"
+                    value={formData.facility_address}
+                    onChange={e => setFormData({ ...formData, facility_address: e.target.value })} />
+                </div>
+              </div>
+            )}
+
+            {/* Submit */}
+            <div className="flex items-center gap-3 mt-4">
+              <button type="submit" disabled={saving || !formData.role} className="submit-btn">
+                {saving ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>person_add</span>
+                    Create Staff Account
+                  </>
+                )}
+              </button>
+              <button type="button" onClick={() => { setShowForm(false); resetForm() }}
+                style={{ padding: '13px 24px', borderRadius: '10px', border: '1.5px solid #e5e7eb', background: 'white', fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: '#64748b' }}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* USER LIST */}
+      <div className="bento-card s3">
+        <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-3"
+          style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
+          <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>All Users</h3>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div style={{ position: 'relative' }}>
+              <span className="material-symbols-outlined" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '16px', color: '#94a3b8' }}>search</span>
+              <input type="text" placeholder="Search by name..."
+                value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                style={{ paddingLeft: '34px', paddingRight: '12px', paddingTop: '7px', paddingBottom: '7px', border: '1.5px solid #e5e7eb', borderRadius: '99px', fontSize: '13px', fontFamily: 'Inter, sans-serif', outline: 'none', background: '#fafafa', width: '180px', color: '#181c22' }} />
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {['all', 'district_engineer', 'supervisor', 'driver', 'contractor', 'resident'].map(f => (
+                <button key={f} onClick={() => setFilterRole(f)}
+                  className={`filter-btn ${filterRole === f ? 'active' : ''}`}>
+                  {f === 'all' ? 'All' : f === 'district_engineer' ? 'DE' : f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
               ))}
-              <SelectItem value="resident">Resident</SelectItem>
-              <SelectItem value="commercial_establishment">Commercial Establishment</SelectItem>
-            </SelectContent>
-          </Select>
+            </div>
+          </div>
         </div>
 
         {loading ? (
-          <div className="text-center py-12 text-slate-400">Loading users...</div>
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+              style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
+          </div>
         ) : filteredUsers.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
-            <p>No users found</p>
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#f0fdf4' }}>
+              <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '32px' }}>group</span>
+            </div>
+            <p className="font-headline font-bold text-lg" style={{ color: '#181c22' }}>No users found</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filteredUsers.map((user) => (
-              <Card key={user.id} className="border-0 shadow-sm">
-                <CardContent className="py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span className="text-blue-600 font-medium text-sm">
-                          {user.full_name?.charAt(0)?.toUpperCase()}
-                        </span>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-slate-800 text-sm">
-                            {user.full_name}
-                          </p>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-slate-100 text-slate-700'}`}>
-                            {ROLE_LABELS[user.role as keyof typeof ROLE_LABELS] || user.role}
-                          </span>
-                          {!user.is_approved && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-                              Inactive
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-slate-400 text-xs mt-0.5">
-                          {user.district || 'No district'} |
-                          Joined {new Date(user.created_at).toLocaleDateString('en-GB', {
-                            day: 'numeric', month: 'short', year: 'numeric'
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleApproval(user)}
-                      className={user.is_approved
-                        ? 'border-red-300 text-red-600 hover:bg-red-50'
-                        : 'border-green-300 text-green-600 hover:bg-green-50'
-                      }
-                    >
-                      {user.is_approved ? 'Deactivate' : 'Activate'}
-                    </Button>
+          <div>
+            {filteredUsers.map(user => {
+              const rs = ROLE_STYLE[user.role] || { color: '#64748b', bg: '#f8fafc' }
+              return (
+                <div key={user.id} className="user-row">
+                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: rs.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: '15px', color: rs.color }}>
+                      {user.full_name?.charAt(0)?.toUpperCase() || '?'}
+                    </span>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <p style={{ fontSize: '14px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope, sans-serif' }}>
+                        {user.full_name}
+                      </p>
+                      <span className="role-chip" style={{ background: rs.bg, color: rs.color }}>
+                        {ROLE_LABELS[user.role as keyof typeof ROLE_LABELS] || user.role}
+                      </span>
+                      {!user.is_approved && (
+                        <span className="role-chip" style={{ background: '#fef2f2', color: '#ba1a1a' }}>Inactive</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: '#94a3b8' }}>
+                      {user.district && (
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>
+                          {user.district}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>calendar_today</span>
+                        Joined {new Date(user.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                  </div>
+                  <button onClick={() => toggleApproval(user)} className="action-btn"
+                    style={{ borderColor: user.is_approved ? 'rgba(186,26,26,0.2)' : 'rgba(0,69,13,0.2)', color: user.is_approved ? '#ba1a1a' : '#00450d', background: 'white' }}>
+                    {user.is_approved ? 'Deactivate' : 'Activate'}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
+
+        <div className="px-8 py-4 flex items-center gap-3"
+          style={{ borderTop: '1px solid rgba(0,69,13,0.06)', background: '#f9f9ff' }}>
+          <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '16px' }}>info</span>
+          <p className="text-xs" style={{ color: '#717a6d' }}>
+            Showing {filteredUsers.length} of {users.length} users
+          </p>
+        </div>
       </div>
-    </div>
+    </DashboardLayout>
   )
 }

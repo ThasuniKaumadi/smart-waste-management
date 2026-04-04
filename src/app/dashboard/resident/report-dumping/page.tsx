@@ -1,31 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select'
 import Link from 'next/link'
-import LogoutButton from '@/components/LogoutButton'
 
 const REPORT_TYPES = [
-    { value: 'illegal_dumping', label: 'Illegal Dumping', icon: '🚯', description: 'Someone dumping waste illegally in your area' },
-    { value: 'missed_collection', label: 'Missed Collection', icon: '🗑️', description: 'Scheduled collection did not happen' },
-    { value: 'blocked_drainage', label: 'Blocked Drainage', icon: '🌊', description: 'Waste blocking drainage or waterways' },
+    { value: 'illegal_dumping', label: 'Illegal Dumping', icon: 'delete_forever', color: '#ef4444', description: 'Someone dumping waste illegally' },
+    { value: 'missed_collection', label: 'Missed Collection', icon: 'delete', color: '#f97316', description: 'Scheduled collection did not happen' },
+    { value: 'blocked_drainage', label: 'Blocked Drainage', icon: 'water_damage', color: '#3b82f6', description: 'Waste blocking drainage or waterways' },
 ]
 
-const STATUS_COLORS: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-700',
-    assigned: 'bg-blue-100 text-blue-700',
-    resolved: 'bg-green-100 text-green-700',
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+    pending: { label: 'Pending', color: '#b45309', bg: 'rgba(180,83,9,0.08)' },
+    assigned: { label: 'Assigned', color: '#1d4ed8', bg: 'rgba(29,78,216,0.08)' },
+    resolved: { label: 'Resolved', color: '#15803d', bg: 'rgba(21,128,61,0.08)' },
 }
 
 interface WasteReport {
@@ -34,52 +23,49 @@ interface WasteReport {
     description: string
     location_address: string
     status: string
-    photo_url: string
+    photo_url: string | null
     created_at: string
+    latitude: number | null
+    longitude: number | null
 }
 
 export default function ReportDumpingPage() {
+    const router = useRouter()
     const [reports, setReports] = useState<WasteReport[]>([])
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [showForm, setShowForm] = useState(false)
     const [profile, setProfile] = useState<any>(null)
-    const [message, setMessage] = useState('')
+    const [toast, setToast] = useState('')
+    const [toastType, setToastType] = useState<'success' | 'error'>('success')
     const [photoFile, setPhotoFile] = useState<File | null>(null)
     const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+    const [latitude, setLatitude] = useState<number | null>(null)
+    const [longitude, setLongitude] = useState<number | null>(null)
+    const [locationLoading, setLocationLoading] = useState(false)
+    const [locationError, setLocationError] = useState('')
     const [formData, setFormData] = useState({
         report_type: '',
         description: '',
         location_address: '',
     })
 
-    const [latitude, setLatitude] = useState<number | null>(null)
-    const [longitude, setLongitude] = useState<number | null>(null)
-    const [locationLoading, setLocationLoading] = useState(false)
-    const [locationError, setLocationError] = useState('')
-    useEffect(() => {
-        loadData()
-    }, [])
+    useEffect(() => { loadData() }, [])
+
+    function showToast(msg: string, type: 'success' | 'error' = 'success') {
+        setToast(msg); setToastType(type)
+        setTimeout(() => setToast(''), 3500)
+    }
 
     async function loadData() {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        const { data: profileData } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-
+        if (!user) { router.push('/login'); return }
+        const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         setProfile(profileData)
-
         const { data: reportsData } = await supabase
-            .from('waste_reports')
-            .select('*')
-            .eq('submitted_by', user.id)
+            .from('waste_reports').select('*').eq('submitted_by', user.id)
             .order('created_at', { ascending: false })
-
         setReports(reportsData || [])
         setLoading(false)
     }
@@ -89,44 +75,40 @@ export default function ReportDumpingPage() {
         if (file) {
             setPhotoFile(file)
             const reader = new FileReader()
-            reader.onloadend = () => {
-                setPhotoPreview(reader.result as string)
-            }
+            reader.onloadend = () => setPhotoPreview(reader.result as string)
             reader.readAsDataURL(file)
         }
     }
 
+    function getLocation() {
+        setLocationLoading(true); setLocationError('')
+        if (!navigator.geolocation) { setLocationError('Geolocation not supported'); setLocationLoading(false); return }
+        navigator.geolocation.getCurrentPosition(
+            pos => { setLatitude(pos.coords.latitude); setLongitude(pos.coords.longitude); setLocationLoading(false) },
+            () => { setLocationError('Unable to get location. Please allow access.'); setLocationLoading(false) }
+        )
+    }
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
+        if (!formData.report_type) { showToast('Please select a report type', 'error'); return }
         setSaving(true)
-        setMessage('')
-
-        if (!formData.report_type) {
-            setMessage('Please select a report type')
-            setSaving(false)
-            return
-        }
 
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
-
         let photoUrl = null
 
         if (photoFile) {
             const fileExt = photoFile.name.split('.').pop()
             const fileName = `${user?.id}-${Date.now()}.${fileExt}`
-
             const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('waste-reports')
-                .upload(fileName, photoFile)
-
+                .from('waste-reports').upload(fileName, photoFile)
             if (!uploadError && uploadData) {
-                const { data: urlData } = supabase.storage
-                    .from('waste-reports')
-                    .getPublicUrl(fileName)
+                const { data: urlData } = supabase.storage.from('waste-reports').getPublicUrl(fileName)
                 photoUrl = urlData.publicUrl
             }
         }
+
         const { error } = await supabase.from('waste_reports').insert({
             submitted_by: user?.id,
             report_type: formData.report_type,
@@ -135,258 +117,357 @@ export default function ReportDumpingPage() {
             district: profile?.district,
             photo_url: photoUrl,
             status: 'pending',
-            latitude: latitude,
-            longitude: longitude,
+            latitude, longitude,
         })
+
         if (error) {
-            setMessage('Error: ' + error.message)
+            showToast('Error: ' + error.message, 'error')
         } else {
-            setMessage('Report submitted successfully!')
+            showToast('Report submitted successfully!')
             setShowForm(false)
             setFormData({ report_type: '', description: '', location_address: '' })
-            setPhotoFile(null)
-            setPhotoPreview(null)
+            setPhotoFile(null); setPhotoPreview(null)
+            setLatitude(null); setLongitude(null)
             loadData()
         }
         setSaving(false)
     }
-    function getLocation() {
-        setLocationLoading(true)
-        setLocationError('')
-        if (!navigator.geolocation) {
-            setLocationError('Geolocation is not supported by your browser')
-            setLocationLoading(false)
-            return
-        }
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                setLatitude(position.coords.latitude)
-                setLongitude(position.coords.longitude)
-                setLocationLoading(false)
-            },
-            () => {
-                setLocationError('Unable to get your location. Please allow location access.')
-                setLocationLoading(false)
-            }
-        )
-    }
 
     return (
-        <div className="min-h-screen bg-slate-50">
-            <nav className="bg-blue-700 text-white px-6 py-4 flex items-center justify-between shadow">
-                <div className="flex items-center gap-3">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    <span className="font-semibold text-lg">Smart Waste Management</span>
+        <div style={{ minHeight: '100vh', background: '#f4f6f3', fontFamily: "'Inter', sans-serif" }}>
+            <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Manrope:wght@400;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+        .material-symbols-outlined {
+          font-family: 'Material Symbols Outlined';
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+          display: inline-block; vertical-align: middle; line-height: 1;
+        }
+        .nav-link { transition: color 0.2s, background 0.2s; text-decoration: none; }
+        .nav-link:hover { background: rgba(0,69,13,0.07); color: #00450d; }
+        .report-type-card {
+          border: 1.5px solid #e4ede4; border-radius: 12px; padding: 16px;
+          cursor: pointer; transition: all 0.2s ease; background: #f9fbf9; text-align: left;
+        }
+        .report-type-card:hover { border-color: rgba(0,69,13,0.3); background: white; transform: translateY(-1px); }
+        .report-type-card.selected { border-color: #00450d; background: white; box-shadow: 0 0 0 3px rgba(0,69,13,0.07); }
+        .form-input {
+          width: 100%; border: 1.5px solid #e4ede4; border-radius: 10px;
+          padding: 12px 16px; font-size: 14px; color: #181c22;
+          font-family: 'Inter', sans-serif; transition: all 0.2s; outline: none;
+          background: #f9fbf9; box-sizing: border-box;
+        }
+        .form-input:focus { border-color: #00450d; background: white; box-shadow: 0 0 0 3px rgba(0,69,13,0.07); }
+        .form-input::placeholder { color: #c0ccc0; }
+        textarea.form-input { resize: vertical; min-height: 90px; }
+        .submit-btn {
+          background: linear-gradient(135deg, #00450d, #1b5e20); color: white; border: none;
+          border-radius: 10px; padding: 13px 28px; font-family: 'Manrope', sans-serif;
+          font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s;
+          display: flex; align-items: center; gap: 8px;
+          box-shadow: 0 4px 14px rgba(0,69,13,0.2);
+        }
+        .submit-btn:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(0,69,13,0.3); transform: translateY(-1px); }
+        .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .add-btn {
+          background: #00450d; color: white; border: none; border-radius: 10px;
+          padding: 10px 18px; font-family: 'Manrope', sans-serif; font-weight: 700;
+          font-size: 13px; cursor: pointer; transition: all 0.2s;
+          display: flex; align-items: center; gap: 6px;
+        }
+        .add-btn:hover { background: #1b5e20; }
+        .cancel-btn {
+          background: rgba(0,0,0,0.05); color: #717a6d; border: none; border-radius: 10px;
+          padding: 13px 20px; font-family: 'Manrope', sans-serif; font-weight: 600;
+          font-size: 14px; cursor: pointer; transition: background 0.2s;
+        }
+        .cancel-btn:hover { background: rgba(0,0,0,0.09); }
+        .report-card { transition: transform 0.15s, box-shadow 0.15s; }
+        .report-card:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+        .toast { animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(12px) translateX(-50%); opacity: 0; } to { transform: translateY(0) translateX(-50%); opacity: 1; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .form-enter { animation: fadeIn 0.25s ease; }
+      `}</style>
+
+            {/* Toast */}
+            {toast && (
+                <div className="toast" style={{
+                    position: 'fixed', bottom: '24px', left: '50%',
+                    background: toastType === 'error' ? '#dc2626' : '#181c22',
+                    color: 'white', padding: '10px 20px', borderRadius: '9999px',
+                    fontSize: '13px', fontWeight: 500, zIndex: 1000,
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: toastType === 'error' ? '#fca5a5' : '#4ade80' }}>
+                        {toastType === 'error' ? 'error' : 'check_circle'}
+                    </span>
+                    {toast}
                 </div>
-                <div className="flex items-center gap-4">
-                    <span className="text-blue-100 text-sm">{profile?.full_name}</span>
-                    <span className="bg-blue-600 text-xs px-2 py-1 rounded-full">Resident</span>
-                    <LogoutButton />
+            )}
+
+            {/* Nav */}
+            <nav style={{
+                background: 'white', borderBottom: '1px solid rgba(0,0,0,0.06)',
+                padding: '0 32px', height: '64px', display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40,
+                boxShadow: '0 1px 8px rgba(0,0,0,0.04)',
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                    <Link href="/dashboard/resident" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '22px', color: '#00450d' }}>eco</span>
+                        <span style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: '16px', color: '#00450d', letterSpacing: '-0.02em' }}>EcoLedger</span>
+                    </Link>
+                    <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.1)' }} />
+                    <Link href="/dashboard/resident" className="nav-link" style={{
+                        display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px',
+                        borderRadius: '8px', color: '#717a6d', fontSize: '13px', fontWeight: 500,
+                    }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_back</span>
+                        Dashboard
+                    </Link>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                        <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: 0 }}>{profile?.full_name}</p>
+                        <p style={{ fontSize: '11px', color: '#717a6d', margin: 0 }}>Resident</p>
+                    </div>
+                    <div style={{
+                        width: '34px', height: '34px', borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #00450d, #1b5e20)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white', fontSize: '13px', fontWeight: 700,
+                    }}>{profile?.full_name?.charAt(0) || 'R'}</div>
                 </div>
             </nav>
 
-            <div className="max-w-4xl mx-auto p-6">
-                <div className="flex items-center gap-3 mb-6">
-                    <Link href="/dashboard/resident" className="text-blue-600 hover:underline text-sm">
-                        ← Back to Dashboard
-                    </Link>
-                </div>
+            <main style={{ maxWidth: '860px', margin: '0 auto', padding: '32px 24px' }}>
 
-                <div className="flex items-center justify-between mb-6">
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-800">Report Waste Issue</h1>
-                        <p className="text-slate-500 text-sm mt-1">
+                        <p style={{ fontSize: '11px', color: '#717a6d', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 4px' }}>
+                            Resident Portal
+                        </p>
+                        <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '26px', fontWeight: 800, color: '#181c22', margin: 0, letterSpacing: '-0.02em' }}>
+                            Report Waste Issue
+                        </h1>
+                        <p style={{ fontSize: '13px', color: '#717a6d', margin: '4px 0 0' }}>
                             Report illegal dumping, missed collections or blocked drainage
                         </p>
                     </div>
-                    <Button
-                        onClick={() => setShowForm(!showForm)}
-                        className="bg-blue-600 hover:bg-blue-700"
-                    >
-                        {showForm ? 'Cancel' : '+ New Report'}
-                    </Button>
+                    <button className={showForm ? 'cancel-btn' : 'add-btn'} onClick={() => setShowForm(!showForm)}>
+                        {showForm ? 'Cancel' : (
+                            <><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>add</span>New Report</>
+                        )}
+                    </button>
                 </div>
 
-                {message && (
-                    <div className={`p-3 rounded-lg mb-4 text-sm ${message.startsWith('Error')
-                        ? 'bg-red-50 text-red-600 border border-red-200'
-                        : 'bg-green-50 text-green-600 border border-green-200'
-                        }`}>
-                        {message}
+                {/* Form */}
+                {showForm && (
+                    <div className="form-enter" style={{
+                        background: 'white', borderRadius: '16px', padding: '28px',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)',
+                        marginBottom: '24px',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
+                            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(0,69,13,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#00450d' }}>report_problem</span>
+                            </div>
+                            <div>
+                                <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>Submit Waste Report</h2>
+                                <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>Fill in the details below</p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSubmit}>
+
+                            {/* Report type selector */}
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#2d3d2d', marginBottom: '10px', fontFamily: 'Manrope, sans-serif' }}>
+                                    Report Type
+                                </label>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                                    {REPORT_TYPES.map(type => (
+                                        <div key={type.value}
+                                            className={`report-type-card ${formData.report_type === type.value ? 'selected' : ''}`}
+                                            onClick={() => setFormData({ ...formData, report_type: type.value })}>
+                                            <div style={{
+                                                width: '36px', height: '36px', borderRadius: '10px', marginBottom: '10px',
+                                                background: formData.report_type === type.value ? `${type.color}15` : '#f0f4f0',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                transition: 'background 0.2s',
+                                            }}>
+                                                <span className="material-symbols-outlined" style={{
+                                                    fontSize: '20px',
+                                                    color: formData.report_type === type.value ? type.color : '#94a894',
+                                                }}>{type.icon}</span>
+                                            </div>
+                                            <p style={{ fontSize: '13px', fontWeight: 700, color: formData.report_type === type.value ? '#00450d' : '#181c22', fontFamily: 'Manrope, sans-serif', margin: '0 0 3px' }}>
+                                                {type.label}
+                                            </p>
+                                            <p style={{ fontSize: '11px', color: '#717a6d', margin: 0, lineHeight: 1.4 }}>{type.description}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Location */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#2d3d2d', marginBottom: '7px', fontFamily: 'Manrope, sans-serif' }}>
+                                    Location / Address
+                                </label>
+                                <input className="form-input" placeholder="Where is the issue? (street, landmark)"
+                                    value={formData.location_address}
+                                    onChange={e => setFormData({ ...formData, location_address: e.target.value })}
+                                    required />
+                            </div>
+
+                            {/* Description */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#2d3d2d', marginBottom: '7px', fontFamily: 'Manrope, sans-serif' }}>
+                                    Description
+                                </label>
+                                <textarea className="form-input" placeholder="Describe the issue in detail..."
+                                    value={formData.description}
+                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                                    required />
+                            </div>
+
+                            {/* Photo upload */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#2d3d2d', marginBottom: '7px', fontFamily: 'Manrope, sans-serif' }}>
+                                    Photo Evidence <span style={{ color: '#b0b8aa', fontWeight: 500 }}>· optional</span>
+                                </label>
+                                {photoPreview ? (
+                                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                                        <img src={photoPreview} alt="Preview" style={{ maxHeight: '160px', borderRadius: '10px', objectFit: 'cover', display: 'block' }} />
+                                        <button type="button" onClick={() => { setPhotoFile(null); setPhotoPreview(null) }}
+                                            style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>close</span>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', border: '1.5px dashed #c4cdc4', borderRadius: '10px', cursor: 'pointer', background: '#f9fbf9', transition: 'border-color 0.2s' }}>
+                                        <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#717a6d' }}>upload</span>
+                                        <span style={{ fontSize: '13px', color: '#717a6d' }}>Click to upload a photo</span>
+                                        <input type="file" accept="image/*" onChange={handlePhotoChange} style={{ display: 'none' }} />
+                                    </label>
+                                )}
+                            </div>
+
+                            {/* GPS location */}
+                            <div style={{ marginBottom: '24px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#2d3d2d', marginBottom: '7px', fontFamily: 'Manrope, sans-serif' }}>
+                                    GPS Location <span style={{ color: '#b0b8aa', fontWeight: 500 }}>· optional</span>
+                                </label>
+                                <button type="button" onClick={getLocation} style={{
+                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    background: latitude ? 'rgba(0,69,13,0.07)' : '#f0f4f0',
+                                    border: `1.5px solid ${latitude ? 'rgba(0,69,13,0.2)' : '#e4ede4'}`,
+                                    color: latitude ? '#00450d' : '#717a6d',
+                                    padding: '10px 16px', borderRadius: '10px', cursor: 'pointer',
+                                    fontSize: '13px', fontWeight: 600, fontFamily: 'Manrope, sans-serif', transition: 'all 0.2s',
+                                }}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: '17px' }}>
+                                        {locationLoading ? 'sync' : latitude ? 'location_on' : 'my_location'}
+                                    </span>
+                                    {locationLoading ? 'Getting location...' : latitude ? `${latitude.toFixed(4)}, ${longitude?.toFixed(4)}` : 'Use My Location'}
+                                </button>
+                                {locationError && <p style={{ fontSize: '12px', color: '#dc2626', marginTop: '6px' }}>{locationError}</p>}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button type="submit" disabled={saving} className="submit-btn">
+                                    {saving ? (
+                                        <>
+                                            <svg style={{ width: '16px', height: '16px', animation: 'spin 0.8s linear infinite' }} fill="none" viewBox="0 0 24 24">
+                                                <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                            </svg>
+                                            Submitting...
+                                        </>
+                                    ) : (
+                                        <><span className="material-symbols-outlined" style={{ fontSize: '18px' }}>send</span>Submit Report</>
+                                    )}
+                                </button>
+                                <button type="button" className="cancel-btn" onClick={() => setShowForm(false)}>Cancel</button>
+                            </div>
+                        </form>
                     </div>
                 )}
 
-                {showForm && (
-                    <Card className="mb-6 border-blue-200 shadow-md">
-                        <CardHeader>
-                            <CardTitle className="text-lg text-slate-800">Submit Waste Report</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label>Report Type</Label>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                        {REPORT_TYPES.map((type) => (
-                                            <div
-                                                key={type.value}
-                                                onClick={() => setFormData({ ...formData, report_type: type.value })}
-                                                className={`cursor-pointer rounded-xl border-2 p-4 transition-all ${formData.report_type === type.value
-                                                    ? 'border-blue-600 bg-blue-50'
-                                                    : 'border-slate-200 hover:border-blue-300'
-                                                    }`}
-                                            >
-                                                <span className="text-2xl">{type.icon}</span>
-                                                <p className={`font-medium text-sm mt-2 ${formData.report_type === type.value ? 'text-blue-700' : 'text-slate-800'
-                                                    }`}>
-                                                    {type.label}
-                                                </p>
-                                                <p className="text-xs text-slate-500 mt-1">{type.description}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Location / Address</Label>
-                                    <Input
-                                        placeholder="Where is the issue? (street, landmark)"
-                                        value={formData.location_address}
-                                        onChange={(e) => setFormData({ ...formData, location_address: e.target.value })}
-                                        required
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Description</Label>
-                                    <textarea
-                                        className="w-full border border-slate-200 rounded-lg p-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-24"
-                                        placeholder="Describe the issue in detail..."
-                                        value={formData.description}
-                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                        required
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Photo Evidence</Label>
-                                    <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center">
-                                        {photoPreview ? (
-                                            <div className="space-y-2">
-                                                <img
-                                                    src={photoPreview}
-                                                    alt="Preview"
-                                                    className="max-h-48 mx-auto rounded-lg object-cover"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => { setPhotoFile(null); setPhotoPreview(null) }}
-                                                    className="text-red-500 text-xs hover:underline"
-                                                >
-                                                    Remove photo
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div>
-                                                <p className="text-slate-400 text-sm mb-2">Upload a photo of the issue</p>
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    onChange={handlePhotoChange}
-                                                    className="text-sm text-slate-500"
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-slate-700">Location</label>
-                                    <button
-                                        type="button"
-                                        onClick={getLocation}
-                                        className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm px-4 py-2 rounded-lg transition-colors"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        </svg>
-                                        {locationLoading ? 'Getting location...' : 'Use My Location'}
-                                    </button>
-                                    {latitude && longitude && (
-                                        <p className="text-green-600 text-xs">
-                                            ✓ Location captured: {latitude.toFixed(4)}, {longitude.toFixed(4)}
-                                        </p>
-                                    )}
-                                    {locationError && (
-                                        <p className="text-red-500 text-xs">{locationError}</p>
-                                    )}
-                                </div>
-                                <Button
-                                    type="submit"
-                                    className="bg-blue-600 hover:bg-blue-700"
-                                    disabled={saving}
-                                >
-                                    {saving ? 'Submitting...' : 'Submit Report'}
-                                </Button>
-                            </form>
-                        </CardContent>
-                    </Card>
-                )}
-
+                {/* Reports list */}
                 {loading ? (
-                    <div className="text-center py-12 text-slate-400">Loading reports...</div>
+                    <div style={{ textAlign: 'center', padding: '60px', color: '#717a6d', fontSize: '13px' }}>
+                        <div style={{ width: '28px', height: '28px', border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 0.8s linear infinite' }} />
+                        Loading reports...
+                    </div>
                 ) : reports.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400">
-                        <p className="text-lg">No reports submitted yet</p>
-                        <p className="text-sm mt-1">Click "New Report" to report a waste issue</p>
+                    <div style={{ textAlign: 'center', padding: '60px', background: 'white', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '44px', color: '#c4c9c0', display: 'block', marginBottom: '12px' }}>report_problem</span>
+                        <p style={{ fontSize: '15px', fontWeight: 600, color: '#41493e', margin: '0 0 4px' }}>No reports submitted yet</p>
+                        <p style={{ fontSize: '13px', color: '#717a6d', margin: '0 0 20px' }}>Help keep your district clean by reporting waste issues</p>
+                        <button className="add-btn" onClick={() => setShowForm(true)}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>add</span>
+                            New Report
+                        </button>
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-semibold text-slate-800">My Reports</h2>
-                        {reports.map((report) => {
-                            const reportType = REPORT_TYPES.find(t => t.value === report.report_type)
-                            return (
-                                <Card key={report.id} className="border-0 shadow-sm">
-                                    <CardContent className="py-4">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex items-start gap-3">
-                                                <span className="text-2xl">{reportType?.icon}</span>
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <p className="font-medium text-slate-800 text-sm">
-                                                            {reportType?.label}
-                                                        </p>
-                                                        <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[report.status]}`}>
-                                                            {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-slate-600 text-sm">{report.description}</p>
-                                                    <p className="text-slate-400 text-xs mt-1">
-                                                        📍 {report.location_address}
-                                                    </p>
-                                                    <p className="text-slate-400 text-xs mt-1">
-                                                        {new Date(report.created_at).toLocaleDateString('en-GB', {
-                                                            day: 'numeric', month: 'short', year: 'numeric'
-                                                        })}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            {report.photo_url && (
-                                                <img
-                                                    src={report.photo_url}
-                                                    alt="Report photo"
-                                                    className="w-16 h-16 rounded-lg object-cover ml-4"
-                                                />
-                                            )}
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                            <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>My Reports</h2>
+                            <span style={{ fontSize: '12px', color: '#717a6d' }}>{reports.length} reports</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {reports.map(report => {
+                                const rt = REPORT_TYPES.find(t => t.value === report.report_type)
+                                const sc = STATUS_CONFIG[report.status] || STATUS_CONFIG.pending
+                                return (
+                                    <div key={report.id} className="report-card" style={{
+                                        background: 'white', borderRadius: '14px', padding: '18px 20px',
+                                        border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                                        display: 'flex', alignItems: 'flex-start', gap: '14px',
+                                    }}>
+                                        <div style={{ width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0, background: `${rt?.color || '#00450d'}12`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <span className="material-symbols-outlined" style={{ fontSize: '22px', color: rt?.color || '#00450d' }}>{rt?.icon || 'report'}</span>
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            )
-                        })}
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                                <span style={{ fontSize: '14px', fontWeight: 700, color: '#181c22' }}>{rt?.label || report.report_type}</span>
+                                                <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: sc.bg, color: sc.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                                    {sc.label}
+                                                </span>
+                                            </div>
+                                            <p style={{ fontSize: '13px', color: '#41493e', margin: '0 0 5px', lineHeight: 1.5 }}>{report.description}</p>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                                <span style={{ fontSize: '12px', color: '#717a6d', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                    <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>
+                                                    {report.location_address}
+                                                </span>
+                                                <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                                                    {new Date(report.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </span>
+                                                {report.latitude && (
+                                                    <span style={{ fontSize: '12px', color: '#00450d', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>my_location</span>
+                                                        GPS tagged
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {report.photo_url && (
+                                            <img src={report.photo_url} alt="Report" style={{ width: '56px', height: '56px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(0,0,0,0.06)' }} />
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </div>
                     </div>
                 )}
-            </div>
+            </main>
         </div>
     )
 }

@@ -23,21 +23,12 @@ export interface Profile {
 }
 
 export const DISTRICTS = [
-  'Colombo 1 - Fort/Pettah',
-  'Colombo 2 - Slave Island',
-  'Colombo 3 - Kollupitiya',
-  'Colombo 4 - Bambalapitiya',
-  'Colombo 5 - Havelock Town',
-  'Colombo 6 - Wellawatte',
-  'Colombo 7 - Cinnamon Gardens',
-  'Colombo 8 - Borella',
-  'Colombo 9 - Dematagoda',
-  'Colombo 10 - Maradana',
-  'Colombo 11 - Pettah',
-  'Colombo 12 - Hulftsdorp',
-  'Colombo 13 - Kotahena',
-  'Colombo 14 - Grandpass',
-  'Colombo 15 - Mattakkuliya',
+  'Colombo North - District 1',
+  'Colombo Central 1 - District 2A',
+  'Colombo Central 2 - District 2B',
+  'Borella - District 3',
+  'Colombo East - District 4',
+  'Colombo West - District 5',
 ]
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -83,8 +74,8 @@ export const ROLE_DASHBOARDS: Record<UserRole, string> = {
   resident: '/dashboard/resident',
   commercial_establishment: '/dashboard/commercial',
   contractor: '/dashboard/contractor',
-  recycling_partner: '/dashboard/recycler',
-  facility_operator: '/dashboard/facility',
+  recycling_partner: '/dashboard/intake',
+  facility_operator: '/dashboard/intake',
   district_engineer: '/dashboard/district-engineer',
   engineer: '/dashboard/engineer',
   supervisor: '/dashboard/supervisor',

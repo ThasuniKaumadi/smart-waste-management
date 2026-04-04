@@ -1,22 +1,41 @@
-import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { ROLE_DASHBOARDS, type UserRole } from '@/lib/types'
+'use client'
 
-export default async function DashboardPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
+import { ROLE_DASHBOARDS } from '@/lib/types'
 
-  if (!user) redirect('/login')
+export default function DashboardRedirectPage() {
+  const router = useRouter()
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  useEffect(() => {
+    async function redirect() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
 
-  if (profile?.role && profile.role in ROLE_DASHBOARDS) {
-    redirect(ROLE_DASHBOARDS[profile.role as UserRole])
-  }
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
 
-  redirect('/login')
+      if (profile?.role) {
+        router.push(ROLE_DASHBOARDS[profile.role as keyof typeof ROLE_DASHBOARDS])
+      } else {
+        router.push('/login')
+      }
+    }
+    redirect()
+  }, [router])
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9f9ff' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ width: '32px', height: '32px', border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ fontSize: '14px', color: '#717a6d', fontFamily: 'Inter, sans-serif' }}>Redirecting to your dashboard...</p>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
 }

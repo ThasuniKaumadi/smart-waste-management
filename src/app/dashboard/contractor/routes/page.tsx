@@ -33,6 +33,20 @@ interface Driver {
   district: string
 }
 
+interface CommercialEstablishment {
+  id: string
+  full_name: string
+  organisation_name: string | null
+  district: string
+  address: string
+}
+
+interface Stop {
+  address: string
+  is_commercial: boolean
+  commercial_id: string
+}
+
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
   active: 'bg-blue-100 text-blue-700',
@@ -43,12 +57,13 @@ const STATUS_COLORS: Record<string, string> = {
 export default function ContractorRoutesPage() {
   const [routes, setRoutes] = useState<Route[]>([])
   const [drivers, setDrivers] = useState<Driver[]>([])
+  const [commercials, setCommercials] = useState<CommercialEstablishment[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<any>(null)
   const [message, setMessage] = useState('')
-  const [stops, setStops] = useState([{ address: '', is_commercial: false }])
+  const [stops, setStops] = useState<Stop[]>([{ address: '', is_commercial: false, commercial_id: '' }])
   const [formData, setFormData] = useState({
     route_name: '',
     district: '',
@@ -57,9 +72,7 @@ export default function ContractorRoutesPage() {
     date: new Date().toISOString().split('T')[0],
   })
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  useEffect(() => { loadData() }, [])
 
   async function loadData() {
     const supabase = createClient()
@@ -67,47 +80,49 @@ export default function ContractorRoutesPage() {
     if (!user) return
 
     const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-
+      .from('profiles').select('*').eq('id', user.id).single()
     setProfile(profileData)
 
     const { data: routesData } = await supabase
       .from('routes')
-      .select(`*, profiles(full_name)`)
+      .select('*, profiles(full_name)')
       .eq('contractor_id', user.id)
       .order('date', { ascending: false })
-
     setRoutes(routesData || [])
 
     const { data: driversData } = await supabase
-      .from('profiles')
-      .select('id, full_name, district')
-      .eq('role', 'driver')
-
+      .from('profiles').select('id, full_name, district').eq('role', 'driver')
     setDrivers(driversData || [])
+
+    const { data: commercialData } = await supabase
+      .from('profiles')
+      .select('id, full_name, organisation_name, district, address')
+      .eq('role', 'commercial_establishment')
+    setCommercials(commercialData || [])
+
     setLoading(false)
   }
 
   function addStop() {
-    setStops([...stops, { address: '', is_commercial: false }])
+    setStops([...stops, { address: '', is_commercial: false, commercial_id: '' }])
   }
 
   function removeStop(index: number) {
     setStops(stops.filter((_, i) => i !== index))
   }
 
-  function updateStop(index: number, value: string) {
+  function updateStopField(index: number, field: keyof Stop, value: string | boolean) {
     const updated = [...stops]
-    updated[index] = { ...updated[index], address: value }
-    setStops(updated)
-  }
-
-  function toggleCommercial(index: number) {
-    const updated = [...stops]
-    updated[index] = { ...updated[index], is_commercial: !updated[index].is_commercial }
+    updated[index] = { ...updated[index], [field]: value }
+    // Clear commercial_id if toggling off
+    if (field === 'is_commercial' && value === false) {
+      updated[index].commercial_id = ''
+    }
+    // Auto-fill address when commercial is selected
+    if (field === 'commercial_id' && typeof value === 'string') {
+      const found = commercials.find(c => c.id === value)
+      if (found?.address) updated[index].address = found.address
+    }
     setStops(updated)
   }
 
@@ -126,13 +141,16 @@ export default function ContractorRoutesPage() {
       return
     }
 
+    const missingCommercial = validStops.find(s => s.is_commercial && !s.commercial_id)
+    if (missingCommercial) {
+      setMessage('Please select a commercial establishment for all commercial stops')
+      setSaving(false)
+      return
+    }
+
     const { data: routeData, error: routeError } = await supabase
       .from('routes')
-      .insert({
-        ...formData,
-        contractor_id: user?.id,
-        status: 'pending',
-      })
+      .insert({ ...formData, contractor_id: user?.id, status: 'pending' })
       .select()
       .single()
 
@@ -148,11 +166,11 @@ export default function ContractorRoutesPage() {
       stop_order: index + 1,
       status: 'pending',
       is_commercial: stop.is_commercial,
+      commercial_id: stop.is_commercial && stop.commercial_id ? stop.commercial_id : null,
     }))
 
     const { error: stopsError } = await supabase
-      .from('collection_stops')
-      .insert(stopsToInsert)
+      .from('collection_stops').insert(stopsToInsert)
 
     if (stopsError) {
       setMessage('Error creating stops: ' + stopsError.message)
@@ -160,13 +178,10 @@ export default function ContractorRoutesPage() {
       setMessage('Route created successfully!')
       setShowForm(false)
       setFormData({
-        route_name: '',
-        district: '',
-        driver_id: '',
-        vehicle_number: '',
+        route_name: '', district: '', driver_id: '', vehicle_number: '',
         date: new Date().toISOString().split('T')[0],
       })
-      setStops([{ address: '', is_commercial: false }])
+      setStops([{ address: '', is_commercial: false, commercial_id: '' }])
       loadData()
     }
     setSaving(false)
@@ -177,6 +192,11 @@ export default function ContractorRoutesPage() {
     await supabase.from('routes').update({ status }).eq('id', routeId)
     loadData()
   }
+
+  // Filter commercials by selected district
+  const filteredCommercials = formData.district
+    ? commercials.filter(c => c.district === formData.district)
+    : commercials
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -205,16 +225,13 @@ export default function ContractorRoutesPage() {
             <h1 className="text-2xl font-bold text-slate-800">Route Management</h1>
             <p className="text-slate-500 text-sm mt-1">Assign drivers and vehicles to collection routes</p>
           </div>
-          <Button
-            onClick={() => setShowForm(!showForm)}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
+          <Button onClick={() => setShowForm(!showForm)} className="bg-blue-600 hover:bg-blue-700">
             {showForm ? 'Cancel' : '+ New Route'}
           </Button>
         </div>
 
         {message && (
-          <div className={`p-3 rounded-lg mb-4 text-sm ${message.startsWith('Error')
+          <div className={`p-3 rounded-lg mb-4 text-sm ${message.startsWith('Error') || message.startsWith('Please')
             ? 'bg-red-50 text-red-600 border border-red-200'
             : 'bg-green-50 text-green-600 border border-green-200'
             }`}>
@@ -243,13 +260,9 @@ export default function ContractorRoutesPage() {
                   <div className="space-y-2">
                     <Label>District</Label>
                     <Select onValueChange={(v) => setFormData({ ...formData, district: v })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select district" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select district" /></SelectTrigger>
                       <SelectContent>
-                        {DISTRICTS.map(d => (
-                          <SelectItem key={d} value={d}>{d}</SelectItem>
-                        ))}
+                        {DISTRICTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -257,17 +270,12 @@ export default function ContractorRoutesPage() {
                   <div className="space-y-2">
                     <Label>Assign Driver</Label>
                     <Select onValueChange={(v) => setFormData({ ...formData, driver_id: v })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select driver" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select driver" /></SelectTrigger>
                       <SelectContent>
-                        {drivers.length === 0 ? (
-                          <SelectItem value="none" disabled>No drivers available</SelectItem>
-                        ) : (
-                          drivers.map(d => (
-                            <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
-                          ))
-                        )}
+                        {drivers.length === 0
+                          ? <SelectItem value="none" disabled>No drivers available</SelectItem>
+                          : drivers.map(d => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)
+                        }
                       </SelectContent>
                     </Select>
                   </div>
@@ -293,58 +301,94 @@ export default function ContractorRoutesPage() {
                   </div>
                 </div>
 
+                {/* Collection Stops */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label>Collection Stops</Label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={addStop}
-                      className="text-blue-600 border-blue-300"
-                    >
+                    <Button type="button" size="sm" variant="outline" onClick={addStop}
+                      className="text-blue-600 border-blue-300">
                       + Add Stop
                     </Button>
                   </div>
 
                   {stops.map((stop, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <span className="text-slate-400 text-sm w-6">{index + 1}.</span>
-                      <Input
-                        placeholder={`Stop ${index + 1} address`}
-                        value={stop.address}
-                        onChange={(e) => updateStop(index, e.target.value)}
-                        className="flex-1"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCommercial(index)}
-                        className={`text-xs px-2 py-1 rounded-lg border transition-colors whitespace-nowrap ${stop.is_commercial
-                          ? 'bg-orange-100 text-orange-700 border-orange-300'
-                          : 'bg-slate-100 text-slate-500 border-slate-200'
-                          }`}
-                      >
-                        {stop.is_commercial ? '🏢 Commercial' : 'Residential'}
-                      </button>
-                      {stops.length > 1 && (
-                        <Button
+                    <div key={index} className="space-y-2 p-3 rounded-lg border border-slate-200 bg-white">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400 text-sm w-6 flex-shrink-0">{index + 1}.</span>
+                        <Input
+                          placeholder={`Stop ${index + 1} address`}
+                          value={stop.address}
+                          onChange={(e) => updateStopField(index, 'address', e.target.value)}
+                          className="flex-1"
+                        />
+                        <button
                           type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => removeStop(index)}
-                          className="text-red-500 border-red-300"
+                          onClick={() => updateStopField(index, 'is_commercial', !stop.is_commercial)}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap flex-shrink-0 ${stop.is_commercial
+                              ? 'bg-orange-100 text-orange-700 border-orange-300'
+                              : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
                         >
-                          ✕
-                        </Button>
+                          {stop.is_commercial ? '🏢 Commercial' : 'Residential'}
+                        </button>
+                        {stops.length > 1 && (
+                          <Button type="button" size="sm" variant="outline"
+                            onClick={() => removeStop(index)}
+                            className="text-red-500 border-red-300 flex-shrink-0">
+                            ✕
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Commercial establishment picker */}
+                      {stop.is_commercial && (
+                        <div className="ml-8">
+                          <Select
+                            value={stop.commercial_id}
+                            onValueChange={(v) => updateStopField(index, 'commercial_id', v)}
+                          >
+                            <SelectTrigger className={`text-sm ${!stop.commercial_id ? 'border-orange-300' : 'border-green-300'}`}>
+                              <SelectValue placeholder="Select commercial establishment…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {filteredCommercials.length === 0 ? (
+                                <SelectItem value="none" disabled>
+                                  {formData.district
+                                    ? `No commercial establishments in ${formData.district}`
+                                    : 'Select a district first'}
+                                </SelectItem>
+                              ) : (
+                                filteredCommercials.map(c => (
+                                  <SelectItem key={c.id} value={c.id}>
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">
+                                        {c.organisation_name || c.full_name}
+                                      </span>
+                                      {c.address && (
+                                        <span className="text-xs text-slate-400">{c.address}</span>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {!stop.commercial_id && (
+                            <p className="text-xs text-orange-600 mt-1">
+                              ⚠ Select an establishment to enable billing for this stop
+                            </p>
+                          )}
+                          {stop.commercial_id && (
+                            <p className="text-xs text-green-600 mt-1">
+                              ✓ Billing will be auto-generated on collection
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
 
-                  <Button
-                    type="submit"
-                    className="bg-blue-600 hover:bg-blue-700"
-                    disabled={saving}
-                  >
+                  <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={saving}>
                     {saving ? 'Creating...' : 'Create Route'}
                   </Button>
                 </div>
@@ -364,9 +408,9 @@ export default function ContractorRoutesPage() {
           <div className="space-y-4">
             {routes.map((route) => (
               <Card key={route.id} className={`border-0 shadow-sm border-l-4 ${route.status === 'completed' ? 'border-l-green-500' :
-                route.status === 'active' ? 'border-l-blue-500' :
-                  route.status === 'cancelled' ? 'border-l-red-500' :
-                    'border-l-yellow-500'
+                  route.status === 'active' ? 'border-l-blue-500' :
+                    route.status === 'cancelled' ? 'border-l-red-500' :
+                      'border-l-yellow-500'
                 }`}>
                 <CardContent className="py-4">
                   <div className="flex items-center justify-between">
@@ -383,26 +427,19 @@ export default function ContractorRoutesPage() {
                         })}
                       </p>
                       <p className="text-slate-400 text-xs mt-1">
-                        Driver: {route.profiles?.full_name || 'Not assigned'} |
-                        Vehicle: {route.vehicle_number}
+                        Driver: {route.profiles?.full_name || 'Not assigned'} | Vehicle: {route.vehicle_number}
                       </p>
                     </div>
                     <div className="flex gap-2">
                       {route.status === 'pending' && (
-                        <Button
-                          size="sm"
-                          onClick={() => updateRouteStatus(route.id, 'active')}
-                          className="bg-blue-600 hover:bg-blue-700 text-xs"
-                        >
+                        <Button size="sm" onClick={() => updateRouteStatus(route.id, 'active')}
+                          className="bg-blue-600 hover:bg-blue-700 text-xs">
                           Activate
                         </Button>
                       )}
                       {route.status === 'active' && (
-                        <Button
-                          size="sm"
-                          onClick={() => updateRouteStatus(route.id, 'completed')}
-                          className="bg-green-600 hover:bg-green-700 text-xs"
-                        >
+                        <Button size="sm" onClick={() => updateRouteStatus(route.id, 'completed')}
+                          className="bg-green-600 hover:bg-green-700 text-xs">
                           Complete
                         </Button>
                       )}
