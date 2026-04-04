@@ -31,10 +31,28 @@ export default function ResidentDashboardPage() {
 
     if (p?.district) {
       const today = new Date().toISOString().split('T')[0]
-      const { data: schedules } = await supabase
-        .from('schedules').select('*').eq('district', p.district)
-        .gte('scheduled_date', today).order('scheduled_date', { ascending: true }).limit(1)
-      if (schedules && schedules.length > 0) setNextSchedule(schedules[0])
+
+      // Try ward-specific schedule first, then fall back to district-wide
+      let scheduleQuery = supabase
+        .from('schedules').select('*')
+        .eq('district', p.district)
+        .eq('published', true)
+        .gte('scheduled_date', today)
+        .order('scheduled_date', { ascending: true })
+
+      const { data: allSchedules } = await scheduleQuery
+
+      if (allSchedules && allSchedules.length > 0) {
+        // Prefer schedules that match resident's ward, then district-wide ones (wards is null/empty)
+        const wardMatch = p?.ward
+          ? allSchedules.find(s =>
+            (s.wards && s.wards.includes(p.ward)) ||
+            (s.ward && s.ward === p.ward)
+          )
+          : null
+        const districtWide = allSchedules.find(s => !s.wards?.length && !s.ward)
+        setNextSchedule(wardMatch || districtWide || allSchedules[0])
+      }
     }
 
     const { data: comp } = await supabase
