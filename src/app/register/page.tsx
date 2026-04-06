@@ -32,6 +32,7 @@ export default function RegisterPage() {
     ward: '',
     address: '',
     phone: '',
+    billing_cycle: 'monthly',
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -68,6 +69,8 @@ export default function RegisterPage() {
         organisation_name: formData.role === 'commercial_establishment' ? formData.companyName : null,
         phone: formData.phone,
         is_approved: true,
+        billing_cycle: formData.role === 'commercial_establishment' ? formData.billing_cycle : null,
+        billing_cycle_effective_from: formData.role === 'commercial_establishment' ? new Date().toISOString().split('T')[0] : null,
       })
       if (profileError) { setError(profileError.message); setLoading(false); return }
       router.push(ROLE_DASHBOARDS[formData.role as UserRole])
@@ -450,7 +453,64 @@ export default function RegisterPage() {
                 value={formData.address}
                 onChange={e => setFormData({ ...formData, address: e.target.value })} />
             </div>
-
+            {/* Billing cycle — commercial only */}
+            {formData.role === 'commercial_establishment' && (
+              <div>
+                <label className="field-label">Billing Cycle *</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {[
+                    {
+                      value: 'monthly',
+                      label: 'Monthly',
+                      icon: 'calendar_today',
+                      desc: 'Billed every month. Pay in smaller amounts.',
+                    },
+                    {
+                      value: 'quarterly',
+                      label: 'Quarterly',
+                      icon: 'date_range',
+                      desc: 'Billed every 3 months. Less frequent payments.',
+                    },
+                  ].map(opt => (
+                    <div key={opt.value}
+                      onClick={() => setFormData({ ...formData, billing_cycle: opt.value })}
+                      style={{
+                        border: `1.5px solid ${formData.billing_cycle === opt.value ? '#00450d' : '#e4ede4'}`,
+                        borderRadius: '12px', padding: '14px', cursor: 'pointer',
+                        background: formData.billing_cycle === opt.value ? '#f0fdf4' : '#fafcfa',
+                        transition: 'all 0.2s ease',
+                        boxShadow: formData.billing_cycle === opt.value ? '0 0 0 3px rgba(0,69,13,0.07)' : 'none',
+                      }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: formData.billing_cycle === opt.value ? 'rgba(0,69,13,0.1)' : '#f0f4f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '16px', color: formData.billing_cycle === opt.value ? '#00450d' : '#94a894' }}>
+                              {opt.icon}
+                            </span>
+                          </div>
+                          <span style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '13px', color: formData.billing_cycle === opt.value ? '#00450d' : '#181c22' }}>
+                            {opt.label}
+                          </span>
+                        </div>
+                        {formData.billing_cycle === opt.value && (
+                          <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#00450d', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <svg style={{ width: '10px', height: '10px' }} fill="none" stroke="white" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <p style={{ fontSize: '11px', color: formData.billing_cycle === opt.value ? 'rgba(0,69,13,0.6)' : '#94a894', lineHeight: 1.4, margin: 0 }}>
+                        {opt.desc}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '6px', fontFamily: 'Inter, sans-serif' }}>
+                  You can request a change later from your billing dashboard.
+                </p>
+              </div>
+            )}
             {/* Error */}
             {error && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 14px', borderRadius: '10px', background: 'rgba(186,26,26,0.06)', border: '1px solid rgba(186,26,26,0.15)', color: '#ba1a1a', fontSize: '14px' }}>
