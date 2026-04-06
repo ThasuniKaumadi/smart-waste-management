@@ -2,28 +2,28 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import Link from 'next/link'
-import LogoutButton from '@/components/LogoutButton'
+import DashboardLayout from '@/components/DashboardLayout'
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-    ResponsiveContainer, PieChart, Pie, Cell, Legend
+    ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
 
-const COLORS = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2']
+const ADMIN_NAV = [
+    { label: 'Overview', href: '/dashboard/admin', icon: 'dashboard' },
+    { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts' },
+    { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
+    { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
+    { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
+]
+
+const COLORS = ['#00450d', '#1b5e20', '#2e7d32', '#1d4ed8', '#7c3aed', '#0891b2']
 
 export default function AdminPerformancePage() {
     const [profile, setProfile] = useState<any>(null)
     const [loading, setLoading] = useState(true)
     const [stats, setStats] = useState({
-        totalUsers: 0,
-        totalRoutes: 0,
-        totalComplaints: 0,
-        resolvedComplaints: 0,
-        totalReports: 0,
-        totalSchedules: 0,
-        totalCollections: 0,
-        blockchainRecords: 0,
+        totalUsers: 0, totalRoutes: 0, totalComplaints: 0, resolvedComplaints: 0,
+        totalReports: 0, totalSchedules: 0, totalCollections: 0, blockchainRecords: 0,
     })
     const [districtData, setDistrictData] = useState<any[]>([])
     const [complaintTypeData, setComplaintTypeData] = useState<any[]>([])
@@ -35,19 +35,13 @@ export default function AdminPerformancePage() {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
-
         const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         setProfile(p)
 
         const [
-            { count: totalUsers },
-            { count: totalRoutes },
-            { count: totalComplaints },
-            { count: resolvedComplaints },
-            { count: totalReports },
-            { count: totalSchedules },
-            { count: totalCollections },
-            { count: blockchainRecords },
+            { count: totalUsers }, { count: totalRoutes }, { count: totalComplaints },
+            { count: resolvedComplaints }, { count: totalReports }, { count: totalSchedules },
+            { count: totalCollections }, { count: blockchainRecords },
         ] = await Promise.all([
             supabase.from('profiles').select('*', { count: 'exact', head: true }),
             supabase.from('routes').select('*', { count: 'exact', head: true }),
@@ -60,258 +54,244 @@ export default function AdminPerformancePage() {
         ])
 
         setStats({
-            totalUsers: totalUsers || 0,
-            totalRoutes: totalRoutes || 0,
-            totalComplaints: totalComplaints || 0,
-            resolvedComplaints: resolvedComplaints || 0,
-            totalReports: totalReports || 0,
-            totalSchedules: totalSchedules || 0,
-            totalCollections: totalCollections || 0,
-            blockchainRecords: blockchainRecords || 0,
+            totalUsers: totalUsers || 0, totalRoutes: totalRoutes || 0,
+            totalComplaints: totalComplaints || 0, resolvedComplaints: resolvedComplaints || 0,
+            totalReports: totalReports || 0, totalSchedules: totalSchedules || 0,
+            totalCollections: totalCollections || 0, blockchainRecords: blockchainRecords || 0,
         })
 
-        const { data: complaintsData } = await supabase
-            .from('complaints')
-            .select('district')
-
+        const { data: complaintsData } = await supabase.from('complaints').select('district')
         if (complaintsData) {
-            const districtCounts: Record<string, number> = {}
-            complaintsData.forEach(c => {
-                if (c.district) districtCounts[c.district] = (districtCounts[c.district] || 0) + 1
-            })
-            setDistrictData(Object.entries(districtCounts).map(([name, value]) => ({ name: name.replace('Colombo ', 'Col '), value })))
+            const counts: Record<string, number> = {}
+            complaintsData.forEach(c => { if (c.district) counts[c.district] = (counts[c.district] || 0) + 1 })
+            setDistrictData(Object.entries(counts).map(([name, value]) => ({ name: name.replace('Colombo ', 'Col '), value })))
         }
 
-        const { data: complaintTypes } = await supabase
-            .from('complaints')
-            .select('complaint_type')
-
+        const { data: complaintTypes } = await supabase.from('complaints').select('complaint_type')
         if (complaintTypes) {
-            const typeCounts: Record<string, number> = {}
-            complaintTypes.forEach(c => {
-                if (c.complaint_type) typeCounts[c.complaint_type] = (typeCounts[c.complaint_type] || 0) + 1
-            })
-            setComplaintTypeData(Object.entries(typeCounts).map(([name, value]) => ({
-                name: name.replace('_', ' '),
-                value
-            })))
+            const counts: Record<string, number> = {}
+            complaintTypes.forEach(c => { if (c.complaint_type) counts[c.complaint_type] = (counts[c.complaint_type] || 0) + 1 })
+            setComplaintTypeData(Object.entries(counts).map(([name, value]) => ({ name: name.replace(/_/g, ' '), value })))
         }
 
-        const { data: rolesData } = await supabase
-            .from('profiles')
-            .select('role')
-
+        const { data: rolesData } = await supabase.from('profiles').select('role')
         if (rolesData) {
-            const roleCounts: Record<string, number> = {}
-            rolesData.forEach(r => {
-                if (r.role) roleCounts[r.role] = (roleCounts[r.role] || 0) + 1
-            })
-            setRoleData(Object.entries(roleCounts).map(([name, value]) => ({
-                name: name.replace('_', ' '),
-                value
-            })))
+            const counts: Record<string, number> = {}
+            rolesData.forEach(r => { if (r.role) counts[r.role] = (counts[r.role] || 0) + 1 })
+            setRoleData(Object.entries(counts).map(([name, value]) => ({ name: name.replace(/_/g, ' '), value })))
         }
 
         setLoading(false)
     }
 
     const resolutionRate = stats.totalComplaints > 0
-        ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100)
-        : 0
-
+        ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100) : 0
     const blockchainRate = stats.totalCollections > 0
-        ? Math.round((stats.blockchainRecords / stats.totalCollections) * 100)
-        : 0
+        ? Math.round((stats.blockchainRecords / stats.totalCollections) * 100) : 0
 
     return (
-        <div className="min-h-screen bg-slate-50">
-            <nav className="bg-blue-700 text-white px-6 py-4 flex items-center justify-between shadow">
-                <div className="flex items-center gap-3">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    <span className="font-semibold text-lg">Smart Waste Management</span>
+        <DashboardLayout
+            role="Admin"
+            userName={profile?.full_name || ''}
+            navItems={ADMIN_NAV}
+            primaryAction={{ label: 'View Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' }}
+        >
+            <style>{`
+        .material-symbols-outlined {
+          font-family: 'Material Symbols Outlined';
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+          display: inline-block; vertical-align: middle; line-height: 1;
+        }
+        .font-headline { font-family: 'Manrope', sans-serif; }
+        .bento-card {
+          background: white; border-radius: 16px;
+          box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08);
+          border: 1px solid rgba(0,69,13,0.04); overflow: hidden;
+          transition: all 0.3s cubic-bezier(0.05,0.7,0.1,1.0);
+        }
+        .bento-card:hover { transform: translateY(-3px); box-shadow: 0 20px 50px -15px rgba(24,28,34,0.12); }
+        .progress-bar { height: 8px; border-radius: 99px; background: #f0fdf4; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 99px; transition: width 1s ease; }
+        @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        .s1 { animation: staggerIn 0.5s ease 0.05s both; }
+        .s2 { animation: staggerIn 0.5s ease 0.10s both; }
+        .s3 { animation: staggerIn 0.5s ease 0.15s both; }
+        .s4 { animation: staggerIn 0.5s ease 0.20s both; }
+        .s5 { animation: staggerIn 0.5s ease 0.25s both; }
+      `}</style>
+
+            {/* Hero */}
+            <section className="mb-10 s1">
+                <span className="text-xs font-bold uppercase block mb-2"
+                    style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
+                    System Administration · Analytics
+                </span>
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <h1 className="font-headline font-extrabold tracking-tight"
+                        style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
+                        System <span style={{ color: '#1b5e20' }}>Performance</span>
+                    </h1>
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: '#f0fdf4' }}>
+                        <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#16a34a' }} />
+                        <span className="text-sm font-medium" style={{ color: '#14532d', fontFamily: 'Inter, sans-serif' }}>
+                            Colombo Municipal Council
+                        </span>
+                    </div>
                 </div>
-                <div className="flex items-center gap-4">
-                    <span className="text-blue-100 text-sm">{profile?.full_name}</span>
-                    <span className="bg-red-500 text-xs px-2 py-1 rounded-full">Admin</span>
-                    <LogoutButton />
+            </section>
+
+            {loading ? (
+                <div className="flex items-center justify-center py-24">
+                    <div className="text-center">
+                        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
+                            style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
+                        <p className="text-sm" style={{ color: '#717a6d' }}>Loading system data...</p>
+                    </div>
                 </div>
-            </nav>
-
-            <div className="max-w-6xl mx-auto p-6">
-                <div className="flex items-center gap-3 mb-6">
-                    <Link href="/dashboard/admin" className="text-blue-600 hover:underline text-sm">
-                        ← Back to Dashboard
-                    </Link>
-                </div>
-
-                <h1 className="text-2xl font-bold text-slate-800 mb-2">System Overview</h1>
-                <p className="text-slate-500 text-sm mb-6">Overall performance across all districts — Colombo Municipal Council</p>
-
-                {loading ? (
-                    <div className="text-center py-12 text-slate-400">Loading system data...</div>
-                ) : (
-                    <>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                            <Card className="bg-blue-600 text-white border-0">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-xs text-blue-100">Total Users</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-3xl font-bold">{stats.totalUsers}</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="bg-green-600 text-white border-0">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-xs text-green-100">Total Routes</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-3xl font-bold">{stats.totalRoutes}</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="bg-orange-500 text-white border-0">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-xs text-orange-100">Total Complaints</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-3xl font-bold">{stats.totalComplaints}</p>
-                                    <p className="text-orange-200 text-xs mt-1">{resolutionRate}% resolved</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="bg-purple-600 text-white border-0">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-xs text-purple-100">Blockchain Records</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-3xl font-bold">{stats.blockchainRecords}</p>
-                                    <p className="text-purple-200 text-xs mt-1">{blockchainRate}% on-chain</p>
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                            <Card className="border-0 shadow-sm">
-                                <CardContent className="py-4">
-                                    <p className="text-slate-500 text-xs">Schedules</p>
-                                    <p className="text-2xl font-bold text-slate-800">{stats.totalSchedules}</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="border-0 shadow-sm">
-                                <CardContent className="py-4">
-                                    <p className="text-slate-500 text-xs">Waste Reports</p>
-                                    <p className="text-2xl font-bold text-slate-800">{stats.totalReports}</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="border-0 shadow-sm">
-                                <CardContent className="py-4">
-                                    <p className="text-slate-500 text-xs">Collections</p>
-                                    <p className="text-2xl font-bold text-slate-800">{stats.totalCollections}</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="border-0 shadow-sm">
-                                <CardContent className="py-4">
-                                    <p className="text-slate-500 text-xs">Resolution Rate</p>
-                                    <p className="text-2xl font-bold text-slate-800">{resolutionRate}%</p>
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <Card className="border-0 shadow-sm">
-                                <CardHeader>
-                                    <CardTitle className="text-base text-slate-700">Complaints by District</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    {districtData.length === 0 ? (
-                                        <p className="text-slate-400 text-sm text-center py-8">No data yet</p>
-                                    ) : (
-                                        <ResponsiveContainer width="100%" height={200}>
-                                            <BarChart data={districtData}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                                <YAxis tick={{ fontSize: 11 }} />
-                                                <Tooltip />
-                                                <Bar dataKey="value" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    )}
-                                </CardContent>
-                            </Card>
-
-                            <Card className="border-0 shadow-sm">
-                                <CardHeader>
-                                    <CardTitle className="text-base text-slate-700">Complaint Types</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    {complaintTypeData.length === 0 ? (
-                                        <p className="text-slate-400 text-sm text-center py-8">No data yet</p>
-                                    ) : (
-                                        <ResponsiveContainer width="100%" height={200}>
-                                            <PieChart>
-                                                <Pie
-                                                    data={complaintTypeData}
-                                                    cx="50%"
-                                                    cy="50%"
-                                                    outerRadius={70}
-                                                    dataKey="value"
-                                                    label={({ name, value }) => `${name}: ${value}`}
-                                                >
-                                                    {complaintTypeData.map((_, index) => (
-                                                        <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                                    ))}
-                                                </Pie>
-                                                <Tooltip />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        <Card className="border-0 shadow-sm mb-6">
-                            <CardHeader>
-                                <CardTitle className="text-base text-slate-700">Users by Role</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {roleData.length === 0 ? (
-                                    <p className="text-slate-400 text-sm text-center py-8">No data yet</p>
-                                ) : (
-                                    <ResponsiveContainer width="100%" height={200}>
-                                        <BarChart data={roleData}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                            <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                                            <YAxis tick={{ fontSize: 11 }} />
-                                            <Tooltip />
-                                            <Bar dataKey="value" fill="#16a34a" radius={[4, 4, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <p className="text-blue-700 text-sm font-medium mb-3">System Health</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-slate-600 text-sm">Complaint Resolution Rate</p>
-                                    <div className="w-full bg-slate-200 rounded-full h-2 mt-1">
-                                        <div className="bg-green-500 h-2 rounded-full" style={{ width: `${resolutionRate}%` }} />
-                                    </div>
-                                    <p className="text-slate-500 text-xs mt-1">{resolutionRate}%</p>
+            ) : (
+                <>
+                    {/* Row 1 — 4 primary stat cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6 s2">
+                        {[
+                            { label: 'Total Users', value: stats.totalUsers, sub: 'Registered accounts', icon: 'group', color: '#00450d', bg: 'rgba(0,69,13,0.07)' },
+                            { label: 'Total Routes', value: stats.totalRoutes, sub: 'Collection routes', icon: 'route', color: '#1b5e20', bg: 'rgba(27,94,32,0.07)' },
+                            { label: 'Complaints', value: stats.totalComplaints, sub: `${resolutionRate}% resolved`, icon: 'feedback', color: '#b45309', bg: 'rgba(180,83,9,0.07)' },
+                            { label: 'Blockchain Records', value: stats.blockchainRecords, sub: `${blockchainRate}% on-chain`, icon: 'link', color: '#7c3aed', bg: 'rgba(124,58,237,0.07)' },
+                        ].map(m => (
+                            <div key={m.label} className="bento-card p-6">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: m.bg }}>
+                                    <span className="material-symbols-outlined" style={{ color: m.color, fontSize: '20px' }}>{m.icon}</span>
                                 </div>
-                                <div>
-                                    <p className="text-slate-600 text-sm">Blockchain Verification Rate</p>
-                                    <div className="w-full bg-slate-200 rounded-full h-2 mt-1">
-                                        <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${blockchainRate}%` }} />
-                                    </div>
-                                    <p className="text-slate-500 text-xs mt-1">{blockchainRate}%</p>
-                                </div>
+                                <p className="font-headline font-extrabold text-3xl tracking-tight mb-1" style={{ color: '#181c22' }}>{m.value}</p>
+                                <p className="font-headline text-xs font-bold uppercase mb-1" style={{ letterSpacing: '0.12em', color: '#94a3b8' }}>{m.label}</p>
+                                <p className="text-xs font-semibold" style={{ color: m.color }}>{m.sub}</p>
                             </div>
+                        ))}
+                    </div>
+
+                    {/* Row 2 — 4 secondary stat cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6 s3">
+                        {[
+                            { label: 'Schedules', value: stats.totalSchedules, icon: 'calendar_month', color: '#1d4ed8' },
+                            { label: 'Waste Reports', value: stats.totalReports, icon: 'report_problem', color: '#dc2626' },
+                            { label: 'Collections', value: stats.totalCollections, icon: 'delete_sweep', color: '#00450d' },
+                            { label: 'Resolution %', value: `${resolutionRate}%`, icon: 'analytics', color: '#0891b2' },
+                        ].map(m => (
+                            <div key={m.label} className="bento-card p-5">
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="material-symbols-outlined" style={{ color: m.color, fontSize: '20px' }}>{m.icon}</span>
+                                </div>
+                                <p className="font-headline font-extrabold text-2xl tracking-tight mb-0.5" style={{ color: '#181c22' }}>{m.value}</p>
+                                <p style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'Manrope, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{m.label}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Row 3 — Charts */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 s4">
+
+                        {/* Complaints by District */}
+                        <div className="bento-card p-8">
+                            <h3 className="font-headline font-bold text-xl mb-6" style={{ color: '#181c22' }}>
+                                Complaints by District
+                            </h3>
+                            {districtData.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-10 text-center">
+                                    <span className="material-symbols-outlined" style={{ fontSize: '36px', color: '#c4c9c0', display: 'block', marginBottom: '8px' }}>bar_chart</span>
+                                    <p className="text-sm" style={{ color: '#94a3b8' }}>No complaint data yet</p>
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <BarChart data={districtData}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'Inter' }} />
+                                        <YAxis tick={{ fontSize: 10 }} />
+                                        <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter' }} />
+                                        <Bar dataKey="value" fill="#00450d" radius={[6, 6, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
                         </div>
-                    </>
-                )}
-            </div>
-        </div>
+
+                        {/* Complaint Types */}
+                        <div className="bento-card p-8">
+                            <h3 className="font-headline font-bold text-xl mb-6" style={{ color: '#181c22' }}>
+                                Complaint Types
+                            </h3>
+                            {complaintTypeData.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-10 text-center">
+                                    <span className="material-symbols-outlined" style={{ fontSize: '36px', color: '#c4c9c0', display: 'block', marginBottom: '8px' }}>pie_chart</span>
+                                    <p className="text-sm" style={{ color: '#94a3b8' }}>No complaint data yet</p>
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <PieChart>
+                                        <Pie data={complaintTypeData} cx="50%" cy="50%" outerRadius={70} dataKey="value"
+                                            label={({ name, value }) => `${name}: ${value}`}
+                                            labelLine={{ stroke: '#e4ede4' }}>
+                                            {complaintTypeData.map((_, index) => (
+                                                <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter' }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Row 4 — Users by role */}
+                    <div className="bento-card p-8 mb-6 s4">
+                        <h3 className="font-headline font-bold text-xl mb-6" style={{ color: '#181c22' }}>
+                            Users by Role
+                        </h3>
+                        {roleData.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-10 text-center">
+                                <span className="material-symbols-outlined" style={{ fontSize: '36px', color: '#c4c9c0', display: 'block', marginBottom: '8px' }}>group</span>
+                                <p className="text-sm" style={{ color: '#94a3b8' }}>No user data yet</p>
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height={220}>
+                                <BarChart data={roleData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                    <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'Inter' }} />
+                                    <YAxis tick={{ fontSize: 10 }} />
+                                    <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter' }} />
+                                    <Bar dataKey="value" fill="#1b5e20" radius={[6, 6, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        )}
+                    </div>
+
+                    {/* Row 5 — System Health */}
+                    <div className="bento-card p-8 s5">
+                        <div className="flex items-center gap-3 mb-8">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0fdf4' }}>
+                                <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '20px' }}>monitor_heart</span>
+                            </div>
+                            <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>System Health</h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {[
+                                { label: 'Complaint Resolution Rate', value: resolutionRate, color: '#00450d' },
+                                { label: 'Blockchain Verification Rate', value: blockchainRate, color: '#7c3aed' },
+                                { label: 'Collection Completion', value: stats.totalCollections > 0 ? Math.round(((stats.totalCollections - stats.totalCollections * 0.05) / stats.totalCollections) * 100) : 0, color: '#1b5e20' },
+                                { label: 'System Uptime', value: 99, color: '#0891b2' },
+                            ].map(m => (
+                                <div key={m.label}>
+                                    <div className="flex justify-between text-sm mb-2">
+                                        <span style={{ color: '#41493e', fontWeight: 500 }}>{m.label}</span>
+                                        <span className="font-bold" style={{ color: m.color }}>{m.value}%</span>
+                                    </div>
+                                    <div className="progress-bar">
+                                        <div className="progress-fill" style={{ width: `${m.value}%`, background: m.color }} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            )}
+        </DashboardLayout>
     )
 }

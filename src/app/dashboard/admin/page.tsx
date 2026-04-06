@@ -11,6 +11,7 @@ const ADMIN_NAV = [
   { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts' },
   { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
   { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
+  { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
 ]
 
 export default function AdminDashboardPage() {

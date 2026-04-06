@@ -11,6 +11,7 @@ const ADMIN_NAV = [
   { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts' },
   { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
   { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
+  { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
 ]
 
 const STAFF_ROLES = [
@@ -165,7 +166,7 @@ export default function AdminUsersPage() {
     setProfile(p)
     const { data: usersData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
     setUsers(usersData || [])
-    const { data: contractorData } = await supabase.from('profiles').select('id, full_name, organisation_name').eq('role', 'contractor')
+    const { data: contractorData } = await supabase.from('profiles').select('id, full_name, organisation_name, role, district, is_approved, created_at').eq('role', 'contractor')
     setContractors(contractorData || [])
     setLoading(false)
   }
