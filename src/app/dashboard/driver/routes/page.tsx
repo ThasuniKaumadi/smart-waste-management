@@ -18,6 +18,8 @@ const SKIP_REASONS = [
 interface Stop {
   id: string
   address: string
+  road_name: string
+  frequency: string
   stop_order: number
   status: string
   skip_reason: string
@@ -31,10 +33,12 @@ interface Route {
   id: string
   route_name: string
   district: string
+  ward: string
   vehicle_number: string
   date: string
   status: string
   waste_type: string
+  shift: string
 }
 
 export default function DriverRoutesPage() {
@@ -98,7 +102,10 @@ export default function DriverRoutesPage() {
     try {
       const res = await fetch('/api/handoff/create', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ route_id: route.id, driver_id: profile?.id, waste_type: route.waste_type || 'General', estimated_quantity: 0 }),
+        body: JSON.stringify({
+          route_id: route.id, driver_id: profile?.id,
+          waste_type: route.waste_type || 'General', estimated_quantity: 0,
+        }),
       })
       const data = await res.json()
       if (data.handoff) alert(`📦 Handoff Code: ${data.handoff.handoff_code}\n\nShare this 6-digit code with the facility operator.\nExpires in 30 minutes.`)
@@ -108,7 +115,9 @@ export default function DriverRoutesPage() {
   }
 
   async function markStop(stop: Stop, status: 'completed' | 'skipped') {
-    if (status === 'skipped' && !selectedSkipReason[stop.id]) { showToast('Please select a skip reason first', 'error'); return }
+    if (status === 'skipped' && !selectedSkipReason[stop.id]) {
+      showToast('Please select a skip reason first', 'error'); return
+    }
     setUpdatingStop(stop.id)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -119,8 +128,10 @@ export default function DriverRoutesPage() {
     if (!error) {
       const txHash = await logCollectionOnChain(selectedRoute?.id || '', user?.id || '', status)
       const { data: eventData } = await supabase.from('collection_events').insert({
-        route_id: selectedRoute?.id, driver_id: user?.id, address: stop.address,
-        status, skip_reason: status === 'skipped' ? selectedSkipReason[stop.id] : null, blockchain_tx: txHash,
+        route_id: selectedRoute?.id, driver_id: user?.id,
+        address: stop.road_name || stop.address,
+        status, skip_reason: status === 'skipped' ? selectedSkipReason[stop.id] : null,
+        blockchain_tx: txHash,
       }).select().single()
       if (txHash) await supabase.from('collection_stops').update({ blockchain_tx: txHash }).eq('id', stop.id)
       if (status === 'completed' && stop.is_commercial && stop.commercial_id) {
@@ -135,13 +146,25 @@ export default function DriverRoutesPage() {
         const skipReason = selectedSkipReason[stop.id]
         const skipLabel = SKIP_REASONS.find(r => r.value === skipReason)?.label || skipReason
         const severity = skipReason === 'vehicle_breakdown' ? 'critical' : skipReason === 'access_denied' ? 'high' : 'medium'
-        await createExceptionAlert({ type: 'stop_skipped', title: 'Collection Stop Skipped', message: `Stop ${stop.stop_order} at "${stop.address}" skipped. Reason: ${skipLabel}.`, severity, route_id: selectedRoute?.id, driver_id: user?.id, collection_event_id: eventData?.id })
+        await createExceptionAlert({
+          type: 'stop_skipped', title: 'Collection Stop Skipped',
+          message: `Stop ${stop.stop_order} — "${stop.road_name || stop.address}" skipped. Reason: ${skipLabel}.`,
+          severity, route_id: selectedRoute?.id, driver_id: user?.id, collection_event_id: eventData?.id,
+        })
         const updatedStops = stops.map(s => s.id === stop.id ? { ...s, status: 'skipped' } : s)
         if (updatedStops.every(s => s.status === 'skipped')) {
-          await createExceptionAlert({ type: 'all_stops_skipped', title: 'All Stops Skipped', message: `All stops on "${selectedRoute?.route_name}" skipped.`, severity: 'critical', route_id: selectedRoute?.id, driver_id: user?.id })
+          await createExceptionAlert({
+            type: 'all_stops_skipped', title: 'All Stops Skipped',
+            message: `All stops on "${selectedRoute?.route_name}" skipped.`,
+            severity: 'critical', route_id: selectedRoute?.id, driver_id: user?.id,
+          })
         }
         if (skipReason === 'vehicle_breakdown') {
-          await createExceptionAlert({ type: 'breakdown_reported', title: 'Vehicle Breakdown Indicated', message: `Breakdown at stop ${stop.stop_order} on route "${selectedRoute?.route_name}". Vehicle: ${selectedRoute?.vehicle_number}.`, severity: 'critical', route_id: selectedRoute?.id, driver_id: user?.id, collection_event_id: eventData?.id })
+          await createExceptionAlert({
+            type: 'breakdown_reported', title: 'Vehicle Breakdown Indicated',
+            message: `Breakdown at stop ${stop.stop_order} on route "${selectedRoute?.route_name}". Vehicle: ${selectedRoute?.vehicle_number}.`,
+            severity: 'critical', route_id: selectedRoute?.id, driver_id: user?.id, collection_event_id: eventData?.id,
+          })
         }
       }
       if (selectedRoute) loadStops(selectedRoute)
@@ -156,6 +179,13 @@ export default function DriverRoutesPage() {
   const skippedCount = stops.filter(s => s.status === 'skipped').length
   const pendingCount = stops.filter(s => s.status === 'pending').length
   const progress = stops.length > 0 ? Math.round(((completedCount + skippedCount) / stops.length) * 100) : 0
+
+  function getFrequencyStyle(freq: string) {
+    if (freq === 'four_times_a_day') return { color: '#ba1a1a', bg: 'rgba(186,26,26,0.08)' }
+    if (freq === 'thrice_a_day') return { color: '#d97706', bg: 'rgba(217,119,6,0.08)' }
+    if (freq === 'twice_a_day') return { color: '#1d4ed8', bg: 'rgba(29,78,216,0.08)' }
+    return null // once a day — no badge needed
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f4f6f3', fontFamily: "'Inter', sans-serif" }}>
@@ -191,6 +221,7 @@ export default function DriverRoutesPage() {
         @keyframes spin { to { transform:rotate(360deg); } }
         .progress-bar { height:6px; background:#e4ede4; border-radius:3px; overflow:hidden; }
         .progress-fill { height:100%; background:linear-gradient(90deg,#00450d,#43a047); border-radius:3px; transition:width 0.5s ease; }
+        .freq-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:99px; font-size:10px; font-weight:700; font-family:'Manrope',sans-serif; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; }
       `}</style>
 
       {toast && (
@@ -202,6 +233,7 @@ export default function DriverRoutesPage() {
         </div>
       )}
 
+      {/* Nav */}
       <nav style={{ background: 'white', borderBottom: '1px solid rgba(0,0,0,0.06)', padding: '0 32px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40, boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
           <Link href="/dashboard/driver" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
@@ -227,6 +259,7 @@ export default function DriverRoutesPage() {
 
       <main style={{ maxWidth: '900px', margin: '0 auto', padding: '32px 24px' }}>
 
+        {/* ROUTE LIST */}
         {!selectedRoute ? (
           <>
             <div style={{ marginBottom: '28px' }}>
@@ -249,23 +282,44 @@ export default function DriverRoutesPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {routes.map(route => {
                   const isActive = route.status === 'active'
+                  const isNight = route.shift === 'night'
                   return (
-                    <div key={route.id} className="route-card" onClick={() => loadStops(route)} style={{ background: 'white', borderRadius: '16px', padding: '20px 24px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <div style={{ width: '48px', height: '48px', borderRadius: '13px', flexShrink: 0, background: 'rgba(0,69,13,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '24px', color: '#00450d' }}>route</span>
+                    <div key={route.id} className="route-card" onClick={() => loadStops(route)}
+                      style={{ background: 'white', borderRadius: '16px', padding: '20px 24px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+
+                      {/* Icon */}
+                      <div style={{ width: '48px', height: '48px', borderRadius: '13px', flexShrink: 0, background: isNight ? 'rgba(29,78,216,0.07)' : 'rgba(0,69,13,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '24px', color: isNight ? '#1d4ed8' : '#00450d' }}>
+                          {isNight ? 'nights_stay' : 'wb_sunny'}
+                        </span>
                       </div>
+
+                      {/* Info */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '15px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>{route.route_name}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '15px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>
+                            {route.route_name}
+                          </span>
                           <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: isActive ? 'rgba(0,69,13,0.08)' : 'rgba(180,83,9,0.08)', color: isActive ? '#00450d' : '#b45309', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                             {route.status}
                           </span>
+                          {isNight && (
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(29,78,216,0.08)', color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                              🌙 Night
+                            </span>
+                          )}
+                          {route.waste_type && (
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(0,69,13,0.06)', color: '#00450d', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                              {route.waste_type.replace('_', ' ')}
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
                           {[
-                            { icon: 'location_on', text: route.district },
+                            { icon: 'location_on', text: route.ward ? `${route.ward} · ${route.district}` : route.district },
                             { icon: 'directions_car', text: route.vehicle_number },
                             { icon: 'calendar_today', text: new Date(route.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) },
+                            { icon: isNight ? 'nights_stay' : 'wb_sunny', text: isNight ? 'Night Shift' : 'Day Shift' },
                           ].map(m => (
                             <span key={m.icon} style={{ fontSize: '12px', color: '#717a6d', display: 'flex', alignItems: 'center', gap: '3px' }}>
                               <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>{m.icon}</span>
@@ -274,8 +328,11 @@ export default function DriverRoutesPage() {
                           ))}
                         </div>
                       </div>
+
+                      {/* Actions */}
                       <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                        <button className="dispatch-btn" disabled={dispatchingRoute === route.id} onClick={e => handleDispatch(e, route)}>
+                        <button className="dispatch-btn" disabled={dispatchingRoute === route.id}
+                          onClick={e => handleDispatch(e, route)}>
                           <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>inventory_2</span>
                           {dispatchingRoute === route.id ? '...' : 'Dispatch'}
                         </button>
@@ -291,20 +348,42 @@ export default function DriverRoutesPage() {
             )}
           </>
         ) : (
+
+          /* STOPS VIEW */
           <>
             <div style={{ marginBottom: '24px' }}>
               <button className="back-btn" style={{ marginBottom: '12px' }} onClick={() => setSelectedRoute(null)}>
                 <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_back</span>
                 All Routes
               </button>
-              <h2 style={{ fontFamily: 'Manrope,sans-serif', fontSize: '22px', fontWeight: 800, color: '#181c22', margin: '0 0 4px', letterSpacing: '-0.02em' }}>{selectedRoute.route_name}</h2>
-              <p style={{ fontSize: '13px', color: '#717a6d', margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>{selectedRoute.district}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>directions_car</span>{selectedRoute.vehicle_number}</span>
-              </p>
+              <h2 style={{ fontFamily: 'Manrope,sans-serif', fontSize: '22px', fontWeight: 800, color: '#181c22', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+                {selectedRoute.route_name}
+              </h2>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', fontSize: '13px', color: '#717a6d' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>
+                  {selectedRoute.ward ? `${selectedRoute.ward} · ${selectedRoute.district}` : selectedRoute.district}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>directions_car</span>
+                  {selectedRoute.vehicle_number}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
+                    {selectedRoute.shift === 'night' ? 'nights_stay' : 'wb_sunny'}
+                  </span>
+                  {selectedRoute.shift === 'night' ? 'Night Shift' : 'Day Shift'}
+                </span>
+                {selectedRoute.waste_type && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>delete_sweep</span>
+                    {selectedRoute.waste_type.replace('_', ' ')}
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* Progress */}
+            {/* Progress card */}
             <div style={{ background: 'white', borderRadius: '16px', padding: '20px 24px', marginBottom: '20px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                 <span style={{ fontSize: '13px', fontWeight: 600, color: '#41493e', fontFamily: 'Manrope,sans-serif' }}>Route Progress</span>
@@ -329,63 +408,109 @@ export default function DriverRoutesPage() {
 
             {/* Stops */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {stops.map(stop => (
-                <div key={stop.id} className="stop-card" style={{ background: 'white', borderRadius: '14px', padding: '16px 20px', border: `1px solid ${stop.status === 'completed' ? 'rgba(0,69,13,0.12)' : stop.status === 'skipped' ? 'rgba(220,38,38,0.12)' : 'rgba(0,0,0,0.05)'}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+              {stops.map(stop => {
+                const freqStyle = getFrequencyStyle(stop.frequency)
+                return (
+                  <div key={stop.id} className="stop-card" style={{ background: 'white', borderRadius: '14px', padding: '16px 20px', border: `1px solid ${stop.status === 'completed' ? 'rgba(0,69,13,0.12)' : stop.status === 'skipped' ? 'rgba(220,38,38,0.12)' : 'rgba(0,0,0,0.05)'}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
 
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0, background: stop.status === 'completed' ? 'rgba(0,69,13,0.1)' : stop.status === 'skipped' ? 'rgba(220,38,38,0.1)' : '#f0f4f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope,sans-serif', color: stop.status === 'completed' ? '#00450d' : stop.status === 'skipped' ? '#dc2626' : '#717a6d' }}>
-                      {stop.status === 'completed'
-                        ? <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>check</span>
-                        : stop.status === 'skipped'
-                          ? <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
-                          : stop.stop_order}
-                    </div>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 600, color: '#181c22' }}>{stop.address}</span>
-                        {stop.is_commercial && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(37,99,235,0.08)', color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Commercial</span>}
-                        {stop.status === 'completed' && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(0,69,13,0.08)', color: '#00450d', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Completed</span>}
-                        {stop.status === 'skipped' && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(220,38,38,0.08)', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Skipped</span>}
-                        {stop.status === 'completed' && stop.is_commercial && stop.commercial_id && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(124,58,237,0.08)', color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Invoiced</span>}
+                      {/* Stop number / status icon */}
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0, background: stop.status === 'completed' ? 'rgba(0,69,13,0.1)' : stop.status === 'skipped' ? 'rgba(220,38,38,0.1)' : '#f0f4f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope,sans-serif', color: stop.status === 'completed' ? '#00450d' : stop.status === 'skipped' ? '#dc2626' : '#717a6d' }}>
+                        {stop.status === 'completed'
+                          ? <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>check</span>
+                          : stop.status === 'skipped'
+                            ? <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
+                            : stop.stop_order}
                       </div>
-                      {stop.skip_reason && <p style={{ fontSize: '12px', color: '#dc2626', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>info</span>{SKIP_REASONS.find(r => r.value === stop.skip_reason)?.label}</p>}
-                      {stop.blockchain_tx && <p style={{ fontSize: '11px', color: '#2563eb', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px', fontFamily: "'Material Symbols Outlined'" }}>link</span>{stop.blockchain_tx.slice(0, 22)}...</p>}
 
-                      {stop.status === 'pending' && (
-                        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {stop.is_commercial && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '12px', color: '#717a6d', whiteSpace: 'nowrap' }}>Bins collected:</span>
-                              <input type="number" min="0" className="bin-input"
-                                value={binCounts[stop.id] || ''}
-                                onChange={e => setBinCounts({ ...binCounts, [stop.id]: parseInt(e.target.value) || 0 })}
-                                placeholder="0" />
-                              {!stop.commercial_id && <span style={{ fontSize: '11px', color: '#f97316', display: 'flex', alignItems: 'center', gap: '3px' }}><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>warning</span>No billing linked</span>}
-                            </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {/* Road name + badges */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 600, color: '#181c22' }}>
+                            {stop.road_name || stop.address}
+                          </span>
+                          {/* Frequency badge — only show if not once a day */}
+                          {freqStyle && (
+                            <span className="freq-badge" style={{ background: freqStyle.bg, color: freqStyle.color }}>
+                              {stop.frequency.replace(/_/g, ' ')}
+                            </span>
                           )}
-                          <select className="skip-select"
-                            value={selectedSkipReason[stop.id] || ''}
-                            onChange={e => setSelectedSkipReason({ ...selectedSkipReason, [stop.id]: e.target.value })}>
-                            <option value="">Skip reason (select if skipping)</option>
-                            {SKIP_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                          </select>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button className="done-btn" onClick={() => markStop(stop, 'completed')} disabled={updatingStop === stop.id}>
-                              {updatingStop === stop.id
-                                ? <svg style={{ width: '14px', height: '14px', animation: 'spin 0.8s linear infinite' }} fill="none" viewBox="0 0 24 24"><circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                                : <><span className="material-symbols-outlined" style={{ fontSize: '15px' }}>check</span>Done</>}
-                            </button>
-                            <button className="skip-btn" onClick={() => markStop(stop, 'skipped')} disabled={updatingStop === stop.id}>
-                              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>close</span>Skip
-                            </button>
-                          </div>
+                          {stop.is_commercial && (
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(37,99,235,0.08)', color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Commercial</span>
+                          )}
+                          {stop.status === 'completed' && (
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(0,69,13,0.08)', color: '#00450d', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Completed</span>
+                          )}
+                          {stop.status === 'skipped' && (
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(220,38,38,0.08)', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Skipped</span>
+                          )}
+                          {stop.status === 'completed' && stop.is_commercial && stop.commercial_id && (
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(124,58,237,0.08)', color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Invoiced</span>
+                          )}
                         </div>
-                      )}
+
+                        {/* Address if different from road name */}
+                        {stop.road_name && stop.address && stop.road_name !== stop.address && (
+                          <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>location_on</span>
+                            {stop.address}
+                          </p>
+                        )}
+
+                        {stop.skip_reason && (
+                          <p style={{ fontSize: '12px', color: '#dc2626', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>info</span>
+                            {SKIP_REASONS.find(r => r.value === stop.skip_reason)?.label}
+                          </p>
+                        )}
+                        {stop.blockchain_tx && (
+                          <p style={{ fontSize: '11px', color: '#2563eb', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>link</span>
+                            {stop.blockchain_tx.slice(0, 22)}...
+                          </p>
+                        )}
+
+                        {/* Pending stop actions */}
+                        {stop.status === 'pending' && (
+                          <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {stop.is_commercial && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '12px', color: '#717a6d', whiteSpace: 'nowrap' }}>Bins collected:</span>
+                                <input type="number" min="0" className="bin-input"
+                                  value={binCounts[stop.id] || ''}
+                                  onChange={e => setBinCounts({ ...binCounts, [stop.id]: parseInt(e.target.value) || 0 })}
+                                  placeholder="0" />
+                                {!stop.commercial_id && (
+                                  <span style={{ fontSize: '11px', color: '#f97316', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>warning</span>
+                                    No billing linked
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            <select className="skip-select"
+                              value={selectedSkipReason[stop.id] || ''}
+                              onChange={e => setSelectedSkipReason({ ...selectedSkipReason, [stop.id]: e.target.value })}>
+                              <option value="">Skip reason (select if skipping)</option>
+                              {SKIP_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                            </select>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button className="done-btn" onClick={() => markStop(stop, 'completed')} disabled={updatingStop === stop.id}>
+                                {updatingStop === stop.id
+                                  ? <svg style={{ width: '14px', height: '14px', animation: 'spin 0.8s linear infinite' }} fill="none" viewBox="0 0 24 24"><circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                                  : <><span className="material-symbols-outlined" style={{ fontSize: '15px' }}>check</span>Done</>}
+                              </button>
+                              <button className="skip-btn" onClick={() => markStop(stop, 'skipped')} disabled={updatingStop === stop.id}>
+                                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>close</span>Skip
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </>
         )}
