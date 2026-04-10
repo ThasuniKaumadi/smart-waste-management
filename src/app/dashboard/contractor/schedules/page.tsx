@@ -10,6 +10,8 @@ const CONTRACTOR_NAV = [
     { label: 'Routes', href: '/dashboard/contractor/routes', icon: 'route' },
     { label: 'Drivers', href: '/dashboard/contractor/drivers', icon: 'person' },
     { label: 'Schedules', href: '/dashboard/contractor/schedules', icon: 'calendar_month' },
+    { label: 'Contracts', href: '/dashboard/contractor/contracts', icon: 'description' },
+    { label: 'Fleet', href: '/dashboard/contractor/fleet', icon: 'local_shipping' },
 ]
 
 const WASTE_STYLE: Record<string, { color: string; bg: string }> = {

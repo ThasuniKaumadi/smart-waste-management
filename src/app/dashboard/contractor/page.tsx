@@ -8,9 +8,10 @@ import DashboardLayout from '@/components/DashboardLayout'
 const CONTRACTOR_NAV = [
   { label: 'Overview', href: '/dashboard/contractor', icon: 'dashboard' },
   { label: 'Routes', href: '/dashboard/contractor/routes', icon: 'route' },
-  { label: 'Drivers', href: '/dashboard/contractor/drivers', icon: 'people' },
-  { label: 'Breakdowns', href: '/dashboard/contractor/breakdowns', icon: 'car_crash' },
+  { label: 'Drivers', href: '/dashboard/contractor/drivers', icon: 'person' },
+  { label: 'Schedules', href: '/dashboard/contractor/schedules', icon: 'calendar_month' },
   { label: 'Contracts', href: '/dashboard/contractor/contracts', icon: 'description' },
+  { label: 'Fleet', href: '/dashboard/contractor/fleet', icon: 'local_shipping' },
 ]
 
 const WASTE_COLORS: Record<string, { label: string; color: string; bg: string; icon: string }> = {
