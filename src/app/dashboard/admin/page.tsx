@@ -12,6 +12,7 @@ const ADMIN_NAV = [
   { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
   { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
   { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
+  { label: 'Contracts', href: '/dashboard/admin/contracts', icon: 'description' },
 ]
 
 export default function AdminDashboardPage() {

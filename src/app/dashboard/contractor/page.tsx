@@ -10,6 +10,7 @@ const CONTRACTOR_NAV = [
   { label: 'Routes', href: '/dashboard/contractor/routes', icon: 'route' },
   { label: 'Drivers', href: '/dashboard/contractor/drivers', icon: 'people' },
   { label: 'Breakdowns', href: '/dashboard/contractor/breakdowns', icon: 'car_crash' },
+  { label: 'Contracts', href: '/dashboard/contractor/contracts', icon: 'description' },
 ]
 
 const WASTE_COLORS: Record<string, { label: string; color: string; bg: string; icon: string }> = {
