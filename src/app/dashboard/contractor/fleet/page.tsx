@@ -11,6 +11,7 @@ const CONTRACTOR_NAV = [
     { label: 'Breakdowns', href: '/dashboard/contractor/breakdowns', icon: 'car_crash' },
     { label: 'Contracts', href: '/dashboard/contractor/contracts', icon: 'description' },
     { label: 'Fleet', href: '/dashboard/contractor/fleet', icon: 'local_shipping' },
+    { label: 'Billing', href: '/dashboard/contractor/billing', icon: 'receipt_long' },
 ]
 
 type Vehicle = {

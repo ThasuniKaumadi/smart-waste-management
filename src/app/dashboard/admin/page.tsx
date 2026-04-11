@@ -13,6 +13,7 @@ const ADMIN_NAV = [
   { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
   { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
   { label: 'Contracts', href: '/dashboard/admin/contracts', icon: 'description' },
+  { label: 'Contractor Billing', href: '/dashboard/admin/billing-contractor', icon: 'receipt_long' },
 ]
 
 export default function AdminDashboardPage() {
