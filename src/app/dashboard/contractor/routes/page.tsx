@@ -12,6 +12,7 @@ const CONTRACTOR_NAV = [
   { label: 'Contracts', href: '/dashboard/contractor/contracts', icon: 'description' },
   { label: 'Fleet', href: '/dashboard/contractor/fleet', icon: 'local_shipping' },
   { label: 'Billing', href: '/dashboard/contractor/billing', icon: 'receipt_long' },
+  { label: 'Incidents', href: '/dashboard/contractor/incidents', icon: 'warning' },
 ]
 
 const STATUS_STYLE: Record<string, { color: string; bg: string }> = {
