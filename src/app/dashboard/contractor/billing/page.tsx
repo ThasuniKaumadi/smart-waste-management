@@ -13,6 +13,7 @@ const CONTRACTOR_NAV = [
     { label: 'Fleet', href: '/dashboard/contractor/fleet', icon: 'local_shipping' },
     { label: 'Billing', href: '/dashboard/contractor/billing', icon: 'receipt_long' },
     { label: 'Incidents', href: '/dashboard/contractor/incidents', icon: 'warning' },
+    { label: 'Messages', href: '/dashboard/contractor/messages', icon: 'chat' },
 ]
 
 type Invoice = {
