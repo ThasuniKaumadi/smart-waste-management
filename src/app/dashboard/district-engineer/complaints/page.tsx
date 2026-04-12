@@ -11,6 +11,7 @@ const DE_NAV = [
   { label: 'Complaints', href: '/dashboard/district-engineer/complaints', icon: 'feedback' },
   { label: 'Waste Reports', href: '/dashboard/district-engineer/waste-reports', icon: 'report' },
   { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
+  { label: 'Zones', href: '/dashboard/district-engineer/zones', icon: 'map' },
 ]
 
 const COMPLAINT_TYPES: Record<string, { label: string; icon: string; color: string; bg: string }> = {

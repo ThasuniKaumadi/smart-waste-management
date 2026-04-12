@@ -15,6 +15,8 @@ const CONTRACTOR_NAV = [
     { label: 'Incidents', href: '/dashboard/contractor/incidents', icon: 'warning' },
     { label: 'Incidents', href: '/dashboard/contractor/incidents', icon: 'warning' },
     { label: 'Messages', href: '/dashboard/contractor/messages', icon: 'chat' },
+    { label: 'Zones', href: '/dashboard/contractor/zones', icon: 'map' },
+    { label: 'Staff', href: '/dashboard/contractor/staff', icon: 'badge' },
 ]
 
 type Incident = {
