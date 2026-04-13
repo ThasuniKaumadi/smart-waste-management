@@ -13,6 +13,7 @@ const DE_NAV = [
     { label: 'Waste Reports', href: '/dashboard/district-engineer/waste-reports', icon: 'report' },
     { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
     { label: 'Zones', href: '/dashboard/district-engineer/zones', icon: 'map' },
+    { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
 
 const FREQUENCIES = [

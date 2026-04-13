@@ -18,6 +18,7 @@ const ADMIN_NAV = [
   { label: 'Communications', href: '/dashboard/admin/communications', icon: 'chat' },
   { label: 'Zones', href: '/dashboard/admin/zones', icon: 'map' },
   { label: 'Supervisors', href: '/dashboard/admin/supervisors', icon: 'supervisor_account' },
+  { label: 'Disposal', href: '/dashboard/admin/disposal', icon: 'delete_sweep' },
 ]
 
 export default function AdminDashboardPage() {

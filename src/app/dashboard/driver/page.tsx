@@ -10,6 +10,7 @@ const DRIVER_NAV = [
   { label: 'My Routes', href: '/dashboard/driver/routes', icon: 'route' },
   { label: 'Fuel Log', href: '/dashboard/driver/fuel-log', icon: 'local_gas_station' },
   { label: 'Breakdown', href: '/dashboard/driver/breakdown', icon: 'car_crash' },
+  { label: 'Disposal', href: '/dashboard/driver/disposal', icon: 'delete_sweep' },
 ]
 
 export default function DriverDashboardPage() {
