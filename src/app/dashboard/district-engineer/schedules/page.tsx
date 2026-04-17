@@ -12,6 +12,7 @@ const DE_NAV = [
   { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
   { label: 'Complaints', href: '/dashboard/district-engineer/complaints', icon: 'feedback' },
   { label: 'Waste Reports', href: '/dashboard/district-engineer/waste-reports', icon: 'report' },
+  { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
   { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
   { label: 'Zones', href: '/dashboard/district-engineer/zones', icon: 'map' },
   { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
@@ -34,32 +35,18 @@ const FREQUENCIES = [
 ]
 
 interface Schedule {
-  id: string
-  district: string
-  ward: string
-  wards: string[]
-  waste_type: string
-  collection_day: string
-  collection_time: string
-  frequency: string
-  notes: string
-  published: boolean
-  scheduled_date: string
-  created_at: string
-  supervisor_id: string | null
+  id: string; district: string; ward: string; wards: string[]
+  waste_type: string; collection_day: string; collection_time: string
+  frequency: string; notes: string; published: boolean
+  scheduled_date: string; created_at: string; supervisor_id: string | null
 }
 
 interface Supervisor {
-  id: string
-  full_name: string
-  district: string
-  assigned_wards: string[]
+  id: string; full_name: string; district: string; assigned_wards: string[]
 }
 
 function WardMultiSelect({ selected, onChange, wards }: {
-  selected: string[]
-  onChange: (wards: string[]) => void
-  wards: string[]
+  selected: string[]; onChange: (wards: string[]) => void; wards: string[]
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -71,12 +58,7 @@ function WardMultiSelect({ selected, onChange, wards }: {
 
   return (
     <div style={{ position: 'relative' }}>
-      <div onClick={() => setOpen(!open)} style={{
-        width: '100%', padding: '11px 14px', border: '1.5px solid #e5e7eb', borderRadius: '10px',
-        fontSize: '14px', color: '#181c22', fontFamily: 'Inter, sans-serif', background: '#fafafa',
-        cursor: 'pointer', minHeight: '44px', display: 'flex', flexWrap: 'wrap', gap: '4px',
-        alignItems: 'center', boxSizing: 'border-box',
-      }}>
+      <div onClick={() => setOpen(!open)} style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #e5e7eb', borderRadius: '10px', fontSize: '14px', color: '#181c22', fontFamily: 'Inter, sans-serif', background: '#fafafa', cursor: 'pointer', minHeight: '44px', display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center', boxSizing: 'border-box' }}>
         {selected.length === 0
           ? <span style={{ color: '#9ca3af' }}>Select wards (all wards if empty)</span>
           : selected.map(w => (
@@ -84,26 +66,18 @@ function WardMultiSelect({ selected, onChange, wards }: {
               {w}
               <span onClick={e => { e.stopPropagation(); toggle(w) }} style={{ cursor: 'pointer', opacity: 0.6 }}>×</span>
             </span>
-          ))
-        }
+          ))}
       </div>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1px solid rgba(0,69,13,0.1)', borderRadius: '12px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.12)', zIndex: 100, maxHeight: '220px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '8px', borderBottom: '1px solid #f1f5f9' }}>
-            <input type="text" placeholder="Search wards..." value={query}
-              onChange={e => setQuery(e.target.value)} onClick={e => e.stopPropagation()}
-              style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', outline: 'none', boxSizing: 'border-box' }} />
+            <input type="text" placeholder="Search wards..." value={query} onChange={e => setQuery(e.target.value)} onClick={e => e.stopPropagation()} style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', outline: 'none', boxSizing: 'border-box' }} />
           </div>
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {filtered.length === 0
               ? <div style={{ padding: '12px', textAlign: 'center', fontSize: '13px', color: '#94a3b8' }}>No wards found</div>
               : filtered.map(ward => (
-                <div key={ward} onClick={() => toggle(ward)} style={{
-                  padding: '9px 14px', fontSize: '13px', fontFamily: 'Inter, sans-serif',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                  background: selected.includes(ward) ? '#f0fdf4' : 'white',
-                  color: selected.includes(ward) ? '#00450d' : '#181c22',
-                }}>
+                <div key={ward} onClick={() => toggle(ward)} style={{ padding: '9px 14px', fontSize: '13px', fontFamily: 'Inter, sans-serif', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', background: selected.includes(ward) ? '#f0fdf4' : 'white', color: selected.includes(ward) ? '#00450d' : '#181c22' }}>
                   <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: `2px solid ${selected.includes(ward) ? '#00450d' : '#e5e7eb'}`, background: selected.includes(ward) ? '#00450d' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {selected.includes(ward) && <svg style={{ width: '9px', height: '9px' }} fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                   </div>
@@ -135,6 +109,7 @@ export default function DESchedulesPage() {
   const [wards, setWards] = useState<string[]>([])
   const [supervisors, setSupervisors] = useState<Supervisor[]>([])
   const [selectedWards, setSelectedWards] = useState<string[]>([])
+  const [confirmationCounts, setConfirmationCounts] = useState<Record<string, number>>({})
   const [formData, setFormData] = useState({
     waste_type: '', collection_day: '', collection_time: '08:00',
     frequency: 'weekly', scheduled_date: '', notes: '', supervisor_id: '',
@@ -148,13 +123,32 @@ export default function DESchedulesPage() {
     if (!user) return
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
+
     if (p?.district) {
       setWards(getWardsForDistrict(p.district))
       const { data: supData } = await supabase.from('profiles').select('id, full_name, district, assigned_wards').eq('role', 'supervisor').eq('district', p.district)
       setSupervisors(supData || [])
     }
-    const { data: schedulesData } = await supabase.from('schedules').select('*').eq('district', p?.district || '').order('created_at', { ascending: false })
+
+    const { data: schedulesData } = await supabase
+      .from('schedules').select('*')
+      .eq('district', p?.district || '')
+      .order('created_at', { ascending: false })
     setSchedules(schedulesData || [])
+
+    // Load confirmation counts per schedule — R5 waste handover
+    if (schedulesData && schedulesData.length > 0) {
+      const { data: confirmData } = await supabase
+        .from('waste_confirmations')
+        .select('schedule_id')
+        .in('schedule_id', schedulesData.map((s: any) => s.id))
+      const counts: Record<string, number> = {}
+        ; (confirmData || []).forEach((c: any) => {
+          counts[c.schedule_id] = (counts[c.schedule_id] || 0) + 1
+        })
+      setConfirmationCounts(counts)
+    }
+
     setLoading(false)
   }
 
@@ -163,71 +157,53 @@ export default function DESchedulesPage() {
     if (!formData.waste_type) { setMessage('Please select a waste type'); return }
     if (!formData.collection_day) { setMessage('Please select a collection day'); return }
     if (!formData.scheduled_date) { setMessage('Please select a scheduled date'); return }
-    setSaving(true)
-    setMessage('')
+    setSaving(true); setMessage('')
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase.from('schedules').insert({
       district: profile?.district,
       wards: selectedWards.length > 0 ? selectedWards : null,
       ward: selectedWards.length === 1 ? selectedWards[0] : null,
-      waste_type: formData.waste_type,
-      collection_day: formData.collection_day,
-      collection_time: formData.collection_time,
-      frequency: formData.frequency,
-      scheduled_date: formData.scheduled_date,
-      notes: formData.notes,
-      supervisor_id: formData.supervisor_id || null,
-      created_by: user?.id,
-      published: false,
-      status: 'draft',
+      waste_type: formData.waste_type, collection_day: formData.collection_day,
+      collection_time: formData.collection_time, frequency: formData.frequency,
+      scheduled_date: formData.scheduled_date, notes: formData.notes,
+      supervisor_id: formData.supervisor_id || null, created_by: user?.id,
+      published: false, status: 'draft',
     })
     if (error) { setMessage('Error: ' + error.message) }
     else {
       setMessage('Schedule created successfully!')
-      setShowForm(false)
-      setSelectedWards([])
+      setShowForm(false); setSelectedWards([])
       setFormData({ waste_type: '', collection_day: '', collection_time: '08:00', frequency: 'weekly', scheduled_date: '', notes: '', supervisor_id: '' })
       loadData()
     }
     setSaving(false)
   }
 
-  // R8 — send push notification when schedule is published
   async function togglePublish(schedule: Schedule) {
     const supabase = createClient()
     const publishing = !schedule.published
-    await supabase.from('schedules').update({
-      published: publishing,
-      status: publishing ? 'published' : 'draft',
-    }).eq('id', schedule.id)
+    await supabase.from('schedules').update({ published: publishing, status: publishing ? 'published' : 'draft' }).eq('id', schedule.id)
 
     if (publishing) {
       const wasteLabel = WASTE_TYPES.find(w => w.value === schedule.waste_type)?.label || schedule.waste_type
       const dateStr = new Date(schedule.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
       const wardStr = schedule.wards?.length > 0 ? schedule.wards.join(', ') : schedule.ward || profile?.district
-
-      // Notify residents, supervisors and contractors in the district
       await sendNotification({
         roles: ['resident', 'supervisor', 'contractor'],
         title: `📅 New Collection Schedule — ${wasteLabel}`,
         body: `${wasteLabel} collection on ${schedule.collection_day} ${dateStr} at ${schedule.collection_time}. Area: ${wardStr}`,
-        type: 'schedule_published',
-        url: '/dashboard/resident/schedule',
+        type: 'schedule_published', url: '/dashboard/resident/schedules',
       })
-
-      // Also notify assigned supervisor directly if set
       if (schedule.supervisor_id) {
         await sendNotification({
           user_ids: [schedule.supervisor_id],
           title: `📋 Schedule Assigned to You`,
           body: `You have been assigned to supervise ${wasteLabel} collection on ${schedule.collection_day} ${dateStr}.`,
-          type: 'schedule_assigned',
-          url: '/dashboard/supervisor',
+          type: 'schedule_assigned', url: '/dashboard/supervisor',
         })
       }
     }
-
     loadData()
   }
 
@@ -247,6 +223,7 @@ export default function DESchedulesPage() {
 
   const publishedCount = schedules.filter(s => s.published).length
   const draftCount = schedules.filter(s => !s.published).length
+  const totalConfirmations = Object.values(confirmationCounts).reduce((a, b) => a + b, 0)
 
   function getWasteStyle(value: string) {
     return WASTE_TYPES.find(w => w.value === value) || { label: value, color: '#64748b', bg: '#f8fafc' }
@@ -286,9 +263,7 @@ export default function DESchedulesPage() {
         .submit-btn:disabled { opacity:0.6; cursor:not-allowed; }
         .field-label { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#374151; font-family:'Manrope',sans-serif; margin-bottom:7px; }
         @keyframes staggerIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-        .s1 { animation:staggerIn 0.5s ease 0.05s both; }
-        .s2 { animation:staggerIn 0.5s ease 0.1s both; }
-        .s3 { animation:staggerIn 0.5s ease 0.15s both; }
+        .s1{animation:staggerIn 0.5s ease 0.05s both} .s2{animation:staggerIn 0.5s ease 0.1s both} .s3{animation:staggerIn 0.5s ease 0.15s both}
         @keyframes slideDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
         .slide-down { animation:slideDown 0.3s ease both; }
       `}</style>
@@ -300,7 +275,9 @@ export default function DESchedulesPage() {
             <h1 className="font-headline font-extrabold tracking-tight" style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
               Collection <span style={{ color: '#1b5e20' }}>Schedules</span>
             </h1>
-            <p className="text-sm mt-1" style={{ color: '#717a6d' }}>{profile?.district || 'Your District'} · Managing waste collection timetables</p>
+            <p className="text-sm mt-1" style={{ color: '#717a6d' }}>
+              {profile?.district || 'Your District'} · Managing waste collection timetables
+            </p>
           </div>
           <button onClick={() => setShowForm(!showForm)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', background: showForm ? '#f1f5f9' : '#00450d', color: showForm ? '#64748b' : 'white', border: 'none', cursor: 'pointer', fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', transition: 'all 0.2s ease' }}>
             <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{showForm ? 'close' : 'add'}</span>
@@ -314,7 +291,7 @@ export default function DESchedulesPage() {
           { label: 'Total Schedules', value: schedules.length, icon: 'calendar_month', color: '#00450d', bg: '#f0fdf4' },
           { label: 'Published', value: publishedCount, icon: 'check_circle', color: '#1b5e20', bg: '#f0fdf4' },
           { label: 'Drafts', value: draftCount, icon: 'edit_note', color: '#d97706', bg: '#fefce8' },
-          { label: 'District', value: profile?.district?.split(' - ')[0] || '—', icon: 'location_on', color: '#1d4ed8', bg: '#eff6ff' },
+          { label: 'Confirmations', value: totalConfirmations, icon: 'thumb_up', color: '#1d4ed8', bg: '#eff6ff' },
         ].map(m => (
           <div key={m.label} className="bento-card p-5">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: m.bg }}>
@@ -427,8 +404,11 @@ export default function DESchedulesPage() {
             </select>
           </div>
         </div>
+
         {loading ? (
-          <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} /></div>
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
+          </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center px-8">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#f0fdf4' }}>
@@ -444,6 +424,7 @@ export default function DESchedulesPage() {
               const waste = getWasteStyle(schedule.waste_type)
               const supName = getSupervisorName(schedule.supervisor_id)
               const scheduleWards = schedule.wards?.length > 0 ? schedule.wards : schedule.ward ? [schedule.ward] : []
+              const confirmCount = confirmationCounts[schedule.id] || 0
               return (
                 <div key={schedule.id} className="schedule-row">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: waste.bg }}>
@@ -460,16 +441,19 @@ export default function DESchedulesPage() {
                     <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: '#94a3b8' }}>
                       <span className="flex items-center gap-1"><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>calendar_today</span>{schedule.collection_day} at {schedule.collection_time}</span>
                       <span className="flex items-center gap-1"><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>event</span>{new Date(schedule.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                      {scheduleWards.length > 0
-                        ? <span className="flex items-center gap-1"><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>{scheduleWards.join(', ')}</span>
-                        : <span className="flex items-center gap-1"><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>map</span>All wards</span>}
+                      {scheduleWards.length > 0 ? <span className="flex items-center gap-1"><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>{scheduleWards.join(', ')}</span> : <span className="flex items-center gap-1"><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>map</span>All wards</span>}
                       {schedule.notes && <span className="flex items-center gap-1"><span className="material-symbols-outlined" style={{ fontSize: '13px' }}>info</span>{schedule.notes}</span>}
                     </div>
                   </div>
+                  {/* Confirmation count badge */}
+                  {confirmCount > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '99px', background: 'rgba(29,78,216,0.08)', flexShrink: 0 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '13px', color: '#1d4ed8', fontVariationSettings: "'FILL' 1" }}>thumb_up</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#1d4ed8', fontFamily: 'Manrope, sans-serif' }}>{confirmCount} confirmed</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <button onClick={() => togglePublish(schedule)} className={`action-btn ${schedule.published ? 'unpublish-btn' : 'publish-btn'}`}>
-                      {schedule.published ? 'Unpublish' : 'Publish'}
-                    </button>
+                    <button onClick={() => togglePublish(schedule)} className={`action-btn ${schedule.published ? 'unpublish-btn' : 'publish-btn'}`}>{schedule.published ? 'Unpublish' : 'Publish'}</button>
                     <button onClick={() => deleteSchedule(schedule.id)} className="action-btn delete-btn">Delete</button>
                   </div>
                 </div>
@@ -477,10 +461,12 @@ export default function DESchedulesPage() {
             })}
           </div>
         )}
+
         <div className="px-8 py-4 flex items-center gap-3" style={{ borderTop: '1px solid rgba(0,69,13,0.06)', background: '#f9f9ff' }}>
           <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '18px' }}>notifications_active</span>
           <p className="text-xs" style={{ color: '#717a6d' }}>
             Publishing a schedule sends a push notification to all residents, supervisors and contractors in <strong>{profile?.district}</strong>.
+            Residents can confirm waste handover — counts appear as blue badges.
           </p>
         </div>
       </div>
