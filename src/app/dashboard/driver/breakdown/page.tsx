@@ -103,6 +103,19 @@ export default function BreakdownPage() {
         if (error) {
             showToast('Error: ' + error.message, 'error')
         } else {
+            // R22 — fire exception alert to supervisor
+            if (activeRoute?.id) {
+                await fetch('/api/alerts/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        route_id: activeRoute.id,
+                        driver_id: user?.id,
+                        alert_type: 'breakdown',
+                        message: `Vehicle breakdown reported: ${BREAKDOWN_TYPES.find(t => t.value === formData.breakdown_type)?.label || formData.breakdown_type} at ${formData.location_address}`,
+                    }),
+                })
+            }
             showToast('Breakdown reported! Supervisor has been notified.')
             setShowForm(false)
             setFormData({ vehicle_number: activeRoute?.vehicle_number || '', location_address: '', breakdown_type: '', description: '' })
