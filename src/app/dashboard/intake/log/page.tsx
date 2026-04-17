@@ -37,6 +37,19 @@ const WASTE_CONDITIONS = [
 
 const UNITS = ['kg', 'tonnes', 'bags', 'cubic_meters']
 
+interface FormData {
+    actual_quantity: string
+    unit: string
+    material_type: string
+    grade: string
+    processing_method: string
+    condition: string
+    notes: string
+    is_rejected: boolean
+    rejection_reason: string
+    rejection_notes: string
+}
+
 export default function IntakeLogPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -49,16 +62,16 @@ export default function IntakeLogPage() {
     const [completedStops, setCompletedStops] = useState(0)
     const [loadingHandoff, setLoadingHandoff] = useState(false)
 
-    // Manual code entry
     const [showCodeEntry, setShowCodeEntry] = useState(false)
     const [code, setCode] = useState(['', '', '', '', '', ''])
     const [verifying, setVerifying] = useState(false)
     const [codeError, setCodeError] = useState('')
 
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<FormData>({
         actual_quantity: '',
         unit: 'kg',
         material_type: '',
+        grade: '',
         processing_method: '',
         condition: '',
         notes: '',
@@ -76,7 +89,6 @@ export default function IntakeLogPage() {
     }, [])
 
     useEffect(() => {
-        // Auto-verify if handoff code passed in URL from dashboard
         if (handoffCodeFromUrl && handoffCodeFromUrl.length === 6) {
             autoVerifyCode(handoffCodeFromUrl)
         }
@@ -102,29 +114,23 @@ export default function IntakeLogPage() {
             })
             const data = await res.json()
             if (!res.ok) {
-                // Code might be expired — try fetching by code directly from supabase
                 const supabase = createClient()
                 const { data: h } = await supabase
                     .from('route_handoffs')
                     .select(`
-            *,
-            route:route_id(id, route_name, district, vehicle_number, date, waste_type),
-            driver:driver_id(full_name, phone)
-          `)
+                        *,
+                        route:route_id(id, route_name, district, vehicle_number, date, waste_type),
+                        driver:driver_id(full_name, phone)
+                    `)
                     .eq('handoff_code', handoffCode)
                     .single()
-
                 if (h) {
                     setHandoff(h)
                     const { count: total } = await supabase
-                        .from('collection_stops')
-                        .select('*', { count: 'exact', head: true })
-                        .eq('route_id', h.route_id)
+                        .from('collection_stops').select('*', { count: 'exact', head: true }).eq('route_id', h.route_id)
                     const { count: completed } = await supabase
-                        .from('collection_stops')
-                        .select('*', { count: 'exact', head: true })
-                        .eq('route_id', h.route_id)
-                        .eq('status', 'completed')
+                        .from('collection_stops').select('*', { count: 'exact', head: true })
+                        .eq('route_id', h.route_id).eq('status', 'completed')
                     setTotalStops(total || 0)
                     setCompletedStops(completed || 0)
                 }
@@ -192,6 +198,12 @@ export default function IntakeLogPage() {
         if (!formData.condition && !formData.is_rejected) {
             setSubmitError('Please select the waste condition'); return
         }
+        if (isRecycler && !formData.material_type && !formData.is_rejected) {
+            setSubmitError('Please select the material type'); return
+        }
+        if (isRecycler && !formData.grade && !formData.is_rejected) {
+            setSubmitError('Please select the material grade'); return
+        }
         if (formData.is_rejected && !formData.rejection_reason) {
             setSubmitError('Please select a rejection reason'); return
         }
@@ -219,6 +231,7 @@ export default function IntakeLogPage() {
                     disposal_location: profile?.organisation_name || profile?.full_name,
                     waste_type: handoff.route?.waste_type || handoff.waste_type,
                     material_type: formData.material_type,
+                    grade: formData.grade || null,
                     actual_quantity: parseFloat(formData.actual_quantity) || 0,
                     unit: formData.unit,
                     processing_method: formData.processing_method,
@@ -337,7 +350,6 @@ export default function IntakeLogPage() {
 
             <div style={{ maxWidth: '640px' }}>
 
-                {/* Loading handoff from URL */}
                 {loadingHandoff && (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px', background: 'white', borderRadius: '16px', boxShadow: '0 10px 40px -10px rgba(24,28,34,0.08)' }}>
                         <div style={{ textAlign: 'center' }}>
@@ -348,7 +360,6 @@ export default function IntakeLogPage() {
                     </div>
                 )}
 
-                {/* No handoff yet */}
                 {!loadingHandoff && !handoff && step === 'form' && (
                     <div className="fade-2">
                         {!showCodeEntry ? (
@@ -478,19 +489,34 @@ export default function IntakeLogPage() {
                                     </div>
                                 </div>
 
-                                {/* Material / Processing */}
+                                {/* Recycler: material type + grade | Facility: processing method */}
                                 {isRecycler ? (
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#374151', fontFamily: 'Manrope, sans-serif', marginBottom: '8px' }}>
-                                            Material Type *
-                                        </label>
-                                        <select className="select-field" value={formData.material_type}
-                                            onChange={e => setFormData({ ...formData, material_type: e.target.value })}>
-                                            <option value="">Select material type</option>
-                                            {MATERIAL_TYPES.map(m => <option key={m} value={m.toLowerCase()}>{m}</option>)}
-                                        </select>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#374151', fontFamily: 'Manrope, sans-serif', marginBottom: '8px' }}>
+                                                Material Type *
+                                            </label>
+                                            <select className="select-field" value={formData.material_type}
+                                                onChange={e => setFormData({ ...formData, material_type: e.target.value })}>
+                                                <option value="">Select material type</option>
+                                                {MATERIAL_TYPES.map(m => <option key={m} value={m.toLowerCase()}>{m}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#374151', fontFamily: 'Manrope, sans-serif', marginBottom: '8px' }}>
+                                                Material Grade *
+                                            </label>
+                                            <select className="select-field" value={formData.grade}
+                                                onChange={e => setFormData({ ...formData, grade: e.target.value })}>
+                                                <option value="">Select grade</option>
+                                                <option value="grade_a">Grade A — Clean, uncontaminated</option>
+                                                <option value="grade_b">Grade B — Minor contamination</option>
+                                                <option value="grade_c">Grade C — Heavily contaminated</option>
+                                                <option value="mixed">Mixed grades</option>
+                                            </select>
+                                        </div>
                                         {formData.material_type && formData.actual_quantity && (
-                                            <div style={{ marginTop: '8px', padding: '10px 14px', background: '#f0fdf4', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ padding: '10px 14px', background: '#f0fdf4', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                 <span style={{ fontSize: '12px', color: '#41493e' }}>
                                                     Rate: LKR {getRateForMaterial(formData.material_type)}/kg
                                                 </span>
@@ -643,7 +669,7 @@ export default function IntakeLogPage() {
                                             { label: 'Quantity', value: `${completedIntake.actual_quantity} ${completedIntake.unit}` },
                                             { label: 'Condition', value: completedIntake.condition },
                                             { label: isRecycler ? 'Material' : 'Method', value: completedIntake.material_type || completedIntake.processing_method || '—' },
-                                            { label: 'Logged At', value: new Date(completedIntake.received_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) },
+                                            { label: isRecycler ? 'Grade' : 'Logged At', value: isRecycler ? (completedIntake.grade?.replace('_', ' ').toUpperCase() || '—') : new Date(completedIntake.received_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) },
                                         ].map(item => (
                                             <div key={item.label}>
                                                 <p style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
