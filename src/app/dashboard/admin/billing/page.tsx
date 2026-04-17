@@ -41,7 +41,6 @@ interface CommercialSummary {
     total_stops_completed: number
     last_collection: string | null
     current_tier: string
-    // calculated
     estimated_amount?: number
     has_invoice?: boolean
 }
@@ -81,7 +80,7 @@ export default function AdminBillingPage() {
     const [loading, setLoading] = useState(true)
     const [savingRates, setSavingRates] = useState(false)
     const [message, setMessage] = useState('')
-    const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'rates' | 'requests'>('overview')
+    const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'invoices' | 'rates' | 'requests'>('overview')
     const [rateForm, setRateForm] = useState({
         tier_a_rate: '',
         tier_b_rate: '',
@@ -122,13 +121,11 @@ export default function AdminBillingPage() {
             .order('requested_at', { ascending: false })
         setCycleRequests(cycleData || [])
 
-        // Load commercial billing summary view
         const { data: summaryData } = await supabase
             .from('commercial_billing_summary')
             .select('*')
             .order('total_bins_this_period', { ascending: false })
 
-        // Enrich with estimated amount and invoice status
         const enriched = (summaryData || []).map((s: CommercialSummary) => {
             const rate = s.current_tier === 'tier_b'
                 ? ratesData?.find(r => r.tier === 'tier_b')?.rate_per_bin || 0
@@ -144,7 +141,6 @@ export default function AdminBillingPage() {
             }
         })
         setCommercialSummaries(enriched)
-
         setLoading(false)
     }
 
@@ -366,6 +362,7 @@ export default function AdminBillingPage() {
             <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }} className="s3">
                 {[
                     { key: 'overview', label: 'Collection Overview', icon: 'storefront' },
+                    { key: 'accounts', label: 'Accounts', icon: 'business' },
                     { key: 'invoices', label: 'Invoices', icon: 'receipt_long' },
                     { key: 'rates', label: 'Billing Rates', icon: 'price_change' },
                     { key: 'requests', label: `Cycle Requests${pendingRequests > 0 ? ` (${pendingRequests})` : ''}`, icon: 'swap_horiz' },
@@ -378,7 +375,7 @@ export default function AdminBillingPage() {
                 ))}
             </div>
 
-            {/* OVERVIEW TAB — per-commercial bin summaries */}
+            {/* OVERVIEW TAB */}
             {activeTab === 'overview' && (
                 <div className="bento-card">
                     <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-3"
@@ -419,7 +416,6 @@ export default function AdminBillingPage() {
                         </div>
                     ) : (
                         <div>
-                            {/* Rates info bar */}
                             {(tierARate || tierBRate) && (
                                 <div style={{ padding: '12px 24px', background: '#f9f9ff', borderBottom: '1px solid rgba(0,69,13,0.04)', display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                                     {tierARate && (
@@ -442,7 +438,6 @@ export default function AdminBillingPage() {
                                     )}
                                 </div>
                             )}
-
                             {commercialSummaries.map(s => {
                                 const isEligible = s.total_bins_this_period > 0 && !s.has_invoice
                                 const isSelected = selectedCommercials.has(s.commercial_id)
@@ -451,30 +446,22 @@ export default function AdminBillingPage() {
                                     : s.current_tier === 'no_activity'
                                         ? { color: '#94a3b8', bg: '#f1f5f9' }
                                         : { color: '#00450d', bg: '#f0fdf4' }
-
                                 return (
                                     <div key={s.commercial_id} className="row"
                                         style={{ background: isSelected ? '#f0fdf4' : undefined, cursor: isEligible ? 'pointer' : 'default' }}
                                         onClick={() => isEligible && toggleSelect(s.commercial_id)}>
-
-                                        {/* Checkbox */}
-                                        <div className={`checkbox ${isSelected ? 'checked' : ''}`}
-                                            style={{ opacity: isEligible ? 1 : 0.3 }}>
+                                        <div className={`checkbox ${isSelected ? 'checked' : ''}`} style={{ opacity: isEligible ? 1 : 0.3 }}>
                                             {isSelected && (
                                                 <svg style={{ width: '10px', height: '10px' }} fill="none" stroke="white" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                                 </svg>
                                             )}
                                         </div>
-
-                                        {/* Avatar */}
                                         <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                             <span style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: '16px', color: '#00450d' }}>
                                                 {(s.organisation_name || s.full_name)?.charAt(0)?.toUpperCase()}
                                             </span>
                                         </div>
-
-                                        {/* Info */}
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                                                 <p style={{ fontSize: '14px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope, sans-serif' }}>
@@ -483,19 +470,9 @@ export default function AdminBillingPage() {
                                                 <span className="badge" style={{ background: tierStyle.bg, color: tierStyle.color }}>
                                                     {s.current_tier === 'no_activity' ? 'No Activity' : s.current_tier === 'tier_b' ? 'Tier B' : 'Tier A'}
                                                 </span>
-                                                <span className="badge" style={{ background: '#f1f5f9', color: '#64748b' }}>
-                                                    {s.billing_cycle}
-                                                </span>
-                                                {s.has_invoice && (
-                                                    <span className="badge" style={{ background: '#f0fdf4', color: '#00450d' }}>
-                                                        ✓ Invoice Generated
-                                                    </span>
-                                                )}
-                                                {s.billing_suspended && (
-                                                    <span className="badge" style={{ background: '#fef2f2', color: '#ba1a1a' }}>
-                                                        Suspended
-                                                    </span>
-                                                )}
+                                                <span className="badge" style={{ background: '#f1f5f9', color: '#64748b' }}>{s.billing_cycle}</span>
+                                                {s.has_invoice && <span className="badge" style={{ background: '#f0fdf4', color: '#00450d' }}>✓ Invoice Generated</span>}
+                                                {s.billing_suspended && <span className="badge" style={{ background: '#fef2f2', color: '#ba1a1a' }}>Suspended</span>}
                                             </div>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', fontSize: '12px', color: '#94a3b8' }}>
                                                 <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -504,11 +481,11 @@ export default function AdminBillingPage() {
                                                 </span>
                                                 <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                                                     <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>delete_sweep</span>
-                                                    {s.total_bins_this_period} bins this period · {s.bins_this_week} this week
+                                                    {s.total_bins_this_period} bins · {s.bins_this_week} this week
                                                 </span>
                                                 <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                                                     <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>check_circle</span>
-                                                    {s.total_stops_completed} stops completed
+                                                    {s.total_stops_completed} stops
                                                 </span>
                                                 {s.last_collection && (
                                                     <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -518,8 +495,6 @@ export default function AdminBillingPage() {
                                                 )}
                                             </div>
                                         </div>
-
-                                        {/* Amount + Generate */}
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
                                             {s.total_bins_this_period > 0 ? (
                                                 <>
@@ -537,6 +512,112 @@ export default function AdminBillingPage() {
                                                     <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>receipt</span>
                                                     {generatingFor === s.commercial_id ? '...' : 'Invoice'}
                                                 </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ACCOUNTS TAB — R39 */}
+            {activeTab === 'accounts' && (
+                <div className="bento-card">
+                    <div className="px-6 py-5" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
+                        <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>
+                            Commercial Accounts — Service Agreement Status
+                        </h3>
+                        <p className="text-sm mt-1" style={{ color: '#717a6d' }}>
+                            Payment health and service status for all registered commercial establishments.
+                        </p>
+                    </div>
+                    {loading ? (
+                        <div className="flex items-center justify-center py-16">
+                            <div className="w-8 h-8 border-2 rounded-full animate-spin"
+                                style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
+                        </div>
+                    ) : commercialSummaries.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16">
+                            <span className="material-symbols-outlined" style={{ color: '#94a3b8', fontSize: '48px', marginBottom: '12px' }}>business</span>
+                            <p style={{ color: '#94a3b8', fontSize: '14px' }}>No commercial accounts registered yet</p>
+                        </div>
+                    ) : (
+                        <div>
+                            <div style={{ padding: '12px 24px', background: '#f9f9ff', borderBottom: '1px solid rgba(0,69,13,0.04)', display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span className="badge" style={{ background: '#f0fdf4', color: '#00450d' }}>Active</span>
+                                    {commercialSummaries.filter(s => !s.billing_suspended).length} accounts
+                                </span>
+                                <span style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span className="badge" style={{ background: '#fef2f2', color: '#ba1a1a' }}>Suspended</span>
+                                    {commercialSummaries.filter(s => s.billing_suspended).length} accounts
+                                </span>
+                                <span style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span className="badge" style={{ background: '#fefce8', color: '#d97706' }}>Outstanding</span>
+                                    LKR {invoices.filter(i => ['pending', 'overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0).toLocaleString()}
+                                </span>
+                            </div>
+                            {commercialSummaries.map(s => {
+                                const accountInvoices = invoices.filter(i => i.commercial_id === s.commercial_id)
+                                const overdueCount = accountInvoices.filter(i => i.status === 'overdue').length
+                                const pendingAmount = accountInvoices.filter(i => ['pending', 'overdue'].includes(i.status)).reduce((sum, i) => sum + i.amount, 0)
+                                const paidAmount = accountInvoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + i.amount, 0)
+                                const healthStatus = s.billing_suspended ? 'suspended'
+                                    : overdueCount > 0 ? 'overdue'
+                                        : pendingAmount > 0 ? 'pending'
+                                            : 'good'
+                                const healthConfig = {
+                                    suspended: { color: '#7c3aed', bg: '#f5f3ff', label: 'Suspended', icon: 'block' },
+                                    overdue: { color: '#ba1a1a', bg: '#fef2f2', label: 'Overdue', icon: 'warning' },
+                                    pending: { color: '#d97706', bg: '#fffbeb', label: 'Payment Due', icon: 'pending' },
+                                    good: { color: '#00450d', bg: '#f0fdf4', label: 'Good Standing', icon: 'verified' },
+                                }[healthStatus]
+                                return (
+                                    <div key={s.commercial_id} className="row">
+                                        <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: healthConfig.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                            <span className="material-symbols-outlined" style={{ color: healthConfig.color, fontSize: '20px' }}>{healthConfig.icon}</span>
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                                <p style={{ fontSize: '14px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope, sans-serif' }}>
+                                                    {s.organisation_name || s.full_name}
+                                                </p>
+                                                <span className="badge" style={{ background: healthConfig.bg, color: healthConfig.color }}>{healthConfig.label}</span>
+                                                <span className="badge" style={{ background: '#f1f5f9', color: '#64748b' }}>{s.billing_cycle}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '12px', color: '#94a3b8' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                    <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>
+                                                    {s.ward || s.district || '—'}
+                                                </span>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                    <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>receipt_long</span>
+                                                    {accountInvoices.length} invoice{accountInvoices.length !== 1 ? 's' : ''}
+                                                </span>
+                                                {overdueCount > 0 && (
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#ba1a1a', fontWeight: 600 }}>
+                                                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>warning</span>
+                                                        {overdueCount} overdue
+                                                    </span>
+                                                )}
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#16a34a', fontWeight: 600 }}>
+                                                    <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>check_circle</span>
+                                                    Paid: LKR {paidAmount.toLocaleString()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                            {pendingAmount > 0 ? (
+                                                <>
+                                                    <p style={{ fontSize: '15px', fontWeight: 800, color: overdueCount > 0 ? '#ba1a1a' : '#d97706', fontFamily: 'Manrope, sans-serif' }}>
+                                                        LKR {pendingAmount.toLocaleString()}
+                                                    </p>
+                                                    <p style={{ fontSize: '11px', color: '#94a3b8' }}>outstanding</p>
+                                                </>
+                                            ) : (
+                                                <p style={{ fontSize: '13px', color: '#00450d', fontWeight: 600 }}>No balance due</p>
                                             )}
                                         </div>
                                     </div>
@@ -653,7 +734,6 @@ export default function AdminBillingPage() {
                             )}
                         </button>
                     </form>
-
                     {rates.length > 0 && (
                         <div style={{ padding: '0 24px 24px' }}>
                             <p style={{ fontSize: '11px', fontWeight: 700, color: '#717a6d', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'Manrope, sans-serif', marginBottom: '12px' }}>
