@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
+import { sendNotification } from '@/lib/notify'
 
 const BREAKDOWN_TYPES = [
     { value: 'flat_tire', label: 'Flat Tire', icon: 'tire_repair' },
@@ -86,6 +87,15 @@ export default function BreakdownPage() {
         e.preventDefault()
         if (!formData.breakdown_type) { showToast('Please select a breakdown type', 'error'); return }
         setSaving(true)
+
+        // R8 — push notification to supervisors and district engineers
+        await sendNotification({
+            roles: ['supervisor', 'district_engineer'],
+            title: `🚨 Vehicle Breakdown — ${BREAKDOWN_TYPES.find(t => t.value === formData.breakdown_type)?.label || formData.breakdown_type}`,
+            body: `Driver ${profile?.full_name || 'Unknown'} reported a breakdown at ${formData.location_address}. Vehicle: ${formData.vehicle_number}`,
+            type: 'breakdown',
+            url: '/dashboard/supervisor/alerts',
+        })
 
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
