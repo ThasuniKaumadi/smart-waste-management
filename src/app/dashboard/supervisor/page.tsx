@@ -27,11 +27,16 @@ interface AlertItem {
 
 interface RouteItem {
   id: string
+  route_name: string
   name: string
   district: string
   status: string
   driver_id: string | null
   total_stops: number
+  completed_stops: number
+  skipped_stops: number
+  driver_name?: string
+  alert_count?: number
 }
 
 interface ScheduleItem {
@@ -56,6 +61,8 @@ export default function SupervisorDashboard() {
   })
   const [loading, setLoading] = useState(true)
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [activeTab, setActiveTab] = useState<'overview' | 'monitor'>('overview')
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000)
@@ -63,69 +70,103 @@ export default function SupervisorDashboard() {
   }, [])
 
   useEffect(() => {
-    async function init() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      if (!prof || prof.role !== 'supervisor') {
-        router.push(prof?.role ? ROLE_DASHBOARDS[prof.role as keyof typeof ROLE_DASHBOARDS] : '/login')
-        return
-      }
-      setProfile(prof)
-
-      const { data: alertData } = await supabase
-        .from('exception_alerts').select('*')
-        .eq('resolved', false).order('created_at', { ascending: false }).limit(5)
-
-      const { count: unresolvedCount } = await supabase
-        .from('exception_alerts').select('*', { count: 'exact', head: true }).eq('resolved', false)
-
-      const { data: routeData } = await supabase
-        .from('routes').select('id, name, district, status, driver_id, collection_stops(count)')
-        .order('created_at', { ascending: false }).limit(6)
-
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const { count: completedCount } = await supabase
-        .from('collection_events').select('*', { count: 'exact', head: true })
-        .eq('status', 'completed').gte('collected_at', today.toISOString())
-
-      const { data: scheduleData } = await supabase
-        .from('schedules').select('*')
-        .eq('supervisor_id', user.id)
-        .eq('published', true)
-        .gte('scheduled_date', new Date().toISOString().split('T')[0])
-        .order('scheduled_date', { ascending: true })
-        .limit(5)
-
-      setAlerts(alertData || [])
-      setSchedules(scheduleData || [])
-      setRoutes((routeData || []).map((r: any) => ({
-        ...r, total_stops: r.collection_stops?.[0]?.count ?? 0,
-      })))
-      setStats({
-        activeRoutes: (routeData || []).filter((r: any) => r.status === 'active').length,
-        unresolvedAlerts: unresolvedCount || 0,
-        completedToday: completedCount || 0,
-        driversOnDuty: (routeData || []).filter((r: any) => r.driver_id).length,
-      })
-      setLoading(false)
-    }
     init()
   }, [router])
 
-  async function handleLogout() {
+  async function init() {
     const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { router.push('/login'); return }
+
+    const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    if (!prof || prof.role !== 'supervisor') {
+      router.push(prof?.role ? ROLE_DASHBOARDS[prof.role as keyof typeof ROLE_DASHBOARDS] : '/login')
+      return
+    }
+    setProfile(prof)
+    await loadData(user.id, prof)
+    setLoading(false)
+  }
+
+  async function loadData(userId: string, prof: any) {
+    const supabase = createClient()
+
+    const { data: alertData } = await supabase
+      .from('exception_alerts').select('*')
+      .eq('is_resolved', false).order('created_at', { ascending: false }).limit(8)
+
+    const { count: unresolvedCount } = await supabase
+      .from('exception_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false)
+
+    // R15 — fetch routes with stop counts and driver info
+    const { data: routeData } = await supabase
+      .from('routes')
+      .select(`
+        id, route_name, district, status, driver_id,
+        profiles:driver_id(full_name),
+        collection_stops(id, status)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(12)
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const { count: completedCount } = await supabase
+      .from('collection_events').select('*', { count: 'exact', head: true })
+      .eq('status', 'completed').gte('collected_at', today.toISOString())
+
+    const { data: scheduleData } = await supabase
+      .from('schedules').select('*')
+      .eq('supervisor_id', userId)
+      .eq('published', true)
+      .gte('scheduled_date', new Date().toISOString().split('T')[0])
+      .order('scheduled_date', { ascending: true })
+      .limit(5)
+
+    setAlerts(alertData || [])
+    setSchedules(scheduleData || [])
+
+    const enrichedRoutes: RouteItem[] = (routeData || []).map((r: any) => {
+      const stops = r.collection_stops || []
+      const completedStops = stops.filter((s: any) => s.status === 'completed').length
+      const skippedStops = stops.filter((s: any) => s.status === 'skipped').length
+      const routeAlerts = (alertData || []).filter(a => a.route_id === r.id).length
+      return {
+        id: r.id,
+        route_name: r.route_name || r.name || `Route ${r.id.slice(0, 6)}`,
+        name: r.route_name || r.name || `Route ${r.id.slice(0, 6)}`,
+        district: r.district,
+        status: r.status,
+        driver_id: r.driver_id,
+        driver_name: (r.profiles as any)?.full_name || null,
+        total_stops: stops.length,
+        completed_stops: completedStops,
+        skipped_stops: skippedStops,
+        alert_count: routeAlerts,
+      }
+    })
+
+    setRoutes(enrichedRoutes)
+    setStats({
+      activeRoutes: enrichedRoutes.filter(r => r.status === 'active').length,
+      unresolvedAlerts: unresolvedCount || 0,
+      completedToday: completedCount || 0,
+      driversOnDuty: enrichedRoutes.filter(r => r.driver_id && r.status === 'active').length,
+    })
+  }
+
+  async function refresh() {
+    setRefreshing(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user && profile) await loadData(user.id, profile)
+    setRefreshing(false)
   }
 
   async function resolveAlert(alertId: string) {
     const supabase = createClient()
     await supabase.from('exception_alerts')
-      .update({ resolved: true, resolved_at: new Date().toISOString() })
+      .update({ is_resolved: true, resolved_at: new Date().toISOString() })
       .eq('id', alertId)
     setAlerts(prev => prev.filter(a => a.id !== alertId))
     setStats(prev => ({ ...prev, unresolvedAlerts: Math.max(0, prev.unresolvedAlerts - 1) }))
@@ -138,10 +179,6 @@ export default function SupervisorDashboard() {
     critical: 'rgba(239,68,68,0.08)', high: 'rgba(249,115,22,0.08)',
     medium: 'rgba(234,179,8,0.08)', low: 'rgba(34,197,94,0.08)',
   }
-  const alertTypeLabel: Record<string, string> = {
-    stop_skipped: 'Stop Skipped', all_stops_skipped: 'All Stops Skipped',
-    vehicle_breakdown: 'Vehicle Breakdown', route_not_started: 'Route Not Started',
-  }
   const routeStatusColor: Record<string, { bg: string; text: string; dot: string }> = {
     active: { bg: 'rgba(0,69,13,0.08)', text: '#00450d', dot: '#00450d' },
     completed: { bg: 'rgba(59,130,246,0.08)', text: '#2563eb', dot: '#3b82f6' },
@@ -149,8 +186,7 @@ export default function SupervisorDashboard() {
     suspended: { bg: 'rgba(239,68,68,0.08)', text: '#dc2626', dot: '#ef4444' },
   }
   const wasteTypeColor: Record<string, string> = {
-    organic: '#00450d', non_recyclable: '#ba1a1a', recyclable: '#1d4ed8',
-    e_waste: '#7c3aed', bulk: '#d97706',
+    organic: '#00450d', non_recyclable: '#ba1a1a', recyclable: '#1d4ed8', e_waste: '#7c3aed', bulk: '#d97706',
   }
 
   const timeGreeting = () => {
@@ -161,6 +197,8 @@ export default function SupervisorDashboard() {
   }
 
   const assignedWards = profile?.assigned_wards || []
+  const activeRoutes = routes.filter(r => r.status === 'active')
+  const allRoutes = routes
 
   if (loading) {
     return (
@@ -188,17 +226,26 @@ export default function SupervisorDashboard() {
         .alert-row:hover { background:rgba(0,0,0,0.02); }
         .resolve-btn { transition:background 0.15s,transform 0.1s; cursor:pointer; }
         .resolve-btn:hover { background:rgba(0,69,13,0.12); }
-        .resolve-btn:active { transform:scale(0.97); }
-        .route-card { transition:transform 0.2s,box-shadow 0.2s; }
-        .route-card:hover { transform:translateY(-1px); box-shadow:0 4px 16px rgba(0,0,0,0.08); }
+        .route-monitor-card { background:white; border-radius:14px; border:1.5px solid rgba(0,69,13,0.06); padding:20px; transition:all 0.2s ease; }
+        .route-monitor-card:hover { border-color:rgba(0,69,13,0.15); box-shadow:0 4px 16px rgba(0,0,0,0.08); }
+        .route-monitor-card.active-route { border-color:rgba(0,69,13,0.2); }
+        .route-monitor-card.alert-route { border-color:rgba(239,68,68,0.25); background:#fffafa; }
         .action-card { transition:transform 0.2s,box-shadow 0.2s; cursor:pointer; }
         .action-card:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,0.1); }
         .ward-pill { display:inline-flex; align-items:center; gap:4px; padding:4px 12px; background:rgba(0,69,13,0.08); color:#00450d; border-radius:99px; font-size:12px; font-weight:700; font-family:'Manrope',sans-serif; }
+        .tab-btn { padding:8px 18px; border-radius:99px; font-size:13px; font-weight:700; font-family:'Manrope',sans-serif; border:none; cursor:pointer; transition:all 0.2s; }
+        .tab-active { background:#00450d; color:white; }
+        .tab-inactive { background:white; color:#717a6d; border:1px solid rgba(0,0,0,0.08); }
+        .tab-inactive:hover { background:#f0fdf4; color:#00450d; }
+        .progress-track { height:6px; border-radius:99px; background:#f0fdf4; overflow:hidden; }
+        .progress-fill { height:100%; border-radius:99px; transition:width 0.8s ease; }
         .schedule-row { padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.04); transition:background 0.15s; }
-        .schedule-row:hover { background:rgba(0,69,13,0.02); }
         .schedule-row:last-child { border-bottom:none; }
         .logout-btn:hover { background:rgba(239,68,68,0.08); color:#dc2626; }
         .logout-btn { transition:background 0.2s,color 0.2s; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+        .live-dot { animation: pulse 2s ease-in-out infinite; }
       `}</style>
 
       {/* Nav */}
@@ -216,11 +263,11 @@ export default function SupervisorDashboard() {
             { icon: 'home', label: 'Overview', href: '/dashboard/supervisor', badge: 0 },
             { icon: 'notifications', label: 'Alerts', href: '/dashboard/supervisor/alerts', badge: stats.unresolvedAlerts },
             { icon: 'route', label: 'Routes', href: '/dashboard/supervisor/routes', badge: 0 },
-            { icon: 'assignment', label: 'Reports', href: '/dashboard/supervisor/reports', badge: 0 },
+            { icon: 'assignment', label: 'Reports', href: '/dashboard/supervisor/waste-reports', badge: 0 },
           ].map(item => (
             <Link key={item.label} href={item.href} className="nav-link" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', textDecoration: 'none', color: '#41493e', fontSize: '13px', fontWeight: 500, position: 'relative' }}>
               <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{item.icon}</span>
-              <span className="hidden md:inline">{item.label}</span>
+              <span>{item.label}</span>
               {item.badge > 0 && (
                 <span style={{ position: 'absolute', top: '2px', right: '6px', background: '#ef4444', color: 'white', borderRadius: '9999px', fontSize: '9px', fontWeight: 700, minWidth: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
                   {item.badge}
@@ -237,25 +284,41 @@ export default function SupervisorDashboard() {
           <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #00450d, #1b5e20)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '14px', fontWeight: 700 }}>
             {profile?.full_name?.charAt(0) || 'S'}
           </div>
-          <button onClick={handleLogout} className="logout-btn" style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '8px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#717a6d', fontSize: '12px' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>logout</span>
-          </button>
         </div>
       </nav>
 
       <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: '28px' }}>
-          <p style={{ fontSize: '12px', color: '#717a6d', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 4px' }}>
-            {timeGreeting()}, {profile?.full_name?.split(' ')[0]}
-          </p>
-          <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '28px', fontWeight: 800, color: '#181c22', margin: 0, letterSpacing: '-0.02em' }}>
-            Supervisor Overview
-          </h1>
-          <p style={{ fontSize: '13px', color: '#717a6d', margin: '4px 0 0' }}>
-            {currentTime.toLocaleDateString('en-LK', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <p style={{ fontSize: '12px', color: '#717a6d', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 4px' }}>
+              {timeGreeting()}, {profile?.full_name?.split(' ')[0]}
+            </p>
+            <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '28px', fontWeight: 800, color: '#181c22', margin: 0 }}>
+              Supervisor Overview
+            </h1>
+            <p style={{ fontSize: '13px', color: '#717a6d', margin: '4px 0 0' }}>
+              {currentTime.toLocaleDateString('en-LK', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button onClick={refresh} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(0,69,13,0.2)', background: 'white', color: '#00450d', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', cursor: 'pointer' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>refresh</span>
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button onClick={() => setActiveTab('overview')} className={`tab-btn ${activeTab === 'overview' ? 'tab-active' : 'tab-inactive'}`}>Overview</button>
+              <button onClick={() => setActiveTab('monitor')} className={`tab-btn ${activeTab === 'monitor' ? 'tab-active' : 'tab-inactive'}`} style={{ position: 'relative' }}>
+                Live Monitor
+                {stats.activeRoutes > 0 && (
+                  <span style={{ marginLeft: '6px', background: activeTab === 'monitor' ? 'rgba(255,255,255,0.3)' : '#00450d', color: activeTab === 'monitor' ? 'white' : 'white', borderRadius: '99px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
+                    {stats.activeRoutes}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Stat Cards */}
@@ -277,247 +340,345 @@ export default function SupervisorDashboard() {
           ))}
         </div>
 
-        {/* Assigned Wards + Schedules */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-
-          {/* Assigned Wards */}
-          <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(0,69,13,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#00450d' }}>map</span>
+        {/* OVERVIEW TAB */}
+        {activeTab === 'overview' && (
+          <>
+            {/* Assigned Wards + Schedules */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(0,69,13,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#00450d' }}>map</span>
+                  </div>
+                  <div>
+                    <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>My Assigned Wards</h2>
+                    <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>{profile?.district || 'All Districts'}</p>
+                  </div>
+                </div>
+                {assignedWards.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px', background: '#f4f6f3', borderRadius: '12px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#00450d', display: 'block', marginBottom: '8px' }}>public</span>
+                    <p style={{ fontSize: '14px', fontWeight: 600, color: '#181c22', margin: '0 0 4px' }}>All wards</p>
+                    <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>You supervise the entire district</p>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+                      {assignedWards.map(ward => (
+                        <span key={ward} className="ward-pill">
+                          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>
+                          {ward}
+                        </span>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#717a6d', padding: '10px 14px', background: '#f4f6f3', borderRadius: '8px' }}>
+                      You are responsible for {assignedWards.length} ward{assignedWards.length > 1 ? 's' : ''} in this district.
+                    </p>
+                  </>
+                )}
               </div>
-              <div>
-                <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>My Assigned Wards</h2>
-                <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>{profile?.district || 'All Districts'}</p>
+
+              <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: '0 0 20px' }}>My Upcoming Schedules</h2>
+                {schedules.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px', background: '#f4f6f3', borderRadius: '12px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#c4c9c0', display: 'block', marginBottom: '8px' }}>calendar_today</span>
+                    <p style={{ fontSize: '14px', fontWeight: 600, color: '#41493e', margin: '0 0 4px' }}>No schedules assigned</p>
+                    <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>The DE will assign schedules to you</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {schedules.map(schedule => {
+                      const color = wasteTypeColor[schedule.waste_type] || '#64748b'
+                      const scheduleWards = schedule.wards?.length > 0 ? schedule.wards : schedule.ward ? [schedule.ward] : []
+                      return (
+                        <div key={schedule.id} className="schedule-row" style={{ borderRadius: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: `${color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: '16px', color }}>delete_sweep</span>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: '0 0 2px' }}>
+                                {schedule.waste_type?.replace(/_/g, ' ')} collection
+                              </p>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '11px', color: '#717a6d' }}>
+                                  {new Date(schedule.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {schedule.collection_time}
+                                </span>
+                                {scheduleWards.length > 0 && (
+                                  <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '99px', background: 'rgba(0,69,13,0.07)', color: '#00450d' }}>
+                                    {scheduleWards.length === 1 ? scheduleWards[0] : `${scheduleWards.length} wards`}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
-            {assignedWards.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '24px', background: '#f4f6f3', borderRadius: '12px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#00450d', display: 'block', marginBottom: '8px' }}>public</span>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: '#181c22', margin: '0 0 4px' }}>All wards</p>
-                <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>You supervise the entire district</p>
+
+            {/* Alerts + Quick Actions */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '20px', marginBottom: '20px' }}>
+              <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="live-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: stats.unresolvedAlerts > 0 ? '#ef4444' : '#22c55e', boxShadow: stats.unresolvedAlerts > 0 ? '0 0 0 3px rgba(239,68,68,0.2)' : '0 0 0 3px rgba(34,197,94,0.2)' }} />
+                    <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>Live Exception Alerts</h2>
+                  </div>
+                  <Link href="/dashboard/supervisor/alerts" style={{ fontSize: '12px', color: '#00450d', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    View all <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>arrow_forward</span>
+                  </Link>
+                </div>
+                {alerts.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '40px', color: '#22c55e', display: 'block', marginBottom: '12px' }}>check_circle</span>
+                    <p style={{ fontSize: '14px', fontWeight: 600, color: '#41493e', margin: '0 0 4px' }}>All clear</p>
+                    <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>No unresolved alerts right now</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {alerts.slice(0, 5).map(alert => (
+                      <div key={alert.id} className="alert-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '12px', borderRadius: '10px', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1 }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0, marginTop: '1px', background: severityBg[alert.severity] || 'rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '16px', color: severityColor[alert.severity] || '#717a6d' }}>
+                              {alert.alert_type === 'breakdown' ? 'car_crash' : alert.alert_type === 'skip' ? 'do_not_disturb_on' : 'warning'}
+                            </span>
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#181c22', textTransform: 'capitalize' }}>{alert.alert_type?.replace('_', ' ') || 'Alert'}</span>
+                              <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '9999px', background: severityBg[alert.severity], color: severityColor[alert.severity], textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                {alert.severity}
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '12px', color: '#717a6d', margin: '0 0 3px', lineHeight: 1.4 }}>{alert.message}</p>
+                            <p style={{ fontSize: '10px', color: '#9ca3af', margin: 0 }}>
+                              {new Date(alert.created_at).toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                        <button onClick={() => resolveAlert(alert.id)} className="resolve-btn" style={{ flexShrink: 0, border: 'none', background: 'rgba(0,69,13,0.06)', borderRadius: '6px', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: 600, color: '#00450d' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>check</span>
+                          Resolve
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-                  {assignedWards.map(ward => (
-                    <span key={ward} className="ward-pill">
-                      <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>
-                      {ward}
-                    </span>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                  <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: '0 0 16px' }}>Quick Actions</h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[
+                      { icon: 'notifications_active', label: 'Manage Alerts', sub: 'Review & resolve exceptions', href: '/dashboard/supervisor/alerts', color: '#ef4444', bg: 'rgba(239,68,68,0.06)' },
+                      { icon: 'content_paste', label: 'Waste Reports', sub: 'Review crowdsourced reports', href: '/dashboard/supervisor/waste-reports', color: '#7c3aed', bg: 'rgba(124,58,237,0.06)' },
+                    ].map(action => (
+                      <Link key={action.label} href={action.href} style={{ textDecoration: 'none' }}>
+                        <div className="action-card" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '20px', color: action.color }}>{action.icon}</span>
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: 0 }}>{action.label}</p>
+                            <p style={{ fontSize: '11px', color: '#717a6d', margin: 0 }}>{action.sub}</p>
+                          </div>
+                          <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#c4c9c0' }}>chevron_right</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ background: 'linear-gradient(135deg, #00450d, #1b5e20)', borderRadius: '16px', padding: '20px', color: 'white' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'rgba(255,255,255,0.7)' }}>verified</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)' }}>System Status</span>
+                  </div>
+                  {[
+                    { label: 'Blockchain Network', status: 'Online' },
+                    { label: 'GPS Tracking', status: 'Active' },
+                    { label: 'Supabase DB', status: 'Healthy' },
+                  ].map(s => (
+                    <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)' }}>{s.label}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4ade80' }} />
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#4ade80' }}>{s.status}</span>
+                      </div>
+                    </div>
                   ))}
                 </div>
-                <p style={{ fontSize: '12px', color: '#717a6d', padding: '10px 14px', background: '#f4f6f3', borderRadius: '8px' }}>
-                  You are responsible for {assignedWards.length} ward{assignedWards.length > 1 ? 's' : ''} in this district.
-                </p>
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          </>
+        )}
 
-          {/* Upcoming Schedules */}
-          <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
-            <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: '0 0 20px' }}>
-              My Upcoming Schedules
-            </h2>
-            {schedules.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '24px', background: '#f4f6f3', borderRadius: '12px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#c4c9c0', display: 'block', marginBottom: '8px' }}>calendar_today</span>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: '#41493e', margin: '0 0 4px' }}>No schedules assigned</p>
-                <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>The DE will assign schedules to you</p>
+        {/* LIVE MONITOR TAB — R15 */}
+        {activeTab === 'monitor' && (
+          <div>
+            {/* Monitor header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div className="live-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 0 3px rgba(34,197,94,0.2)' }} />
+                <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '18px', color: '#181c22', margin: 0 }}>
+                  Live Route Monitor — {allRoutes.length} Routes
+                </h2>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#717a6d' }}>
+                <span style={{ padding: '4px 10px', borderRadius: '99px', background: 'rgba(0,69,13,0.08)', color: '#00450d', fontWeight: 700 }}>
+                  {activeRoutes.length} active
+                </span>
+                <span style={{ padding: '4px 10px', borderRadius: '99px', background: 'rgba(239,68,68,0.08)', color: '#dc2626', fontWeight: 700 }}>
+                  {alerts.length} alerts
+                </span>
+              </div>
+            </div>
+
+            {/* Priority alerts banner */}
+            {alerts.filter(a => a.severity === 'critical' || a.severity === 'high').length > 0 && (
+              <div style={{ background: '#fef2f2', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '14px', padding: '16px 20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <span className="material-symbols-outlined" style={{ color: '#dc2626', fontSize: '22px', flexShrink: 0 }}>emergency</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '13px', fontWeight: 700, color: '#ba1a1a', fontFamily: 'Manrope, sans-serif', margin: '0 0 2px' }}>
+                    {alerts.filter(a => a.severity === 'critical' || a.severity === 'high').length} high-priority alert{alerts.filter(a => a.severity === 'critical' || a.severity === 'high').length > 1 ? 's' : ''} require immediate attention
+                  </p>
+                  <p style={{ fontSize: '12px', color: '#dc2626', margin: 0 }}>
+                    {alerts.filter(a => a.severity === 'critical' || a.severity === 'high').map(a => a.message).join(' · ')}
+                  </p>
+                </div>
+                <Link href="/dashboard/supervisor/alerts" style={{ padding: '8px 14px', borderRadius: '8px', background: '#ba1a1a', color: 'white', textDecoration: 'none', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', flexShrink: 0 }}>
+                  Manage Alerts
+                </Link>
+              </div>
+            )}
+
+            {allRoutes.length === 0 ? (
+              <div style={{ background: 'white', borderRadius: '16px', padding: '60px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '48px', color: '#c4c9c0', display: 'block', marginBottom: '16px' }}>route</span>
+                <p style={{ fontSize: '16px', fontWeight: 600, color: '#41493e', margin: '0 0 8px' }}>No routes to monitor</p>
+                <p style={{ fontSize: '13px', color: '#717a6d', margin: 0 }}>Routes assigned to drivers will appear here in real-time</p>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                {schedules.map(schedule => {
-                  const color = wasteTypeColor[schedule.waste_type] || '#64748b'
-                  const scheduleWards = schedule.wards?.length > 0 ? schedule.wards : schedule.ward ? [schedule.ward] : []
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+                {allRoutes.map(route => {
+                  const sc = routeStatusColor[route.status] || routeStatusColor.planned
+                  const completionPct = route.total_stops > 0 ? Math.round((route.completed_stops / route.total_stops) * 100) : 0
+                  const routeAlerts = alerts.filter(a => a.route_id === route.id)
+                  const hasAlerts = routeAlerts.length > 0
+                  const isActive = route.status === 'active'
+
                   return (
-                    <div key={schedule.id} className="schedule-row" style={{ borderRadius: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: `${color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: '16px', color }}>{`delete_sweep`}</span>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: '0 0 2px' }}>
-                            {schedule.waste_type?.replace(/_/g, ' ')} collection
-                          </p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '11px', color: '#717a6d' }}>
-                              {new Date(schedule.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {schedule.collection_time}
+                    <div key={route.id}
+                      className={`route-monitor-card ${isActive ? 'active-route' : ''} ${hasAlerts ? 'alert-route' : ''}`}>
+
+                      {/* Route header */}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                            <p style={{ fontSize: '14px', fontWeight: 700, color: '#181c22', margin: 0, fontFamily: 'Manrope, sans-serif' }}>
+                              {route.route_name}
+                            </p>
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: sc.bg, color: sc.text, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.dot, display: 'inline-block' }} />
+                              {route.status}
                             </span>
-                            {scheduleWards.length > 0 && (
-                              <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '99px', background: 'rgba(0,69,13,0.07)', color: '#00450d' }}>
-                                {scheduleWards.length === 1 ? scheduleWards[0] : `${scheduleWards.length} wards`}
+                            {hasAlerts && (
+                              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: 'rgba(239,68,68,0.1)', color: '#dc2626', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>warning</span>
+                                {routeAlerts.length} alert{routeAlerts.length > 1 ? 's' : ''}
                               </span>
                             )}
                           </div>
+                          <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>{route.district}</p>
                         </div>
                       </div>
+
+                      {/* Driver info */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 12px', borderRadius: '10px', background: route.driver_id ? 'rgba(0,69,13,0.05)' : '#f8fafc' }}>
+                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: route.driver_id ? '#00450d' : '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '16px', color: route.driver_id ? 'white' : '#9ca3af' }}>person</span>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '13px', fontWeight: 600, color: route.driver_id ? '#181c22' : '#9ca3af', margin: 0 }}>
+                            {route.driver_name || 'No driver assigned'}
+                          </p>
+                          {route.driver_id && isActive && (
+                            <p style={{ fontSize: '11px', color: '#00450d', margin: 0, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                              On duty
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Collection progress */}
+                      {route.total_stops > 0 && (
+                        <div style={{ marginBottom: '14px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '12px', color: '#717a6d' }}>Collection Progress</span>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: completionPct >= 80 ? '#00450d' : completionPct >= 50 ? '#d97706' : '#64748b' }}>
+                              {completionPct}%
+                            </span>
+                          </div>
+                          <div className="progress-track">
+                            <div className="progress-fill" style={{
+                              width: `${completionPct}%`,
+                              background: completionPct >= 80 ? '#00450d' : completionPct >= 50 ? '#d97706' : '#94a3b8',
+                            }} />
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '11px', color: '#94a3b8' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#00450d', fontWeight: 600 }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>check_circle</span>
+                              {route.completed_stops} done
+                            </span>
+                            {route.skipped_stops > 0 && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#dc2626', fontWeight: 600 }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>cancel</span>
+                                {route.skipped_stops} skipped
+                              </span>
+                            )}
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>location_on</span>
+                              {route.total_stops} total
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Active route alerts inline */}
+                      {hasAlerts && (
+                        <div style={{ borderTop: '1px solid rgba(239,68,68,0.1)', paddingTop: '12px' }}>
+                          {routeAlerts.slice(0, 2).map(a => (
+                            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '8px', background: 'rgba(239,68,68,0.05)', marginBottom: '4px' }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: '14px', color: severityColor[a.severity] || '#dc2626', flexShrink: 0 }}>
+                                {a.alert_type === 'breakdown' ? 'car_crash' : 'warning'}
+                              </span>
+                              <p style={{ fontSize: '11px', color: '#dc2626', margin: 0, flex: 1, lineHeight: 1.3 }}>{a.message}</p>
+                              <button onClick={() => resolveAlert(a.id)} style={{ border: 'none', color: '#00450d', fontSize: '10px', fontWeight: 700, cursor: 'pointer', flexShrink: 0, padding: '2px 6px', borderRadius: '4px', background: 'rgba(0,69,13,0.08)' }}>
+                                Resolve
+                              </button>
+                            </div>
+                          ))}
+                          {routeAlerts.length > 2 && (
+                            <Link href="/dashboard/supervisor/alerts" style={{ fontSize: '11px', color: '#00450d', fontWeight: 600, textDecoration: 'none' }}>
+                              +{routeAlerts.length - 2} more alerts →
+                            </Link>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
               </div>
             )}
           </div>
-        </div>
-
-        {/* Alerts + Quick Actions */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '20px', marginBottom: '20px' }}>
-
-          {/* Live Alerts */}
-          <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: stats.unresolvedAlerts > 0 ? '#ef4444' : '#22c55e', boxShadow: stats.unresolvedAlerts > 0 ? '0 0 0 3px rgba(239,68,68,0.2)' : '0 0 0 3px rgba(34,197,94,0.2)' }} />
-                <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>
-                  Live Exception Alerts
-                </h2>
-              </div>
-              <Link href="/dashboard/supervisor/alerts" style={{ fontSize: '12px', color: '#00450d', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                View all
-                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>arrow_forward</span>
-              </Link>
-            </div>
-            {alerts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '40px', color: '#22c55e', display: 'block', marginBottom: '12px' }}>check_circle</span>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: '#41493e', margin: '0 0 4px' }}>All clear</p>
-                <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>No unresolved alerts right now</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                {alerts.map(alert => (
-                  <div key={alert.id} className="alert-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '12px', borderRadius: '10px', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1 }}>
-                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0, marginTop: '1px', background: severityBg[alert.severity] || 'rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '16px', color: severityColor[alert.severity] || '#717a6d' }}>
-                          {alert.alert_type === 'vehicle_breakdown' ? 'car_crash' : alert.alert_type === 'route_not_started' ? 'schedule' : 'warning'}
-                        </span>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#181c22' }}>
-                            {alertTypeLabel[alert.alert_type] || alert.alert_type}
-                          </span>
-                          <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '9999px', background: severityBg[alert.severity], color: severityColor[alert.severity], textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                            {alert.severity}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: '12px', color: '#717a6d', margin: '0 0 3px', lineHeight: 1.4 }}>{alert.message}</p>
-                        <p style={{ fontSize: '10px', color: '#9ca3af', margin: 0 }}>
-                          {new Date(alert.created_at).toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}
-                          {' · '}
-                          {new Date(alert.created_at).toLocaleDateString('en-LK', { month: 'short', day: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-                    <button onClick={() => resolveAlert(alert.id)} className="resolve-btn" style={{ flexShrink: 0, border: 'none', background: 'rgba(0,69,13,0.06)', borderRadius: '6px', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: 600, color: '#00450d' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>check</span>
-                      Resolve
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Quick Actions + System Status */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
-              <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: '0 0 16px' }}>
-                Quick Actions
-              </h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[
-                  { icon: 'notifications_active', label: 'Manage Alerts', sub: 'Review & resolve exceptions', href: '/dashboard/supervisor/alerts', color: '#ef4444', bg: 'rgba(239,68,68,0.06)' },
-                  { icon: 'map', label: 'Live Route Map', sub: 'Track driver locations', href: '/dashboard/supervisor/routes', color: '#2563eb', bg: 'rgba(37,99,235,0.06)' },
-                  { icon: 'content_paste', label: 'Waste Reports', sub: 'Review crowdsourced reports', href: '/dashboard/supervisor/waste-reports', color: '#7c3aed', bg: 'rgba(124,58,237,0.06)' },
-                  { icon: 'summarize', label: 'Daily Summary', sub: 'View collection performance', href: '/dashboard/supervisor/summary', color: '#00450d', bg: 'rgba(0,69,13,0.06)' },
-                ].map(action => (
-                  <Link key={action.label} href={action.href} style={{ textDecoration: 'none' }}>
-                    <div className="action-card" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.05)' }}>
-                      <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '20px', color: action.color }}>{action.icon}</span>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: 0 }}>{action.label}</p>
-                        <p style={{ fontSize: '11px', color: '#717a6d', margin: 0 }}>{action.sub}</p>
-                      </div>
-                      <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#c4c9c0' }}>chevron_right</span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ background: 'linear-gradient(135deg, #00450d, #1b5e20)', borderRadius: '16px', padding: '20px', color: 'white' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'rgba(255,255,255,0.7)' }}>verified</span>
-                <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)' }}>
-                  System Status
-                </span>
-              </div>
-              {[
-                { label: 'Blockchain Network', status: 'Online' },
-                { label: 'GPS Tracking', status: 'Active' },
-                { label: 'Supabase DB', status: 'Healthy' },
-              ].map(s => (
-                <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)' }}>{s.label}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4ade80' }} />
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#4ade80' }}>{s.status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Route Overview */}
-        <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-            <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>
-              Route Overview
-            </h2>
-            <Link href="/dashboard/supervisor/routes" style={{ fontSize: '12px', color: '#00450d', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              View all routes
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>arrow_forward</span>
-            </Link>
-          </div>
-          {routes.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '32px', color: '#717a6d', fontSize: '13px' }}>No routes found</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-              {routes.map(route => {
-                const sc = routeStatusColor[route.status] || routeStatusColor.planned
-                return (
-                  <div key={route.id} className="route-card" style={{ border: '1px solid rgba(0,0,0,0.06)', borderRadius: '12px', padding: '16px', background: '#fafaf9' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '9999px', background: sc.bg, color: sc.text, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.dot, display: 'inline-block' }} />
-                        {route.status}
-                      </span>
-                      <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#c4c9c0' }}>route</span>
-                    </div>
-                    <p style={{ fontSize: '13px', fontWeight: 700, color: '#181c22', margin: '0 0 3px' }}>{route.name}</p>
-                    <p style={{ fontSize: '11px', color: '#717a6d', margin: '0 0 10px' }}>{route.district}</p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '11px', color: '#717a6d', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '13px', color: '#9ca3af' }}>location_on</span>
-                        {route.total_stops} stops
-                      </span>
-                      <span style={{ fontSize: '11px', color: route.driver_id ? '#22c55e' : '#9ca3af', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>person</span>
-                        {route.driver_id ? 'Driver assigned' : 'No driver'}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
+        )}
       </main>
     </div>
   )
