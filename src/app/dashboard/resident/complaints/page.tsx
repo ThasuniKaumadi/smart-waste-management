@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import Link from 'next/link'
 import DashboardLayout from '@/components/DashboardLayout'
 import { logComplaintOnChain } from '@/lib/blockchain'
 
@@ -14,7 +13,7 @@ const RESIDENT_NAV = [
   { label: 'Complaints', href: '/dashboard/resident/complaints', icon: 'feedback' },
 ]
 
-const COMPLAINT_TYPES = [
+const COMPLAINT_SUGGESTIONS = [
   { value: 'missed_collection', label: 'Missed Collection', icon: 'delete' },
   { value: 'delayed_collection', label: 'Delayed Collection', icon: 'schedule' },
   { value: 'illegal_dumping', label: 'Illegal Dumping', icon: 'delete_forever' },
@@ -33,6 +32,7 @@ interface Complaint {
   id: string
   description: string
   complaint_type: string
+  custom_complaint_type: string
   status: string
   blockchain_tx: string
   created_at: string
@@ -46,7 +46,11 @@ export default function ResidentComplaintsPage() {
   const [profile, setProfile] = useState<any>(null)
   const [toast, setToast] = useState('')
   const [toastType, setToastType] = useState<'success' | 'error'>('success')
-  const [formData, setFormData] = useState({ complaint_type: '', description: '' })
+  const [formData, setFormData] = useState({
+    complaint_type: '',
+    custom_complaint_type: '',
+    description: '',
+  })
 
   useEffect(() => { loadData() }, [])
 
@@ -69,17 +73,23 @@ export default function ResidentComplaintsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!formData.complaint_type || !formData.description) {
-      showToast('Please fill in all fields', 'error'); return
+    if (!formData.description.trim()) {
+      showToast('Please describe your complaint', 'error'); return
     }
     setSaving(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
+    // Use custom type if provided, otherwise use selected suggestion, otherwise 'general'
+    const finalType = formData.custom_complaint_type.trim()
+      || formData.complaint_type
+      || 'general'
+
     const { data: complaintData, error } = await supabase.from('complaints').insert({
       submitted_by: user?.id,
       district: profile?.district,
-      complaint_type: formData.complaint_type,
+      complaint_type: finalType,
+      custom_complaint_type: formData.custom_complaint_type.trim() || null,
       description: formData.description,
       status: 'submitted',
     }).select().single()
@@ -96,10 +106,19 @@ export default function ResidentComplaintsPage() {
     } else {
       showToast('Complaint submitted successfully!')
       setShowForm(false)
-      setFormData({ complaint_type: '', description: '' })
+      setFormData({ complaint_type: '', custom_complaint_type: '', description: '' })
       loadData()
     }
     setSaving(false)
+  }
+
+  function getComplaintLabel(c: Complaint) {
+    if (c.custom_complaint_type) return c.custom_complaint_type
+    return COMPLAINT_SUGGESTIONS.find(t => t.value === c.complaint_type)?.label || c.complaint_type
+  }
+
+  function getComplaintIcon(c: Complaint) {
+    return COMPLAINT_SUGGESTIONS.find(t => t.value === c.complaint_type)?.icon || 'feedback'
   }
 
   return (
@@ -113,9 +132,9 @@ export default function ResidentComplaintsPage() {
         .material-symbols-outlined { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
         .font-headline { font-family:'Manrope',sans-serif; }
         .bento-card { background:white; border-radius:16px; box-shadow:0 10px 40px -10px rgba(24,28,34,0.08); border:1px solid rgba(0,69,13,0.04); overflow:hidden; }
-        .complaint-type-card { border:1.5px solid #e4ede4; border-radius:12px; padding:14px; cursor:pointer; transition:all 0.2s ease; background:#f9fbf9; }
-        .complaint-type-card:hover { border-color:rgba(0,69,13,0.3); background:white; }
-        .complaint-type-card.selected { border-color:#00450d; background:white; box-shadow:0 0 0 3px rgba(0,69,13,0.07); }
+        .suggestion-card { border:1.5px solid #e4ede4; border-radius:12px; padding:14px; cursor:pointer; transition:all 0.2s ease; background:#f9fbf9; }
+        .suggestion-card:hover { border-color:rgba(0,69,13,0.3); background:white; }
+        .suggestion-card.selected { border-color:#00450d; background:white; box-shadow:0 0 0 3px rgba(0,69,13,0.07); }
         .form-field { width:100%; padding:11px 14px; border:1.5px solid #e5e7eb; border-radius:10px; font-size:14px; color:#181c22; font-family:'Inter',sans-serif; background:#fafafa; transition:all 0.2s ease; outline:none; box-sizing:border-box; }
         .form-field:focus { border-color:#00450d; background:white; box-shadow:0 0 0 3px rgba(0,69,13,0.08); }
         .form-field::placeholder { color:#9ca3af; }
@@ -125,6 +144,8 @@ export default function ResidentComplaintsPage() {
         .complaint-row { padding:16px 24px; border-bottom:1px solid rgba(0,69,13,0.04); transition:background 0.15s; display:flex; align-items:flex-start; gap:14px; }
         .complaint-row:hover { background:#f9f9ff; }
         .complaint-row:last-child { border-bottom:none; }
+        .clear-btn { background:none; border:none; cursor:pointer; color:#94a3b8; padding:2px 6px; border-radius:6px; font-size:11px; font-weight:700; font-family:'Manrope',sans-serif; transition:all 0.15s; }
+        .clear-btn:hover { color:#ba1a1a; background:rgba(186,26,26,0.06); }
         .toast { animation:slideUp 0.3s ease; }
         @keyframes slideUp { from { transform:translateY(12px) translateX(-50%); opacity:0; } to { transform:translateY(0) translateX(-50%); opacity:1; } }
         @keyframes staggerIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
@@ -135,7 +156,6 @@ export default function ResidentComplaintsPage() {
         .slide-down { animation:slideDown 0.3s ease both; }
       `}</style>
 
-      {/* Toast */}
       {toast && (
         <div className="toast" style={{ position: 'fixed', bottom: '24px', left: '50%', background: toastType === 'error' ? '#dc2626' : '#181c22', color: 'white', padding: '10px 20px', borderRadius: '9999px', fontSize: '13px', fontWeight: 500, zIndex: 1000, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
           <span className="material-symbols-outlined" style={{ fontSize: '16px', color: toastType === 'error' ? '#fca5a5' : '#4ade80' }}>{toastType === 'error' ? 'error' : 'check_circle'}</span>
@@ -143,7 +163,6 @@ export default function ResidentComplaintsPage() {
         </div>
       )}
 
-      {/* Hero */}
       <section className="mb-10 s1">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
@@ -160,7 +179,6 @@ export default function ResidentComplaintsPage() {
         </div>
       </section>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-5 mb-8 s2">
         {[
           { label: 'Total', value: complaints.length, color: '#00450d', bg: '#f0fdf4', icon: 'feedback' },
@@ -177,7 +195,6 @@ export default function ResidentComplaintsPage() {
         ))}
       </div>
 
-      {/* Form */}
       {showForm && (
         <div className="bento-card mb-8 s2 slide-down">
           <div className="px-8 py-6" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
@@ -185,15 +202,25 @@ export default function ResidentComplaintsPage() {
             <p className="text-sm mt-1" style={{ color: '#717a6d' }}>Your complaint will be logged on the blockchain for transparency</p>
           </div>
           <form onSubmit={handleSubmit} className="p-8">
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#374151', fontFamily: 'Manrope, sans-serif', marginBottom: '10px' }}>
-                Complaint Type *
-              </label>
+
+            {/* Suggestions — not mandatory */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#374151', fontFamily: 'Manrope, sans-serif' }}>
+                  Complaint Type
+                  <span style={{ marginLeft: '8px', fontSize: '10px', fontWeight: 600, color: '#94a3b8', textTransform: 'none', letterSpacing: 0 }}>(optional — select a suggestion or describe below)</span>
+                </label>
+                {formData.complaint_type && (
+                  <button type="button" className="clear-btn" onClick={() => setFormData(f => ({ ...f, complaint_type: '' }))}>
+                    Clear
+                  </button>
+                )}
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px' }}>
-                {COMPLAINT_TYPES.map(ct => (
+                {COMPLAINT_SUGGESTIONS.map(ct => (
                   <div key={ct.value}
-                    className={`complaint-type-card ${formData.complaint_type === ct.value ? 'selected' : ''}`}
-                    onClick={() => setFormData({ ...formData, complaint_type: ct.value })}>
+                    className={`suggestion-card ${formData.complaint_type === ct.value ? 'selected' : ''}`}
+                    onClick={() => setFormData(f => ({ ...f, complaint_type: f.complaint_type === ct.value ? '' : ct.value }))}>
                     <div style={{ width: '32px', height: '32px', borderRadius: '8px', marginBottom: '8px', background: formData.complaint_type === ct.value ? 'rgba(0,69,13,0.1)' : '#f0f4f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <span className="material-symbols-outlined" style={{ fontSize: '18px', color: formData.complaint_type === ct.value ? '#00450d' : '#94a894' }}>{ct.icon}</span>
                     </div>
@@ -202,16 +229,39 @@ export default function ResidentComplaintsPage() {
                 ))}
               </div>
             </div>
+
+            {/* Custom type field */}
             <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#374151', fontFamily: 'Manrope, sans-serif', marginBottom: '7px' }}>
+                Custom Complaint Type
+                <span style={{ marginLeft: '8px', fontSize: '10px', fontWeight: 600, color: '#94a3b8', textTransform: 'none', letterSpacing: 0 }}>(optional — overrides selection above)</span>
+              </label>
+              <input className="form-field"
+                placeholder="e.g. Waste left on pavement after collection..."
+                value={formData.custom_complaint_type}
+                onChange={e => setFormData(f => ({ ...f, custom_complaint_type: e.target.value }))} />
+            </div>
+
+            {/* Description */}
+            <div style={{ marginBottom: '24px' }}>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#374151', fontFamily: 'Manrope, sans-serif', marginBottom: '7px' }}>
                 Description *
               </label>
               <textarea className="form-field" style={{ minHeight: '100px', resize: 'vertical' }}
-                placeholder="Describe your complaint in detail..."
+                placeholder="Describe your complaint in detail — what happened, when, and where..."
                 value={formData.description}
-                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
                 required />
             </div>
+
+            {/* Info note */}
+            <div className="flex items-center gap-3 p-4 rounded-xl mb-6" style={{ background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)' }}>
+              <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '18px', flexShrink: 0 }}>info</span>
+              <p className="text-sm" style={{ color: '#41493e' }}>
+                Only the description is required. Selecting a complaint type helps CMC route your complaint faster.
+              </p>
+            </div>
+
             <div className="flex items-center gap-3">
               <button type="submit" disabled={saving} className="submit-btn">
                 {saving ? (
@@ -226,7 +276,6 @@ export default function ResidentComplaintsPage() {
         </div>
       )}
 
-      {/* Complaints list */}
       <div className="bento-card s3">
         <div className="px-6 py-5" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
           <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>All Complaints</h3>
@@ -246,16 +295,15 @@ export default function ResidentComplaintsPage() {
         ) : (
           <div>
             {complaints.map(c => {
-              const ct = COMPLAINT_TYPES.find(t => t.value === c.complaint_type)
               const sc = STATUS_CONFIG[c.status] || STATUS_CONFIG.submitted
               return (
                 <div key={c.id} className="complaint-row">
                   <div style={{ width: '40px', height: '40px', borderRadius: '12px', flexShrink: 0, background: 'rgba(180,83,9,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#b45309' }}>{ct?.icon || 'feedback'}</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#b45309' }}>{getComplaintIcon(c)}</span>
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#181c22' }}>{ct?.label || c.complaint_type}</span>
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#181c22' }}>{getComplaintLabel(c)}</span>
                       <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: sc.bg, color: sc.color, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'Manrope, sans-serif' }}>{sc.label}</span>
                     </div>
                     <p style={{ fontSize: '13px', color: '#41493e', margin: '0 0 4px', lineHeight: 1.5 }}>{c.description}</p>
