@@ -32,8 +32,11 @@ export default function RegisterPage() {
     ward: '',
     address: '',
     phone: '',
+    businessRegNumber: '',
     billing_cycle: 'monthly',
+
   })
+
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -67,6 +70,7 @@ export default function RegisterPage() {
         ward: formData.ward,
         address: formData.address,
         organisation_name: formData.role === 'commercial_establishment' ? formData.companyName : null,
+        business_registration_number: formData.role === 'commercial_establishment' ? formData.businessRegNumber : null,
         phone: formData.phone,
         is_approved: true,
         billing_cycle: formData.role === 'commercial_establishment' ? formData.billing_cycle : null,
@@ -368,25 +372,36 @@ export default function RegisterPage() {
               </div>
             )}
 
+            {/* Business Registration Number — commercial only */}
+            {formData.role === 'commercial_establishment' && (
+              <div>
+                <label className="field-label">Business Registration Number *</label>
+                <div style={{ position: 'relative' }}>
+                  <span className="input-icon"><span className="material-symbols-outlined">badge</span></span>
+                  <input
+                    className="form-input"
+                    placeholder="e.g. PV 00012345"
+                    value={formData.businessRegNumber}
+                    onChange={e => setFormData({ ...formData, businessRegNumber: e.target.value })}
+                    required
+                  />
+                </div>
+                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '5px', fontFamily: 'Inter, sans-serif' }}>
+                  Your Department of Registrar of Companies number
+                </p>
+              </div>
+            )}
+
             {/* Email + Phone */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label className="field-label">Email</label>
-                <div style={{ position: 'relative' }}>
-                  <span className="input-icon"><span className="material-symbols-outlined">mail</span></span>
-                  <input type="email" className="form-input" placeholder="Enter your email"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })} required />
-                </div>
-              </div>
-              <div>
-                <label className="field-label">Phone</label>
-                <div style={{ position: 'relative' }}>
-                  <span className="input-icon"><span className="material-symbols-outlined">phone</span></span>
-                  <input className="form-input" placeholder="+94 77 000 0000"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })} />
-                </div>
+            </div>
+            <div>
+              <label className="field-label">Phone</label>
+              <div style={{ position: 'relative' }}>
+                <span className="input-icon"><span className="material-symbols-outlined">phone</span></span>
+                <input className="form-input" placeholder="+94 77 000 0000"
+                  value={formData.phone}
+                  onChange={e => setFormData({ ...formData, phone: e.target.value })} />
               </div>
             </div>
 

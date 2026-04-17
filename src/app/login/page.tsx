@@ -391,7 +391,7 @@ export default function LoginPage() {
               </span>
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••••••"
+                placeholder="Enter your password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
@@ -399,7 +399,7 @@ export default function LoginPage() {
               />
               <button type="button" className="toggle-btn" onClick={() => setShowPassword(!showPassword)}>
                 <span className="material-symbols-outlined">
-                  {showPassword ? 'visibility_off' : 'visibility'}
+                  {showPassword ? 'visibility' : 'visibility_off'}
                 </span>
               </button>
             </div>

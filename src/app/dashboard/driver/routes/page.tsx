@@ -27,6 +27,9 @@ interface Stop {
   blockchain_tx: string
   is_commercial: boolean
   commercial_id: string | null
+  bin_size: string | null
+  waste_type: string | null
+  bin_quantity: number | null
 }
 
 interface Route {
@@ -84,7 +87,14 @@ export default function DriverRoutesPage() {
     const { data: stopsData } = await supabase
       .from('collection_stops').select('*')
       .eq('route_id', route.id).order('stop_order', { ascending: true })
-    setStops(stopsData || [])
+    const stops = stopsData || []
+    setStops(stops)
+    // Pre-fill binCounts with scheduled bin_quantity for commercial stops
+    const prefilled: Record<string, number> = {}
+    stops.forEach(s => {
+      if (s.is_commercial && s.bin_quantity) prefilled[s.id] = s.bin_quantity
+    })
+    setBinCounts(prefilled)
     const routeDate = new Date(route.date)
     const hoursPast = (Date.now() - routeDate.getTime()) / (1000 * 60 * 60)
     if (route.status === 'pending' && hoursPast > 2) {
@@ -138,7 +148,13 @@ export default function DriverRoutesPage() {
         try {
           await fetch('/api/payhere/create-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ collection_event_id: eventData?.id, commercial_id: stop.commercial_id, bin_count: bins }),
+            body: JSON.stringify({
+              collection_event_id: eventData?.id,
+              commercial_id: stop.commercial_id,
+              bin_count: bins,
+              bin_size: stop.bin_size,
+              waste_type: stop.waste_type,
+            }),
           })
         } catch (err) { console.error('Billing trigger failed:', err) }
       }
@@ -184,7 +200,7 @@ export default function DriverRoutesPage() {
     if (freq === 'four_times_a_day') return { color: '#ba1a1a', bg: 'rgba(186,26,26,0.08)' }
     if (freq === 'thrice_a_day') return { color: '#d97706', bg: 'rgba(217,119,6,0.08)' }
     if (freq === 'twice_a_day') return { color: '#1d4ed8', bg: 'rgba(29,78,216,0.08)' }
-    return null // once a day — no badge needed
+    return null
   }
 
   return (
@@ -214,14 +230,16 @@ export default function DriverRoutesPage() {
         .back-btn:hover { background:rgba(0,0,0,0.09); }
         .skip-select { width:100%; border:1.5px solid #e4ede4; border-radius:8px; padding:8px 28px 8px 10px; font-size:12px; color:#41493e; font-family:'Inter',sans-serif; outline:none; background:#f9fbf9; cursor:pointer; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2341493e'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; background-size:12px; }
         .skip-select:focus { border-color:#00450d; background-color:white; }
-        .bin-input { width:52px; border:1.5px solid #e4ede4; border-radius:6px; padding:6px 8px; font-size:12px; text-align:center; color:#181c22; outline:none; background:#f9fbf9; }
-        .bin-input:focus { border-color:#00450d; background:white; }
+        .bin-input { width:64px; border:1.5px solid #c8dbc8; border-radius:8px; padding:7px 10px; font-size:13px; font-weight:700; text-align:center; color:#00450d; outline:none; background:white; font-family:'Manrope',sans-serif; }
+        .bin-input:focus { border-color:#00450d; box-shadow:0 0 0 3px rgba(0,69,13,0.08); }
         .toast { animation:slideUp 0.3s ease; }
         @keyframes slideUp { from { transform:translateY(12px) translateX(-50%); opacity:0; } to { transform:translateY(0) translateX(-50%); opacity:1; } }
         @keyframes spin { to { transform:rotate(360deg); } }
         .progress-bar { height:6px; background:#e4ede4; border-radius:3px; overflow:hidden; }
         .progress-fill { height:100%; background:linear-gradient(90deg,#00450d,#43a047); border-radius:3px; transition:width 0.5s ease; }
         .freq-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:99px; font-size:10px; font-weight:700; font-family:'Manrope',sans-serif; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; }
+        .bin-panel { background:rgba(0,69,13,0.04); border:1px solid rgba(0,69,13,0.1); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+        .bin-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:700; font-family:'Manrope',sans-serif; white-space:nowrap; }
       `}</style>
 
       {toast && (
@@ -286,33 +304,19 @@ export default function DriverRoutesPage() {
                   return (
                     <div key={route.id} className="route-card" onClick={() => loadStops(route)}
                       style={{ background: 'white', borderRadius: '16px', padding: '20px 24px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-
-                      {/* Icon */}
                       <div style={{ width: '48px', height: '48px', borderRadius: '13px', flexShrink: 0, background: isNight ? 'rgba(29,78,216,0.07)' : 'rgba(0,69,13,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <span className="material-symbols-outlined" style={{ fontSize: '24px', color: isNight ? '#1d4ed8' : '#00450d' }}>
                           {isNight ? 'nights_stay' : 'wb_sunny'}
                         </span>
                       </div>
-
-                      {/* Info */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '15px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>
-                            {route.route_name}
-                          </span>
+                          <span style={{ fontSize: '15px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>{route.route_name}</span>
                           <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: isActive ? 'rgba(0,69,13,0.08)' : 'rgba(180,83,9,0.08)', color: isActive ? '#00450d' : '#b45309', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                             {route.status}
                           </span>
-                          {isNight && (
-                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(29,78,216,0.08)', color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                              🌙 Night
-                            </span>
-                          )}
-                          {route.waste_type && (
-                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(0,69,13,0.06)', color: '#00450d', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                              {route.waste_type.replace('_', ' ')}
-                            </span>
-                          )}
+                          {isNight && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(29,78,216,0.08)', color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>🌙 Night</span>}
+                          {route.waste_type && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(0,69,13,0.06)', color: '#00450d', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{route.waste_type.replace('_', ' ')}</span>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
                           {[
@@ -328,11 +332,8 @@ export default function DriverRoutesPage() {
                           ))}
                         </div>
                       </div>
-
-                      {/* Actions */}
                       <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                        <button className="dispatch-btn" disabled={dispatchingRoute === route.id}
-                          onClick={e => handleDispatch(e, route)}>
+                        <button className="dispatch-btn" disabled={dispatchingRoute === route.id} onClick={e => handleDispatch(e, route)}>
                           <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>inventory_2</span>
                           {dispatchingRoute === route.id ? '...' : 'Dispatch'}
                         </button>
@@ -369,9 +370,7 @@ export default function DriverRoutesPage() {
                   {selectedRoute.vehicle_number}
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
-                    {selectedRoute.shift === 'night' ? 'nights_stay' : 'wb_sunny'}
-                  </span>
+                  <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>{selectedRoute.shift === 'night' ? 'nights_stay' : 'wb_sunny'}</span>
                   {selectedRoute.shift === 'night' ? 'Night Shift' : 'Day Shift'}
                 </span>
                 {selectedRoute.waste_type && (
@@ -429,7 +428,6 @@ export default function DriverRoutesPage() {
                           <span style={{ fontSize: '14px', fontWeight: 600, color: '#181c22' }}>
                             {stop.road_name || stop.address}
                           </span>
-                          {/* Frequency badge — only show if not once a day */}
                           {freqStyle && (
                             <span className="freq-badge" style={{ background: freqStyle.bg, color: freqStyle.color }}>
                               {stop.frequency.replace(/_/g, ' ')}
@@ -457,6 +455,14 @@ export default function DriverRoutesPage() {
                           </p>
                         )}
 
+                        {/* Completed commercial — show what was collected */}
+                        {stop.status === 'completed' && stop.is_commercial && (stop.bin_count > 0 || stop.bin_size) && (
+                          <p style={{ fontSize: '12px', color: '#00450d', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>delete_sweep</span>
+                            Collected: {stop.bin_count} × {stop.bin_size || 'bin'}{stop.waste_type ? ` · ${stop.waste_type}` : ''}
+                          </p>
+                        )}
+
                         {stop.skip_reason && (
                           <p style={{ fontSize: '12px', color: '#dc2626', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}>
                             <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>info</span>
@@ -473,21 +479,51 @@ export default function DriverRoutesPage() {
                         {/* Pending stop actions */}
                         {stop.status === 'pending' && (
                           <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+                            {/* Commercial bin panel */}
                             {stop.is_commercial && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '12px', color: '#717a6d', whiteSpace: 'nowrap' }}>Bins collected:</span>
-                                <input type="number" min="0" className="bin-input"
-                                  value={binCounts[stop.id] || ''}
-                                  onChange={e => setBinCounts({ ...binCounts, [stop.id]: parseInt(e.target.value) || 0 })}
-                                  placeholder="0" />
+                              <div className="bin-panel">
+                                {/* Scheduled bin details from DE */}
+                                {(stop.bin_size || stop.waste_type || stop.bin_quantity) && (
+                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '11px', color: '#717a6d', fontWeight: 600, whiteSpace: 'nowrap' }}>Scheduled:</span>
+                                    {stop.bin_quantity != null && (
+                                      <span className="bin-badge" style={{ background: '#fefce8', color: '#92400e' }}>
+                                        {stop.bin_quantity} × {stop.bin_size || '—'}
+                                      </span>
+                                    )}
+                                    {stop.waste_type && (
+                                      <span className="bin-badge" style={{ background: '#f0fdf4', color: '#00450d' }}>
+                                        {stop.waste_type}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                {/* Actual count input */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '12px', color: '#41493e', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    Actual bins collected:
+                                  </span>
+                                  <input
+                                    type="number" min="0" max="999"
+                                    className="bin-input"
+                                    value={binCounts[stop.id] ?? (stop.bin_quantity ?? '')}
+                                    onChange={e => setBinCounts({ ...binCounts, [stop.id]: parseInt(e.target.value) || 0 })}
+                                    placeholder="0"
+                                  />
+                                  {stop.bin_size && (
+                                    <span style={{ fontSize: '11px', color: '#717a6d' }}>× {stop.bin_size}</span>
+                                  )}
+                                </div>
                                 {!stop.commercial_id && (
                                   <span style={{ fontSize: '11px', color: '#f97316', display: 'flex', alignItems: 'center', gap: '3px' }}>
                                     <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>warning</span>
-                                    No billing linked
+                                    No billing linked — collection recorded only
                                   </span>
                                 )}
                               </div>
                             )}
+
                             <select className="skip-select"
                               value={selectedSkipReason[stop.id] || ''}
                               onChange={e => setSelectedSkipReason({ ...selectedSkipReason, [stop.id]: e.target.value })}>

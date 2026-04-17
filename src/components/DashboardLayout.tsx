@@ -1,14 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+
+interface NavChild {
+    label: string
+    href: string
+    icon: string
+    description?: string
+}
 
 interface NavItem {
     label: string
     href: string
     icon: string
+    section?: string
+    children?: NavChild[]
 }
 
 interface DashboardLayoutProps {
@@ -33,7 +42,10 @@ export default function DashboardLayout({
     const pathname = usePathname()
     const router = useRouter()
     const [loggingOut, setLoggingOut] = useState(false)
+    const [collapsed, setCollapsed] = useState(false)
     const [mobileOpen, setMobileOpen] = useState(false)
+    const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+    const hoverTimeout = useRef<NodeJS.Timeout | null>(null)
 
     async function handleLogout() {
         setLoggingOut(true)
@@ -43,394 +55,455 @@ export default function DashboardLayout({
     }
 
     function getInitials(name: string) {
-        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'
+        if (!name) return 'U'
+        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     }
 
-    const visibleNav = navItems.slice(0, 4)
-    const overflowNav = navItems.slice(4)
+    function isActiveRoute(href: string) {
+        if (pathname === href) return true
+        const segments = href.split('/').filter(Boolean)
+        if (segments.length >= 3) return pathname.startsWith(href + '/')
+        return false
+    }
+
+    function isParentActive(item: NavItem) {
+        if (isActiveRoute(item.href)) return true
+        return item.children?.some(c => isActiveRoute(c.href)) ?? false
+    }
+
+    function handleMouseEnter(key: string) {
+        if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+        setOpenDropdown(key)
+    }
+
+    function handleMouseLeave() {
+        hoverTimeout.current = setTimeout(() => setOpenDropdown(null), 150)
+    }
+
+    function handleDropdownMouseEnter() {
+        if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    }
+
+    // Group nav items by section
+    const sections: { title: string; items: NavItem[] }[] = []
+    const ungrouped: NavItem[] = []
+    navItems.forEach(item => {
+        if (item.section) {
+            const existing = sections.find(s => s.title === item.section)
+            if (existing) existing.items.push(item)
+            else sections.push({ title: item.section, items: [item] })
+        } else {
+            ungrouped.push(item)
+        }
+    })
+
+    const SW = collapsed ? '64px' : '240px'
+
+    function renderNavItem(item: NavItem) {
+        const active = isParentActive(item)
+        const hasChildren = item.children && item.children.length > 0
+        const isOpen = openDropdown === item.href
+
+        return (
+            <div
+                key={item.href}
+                style={{ position: 'relative' }}
+                onMouseEnter={() => hasChildren && !collapsed && handleMouseEnter(item.href)}
+                onMouseLeave={() => hasChildren && handleMouseLeave()}
+            >
+                <Link
+                    href={item.href}
+                    onClick={() => {
+                        setMobileOpen(false)
+                        if (hasChildren && !collapsed) {
+                            setOpenDropdown(isOpen ? null : item.href)
+                        }
+                    }}
+                    className={`sb-item${active ? ' active' : ''}`}
+                    title={collapsed ? item.label : undefined}
+                >
+                    <span className="ms">{item.icon}</span>
+                    {!collapsed && <span className="lbl">{item.label}</span>}
+                    {!collapsed && hasChildren && (
+                        <span className="ms sb-chevron" style={{ marginLeft: 'auto', fontSize: '16px', opacity: 0.4, transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+                            expand_more
+                        </span>
+                    )}
+                </Link>
+
+                {/* Dropdown panel */}
+                {hasChildren && !collapsed && isOpen && (
+                    <div
+                        className="sb-dropdown"
+                        onMouseEnter={handleDropdownMouseEnter}
+                        onMouseLeave={handleMouseLeave}
+                    >
+                        <div className="sb-dropdown-grid">
+                            {item.children!.map(child => {
+                                const childActive = isActiveRoute(child.href)
+                                return (
+                                    <Link
+                                        key={child.href}
+                                        href={child.href}
+                                        onClick={() => { setMobileOpen(false); setOpenDropdown(null) }}
+                                        className={`sb-dropdown-item${childActive ? ' active' : ''}`}
+                                    >
+                                        <div className={`sb-dropdown-icon${childActive ? ' active' : ''}`}>
+                                            <span className="ms">{child.icon}</span>
+                                        </div>
+                                        <div className="sb-dropdown-text">
+                                            <div className="sb-dropdown-label">{child.label}</div>
+                                            {child.description && (
+                                                <div className="sb-dropdown-desc">{child.description}</div>
+                                            )}
+                                        </div>
+                                    </Link>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
+        )
+    }
 
     return (
-        <div className="min-h-screen" style={{ background: '#f9f9ff', fontFamily: "'Inter', sans-serif" }}>
+        <div style={{ display: 'flex', minHeight: '100vh', background: '#f4f6f3', fontFamily: "'Inter', sans-serif" }}>
             <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+        * { box-sizing: border-box; }
 
-        .material-symbols-outlined {
+        .ms {
           font-family: 'Material Symbols Outlined';
-          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-          display: inline-block;
-          vertical-align: middle;
-          line-height: 1;
-        }
-        .font-headline { font-family: 'Manrope', sans-serif; }
-        .font-label { font-family: 'Manrope', sans-serif; }
-
-        .top-nav {
-          background: rgba(255,255,255,0.85);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08);
+          font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+          display: inline-block; line-height: 1; vertical-align: middle; user-select: none;
         }
 
-        .nav-link {
-          font-family: 'Manrope', sans-serif;
-          font-weight: 600;
-          font-size: 13px;
-          letter-spacing: -0.01em;
-          color: #64748b;
-          text-decoration: none;
-          transition: all 0.3s cubic-bezier(0.05,0.7,0.1,1.0);
-          padding-bottom: 2px;
-          white-space: nowrap;
-        }
-        .nav-link:hover {
-          color: #14532d;
-          transform: translateY(-2px);
-        }
-        .nav-link.active {
-          color: #15803d;
-          border-bottom: 2px solid #16a34a;
+        /* ── Sidebar ── */
+        .sb {
+          position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
+          background: #fff;
+          border-right: 1px solid rgba(0,69,13,0.07);
+          display: flex; flex-direction: column;
+          transition: width 0.22s ease; overflow: visible;
         }
 
-        .more-dropdown {
-          position: absolute;
-          top: calc(100% + 8px);
-          left: 0;
-          background: white;
-          border-radius: 12px;
-          box-shadow: 0 20px 40px -10px rgba(24,28,34,0.12);
+        /* ── Brand ── */
+        .sb-brand {
+          display: flex; align-items: center; gap: 10px;
+          padding: 20px 16px 16px; flex-shrink: 0; min-height: 68px;
+          border-bottom: 1px solid rgba(0,69,13,0.06);
+        }
+        .sb-logo {
+          width: 34px; height: 34px; border-radius: 9px; background: #00450d;
+          display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .sb-logo .ms { color: #fff; font-size: 18px; }
+        .sb-brand-text {
+          font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 16px;
+          color: #00450d; white-space: nowrap; opacity: 1; transition: opacity 0.15s ease;
+        }
+        .sb-brand-text.hidden { opacity: 0; pointer-events: none; }
+
+        /* ── Collapse toggle ── */
+        .sb-toggle {
+          position: absolute; top: 22px; right: -11px;
+          width: 22px; height: 22px; border-radius: 50%;
+          background: #fff; border: 1px solid rgba(0,69,13,0.15);
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer; z-index: 52; transition: border-color 0.15s;
+        }
+        .sb-toggle:hover { border-color: #00450d; }
+        .sb-toggle .ms { font-size: 13px; color: #00450d; }
+
+        /* ── Scroll area ── */
+        .sb-scroll { flex: 1; overflow-y: auto; overflow-x: visible; padding: 12px 0 8px; }
+        .sb-scroll::-webkit-scrollbar { width: 2px; }
+        .sb-scroll::-webkit-scrollbar-thumb { background: rgba(0,69,13,0.12); border-radius: 2px; }
+
+        /* ── Section label ── */
+        .sb-section-label {
+          font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+          color: rgba(0,69,13,0.35); text-transform: uppercase;
+          padding: 14px 18px 6px; white-space: nowrap; overflow: hidden;
+          font-family: 'Inter', sans-serif;
+        }
+        .sb-section-label.hidden { opacity: 0; height: 0; padding: 0; }
+
+        /* ── Nav item ── */
+        .sb-item {
+          display: flex; align-items: center; gap: 10px;
+          padding: 9px 12px; margin: 1px 8px;
+          border-radius: 8px; font-size: 13px; font-weight: 500;
+          color: #6b7280; text-decoration: none;
+          transition: all 0.15s ease; white-space: nowrap; overflow: hidden;
+          position: relative; font-family: 'Inter', sans-serif;
+        }
+        .sb-item:hover { background: rgba(0,69,13,0.05); color: #00450d; }
+        .sb-item.active { background: #edf7ee; color: #00450d; font-weight: 600; }
+        .sb-item.active::after {
+          content: ''; position: absolute; right: 0; top: 20%; bottom: 20%;
+          width: 3px; border-radius: 2px 0 0 2px; background: #00450d;
+        }
+        .sb-item .ms { font-size: 18px; flex-shrink: 0; color: inherit; }
+        .sb-item .lbl { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+
+        /* tooltip */
+        .sb-item[title]:hover::before {
+          content: attr(title);
+          position: absolute; left: 58px; top: 50%; transform: translateY(-50%);
+          background: #1a2e1a; color: #fff;
+          font-size: 11.5px; font-weight: 500;
+          padding: 4px 10px; border-radius: 6px; white-space: nowrap;
+          pointer-events: none; z-index: 200;
+        }
+
+        /* ── Dropdown panel ── */
+        .sb-dropdown {
+          position: absolute; left: calc(100% + 10px); top: 0;
+          width: 320px; z-index: 200;
+          background: #fff;
           border: 1px solid rgba(0,69,13,0.08);
-          min-width: 160px;
-          padding: 6px;
-          z-index: 100;
-          display: none;
+          border-radius: 14px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06);
+          padding: 10px;
+          animation: dropIn 0.15s ease both;
         }
-        .more-wrapper:hover .more-dropdown { display: block; }
-
-        .more-btn {
-          font-family: 'Manrope', sans-serif;
-          font-weight: 600;
-          font-size: 13px;
-          color: #64748b;
-          display: flex;
-          align-items: center;
-          gap: 2px;
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding-bottom: 2px;
-          transition: color 0.2s ease;
+        @keyframes dropIn {
+          from { opacity: 0; transform: translateX(-6px); }
+          to   { opacity: 1; transform: translateX(0); }
         }
-        .more-btn:hover { color: #14532d; }
 
-        .dropdown-link {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 9px 12px;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 600;
-          font-family: 'Manrope', sans-serif;
-          color: #64748b;
+        /* Arrow pointing left toward sidebar */
+        .sb-dropdown::before {
+          content: '';
+          position: absolute; left: -6px; top: 16px;
+          width: 10px; height: 10px;
+          background: #fff;
+          border-left: 1px solid rgba(0,69,13,0.08);
+          border-bottom: 1px solid rgba(0,69,13,0.08);
+          transform: rotate(45deg);
+        }
+
+        .sb-dropdown-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 4px;
+        }
+        .sb-dropdown-grid:has(> :only-child),
+        .sb-dropdown-grid:has(> :nth-child(1):last-child) {
+          grid-template-columns: 1fr;
+        }
+
+        .sb-dropdown-item {
+          display: flex; align-items: flex-start; gap: 10px;
+          padding: 10px 10px; border-radius: 10px;
           text-decoration: none;
           transition: background 0.15s ease;
+          color: inherit;
         }
-        .dropdown-link:hover { background: #f0fdf4; color: #14532d; }
-        .dropdown-link.active { color: #00450d; background: #f0fdf4; }
+        .sb-dropdown-item:hover { background: rgba(0,69,13,0.05); }
+        .sb-dropdown-item.active { background: #edf7ee; }
 
-        .avatar-ring {
-          background: linear-gradient(135deg, #00450d, #1b6d24);
-          color: white;
+        .sb-dropdown-icon {
+          width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+          background: rgba(0,69,13,0.07);
+          display: flex; align-items: center; justify-content: center;
+          transition: background 0.15s;
+        }
+        .sb-dropdown-icon .ms { font-size: 16px; color: #00450d; }
+        .sb-dropdown-icon.active { background: #00450d; }
+        .sb-dropdown-icon.active .ms { color: #fff; }
+        .sb-dropdown-item:hover .sb-dropdown-icon { background: rgba(0,69,13,0.12); }
+        .sb-dropdown-item.active:hover .sb-dropdown-icon { background: #005a10; }
+
+        .sb-dropdown-text { min-width: 0; }
+        .sb-dropdown-label {
+          font-size: 12.5px; font-weight: 600; color: #1a2e1a;
+          font-family: 'Manrope', sans-serif; white-space: nowrap;
+          overflow: hidden; text-overflow: ellipsis;
+        }
+        .sb-dropdown-item.active .sb-dropdown-label { color: #00450d; }
+        .sb-dropdown-desc {
+          font-size: 11px; color: #9ca3af; margin-top: 1px;
+          line-height: 1.4; font-family: 'Inter', sans-serif;
+        }
+
+        /* ── Primary action ── */
+        .sb-action {
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          margin: 4px 8px 0; padding: 10px 12px; border-radius: 8px;
+          background: #00450d; color: #fff;
+          font-size: 12.5px; font-weight: 700; text-decoration: none;
+          white-space: nowrap; overflow: hidden;
+          transition: background 0.15s; font-family: 'Inter', sans-serif;
+        }
+        .sb-action:hover { background: #005a10; }
+        .sb-action .ms { font-size: 16px; flex-shrink: 0; }
+        .sb-action-icon {
+          width: 36px; height: 36px; border-radius: 8px; background: #00450d;
+          display: flex; align-items: center; justify-content: center;
+          margin: 8px auto 0; text-decoration: none; transition: background 0.15s;
+        }
+        .sb-action-icon:hover { background: #005a10; }
+        .sb-action-icon .ms { color: #fff; font-size: 18px; }
+
+        /* ── Divider ── */
+        .sb-div { height: 1px; background: rgba(0,69,13,0.06); margin: 8px 12px; }
+
+        /* ── Footer ── */
+        .sb-foot { padding: 6px 8px 14px; flex-shrink: 0; border-top: 1px solid rgba(0,69,13,0.06); }
+        .sb-user { display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 8px; }
+        .sb-avatar {
+          width: 32px; height: 32px; border-radius: 8px; background: #00450d;
+          display: flex; align-items: center; justify-content: center;
+          color: #fff; font-size: 11px; font-weight: 800;
+          flex-shrink: 0; font-family: 'Manrope', sans-serif; letter-spacing: 0.02em;
+        }
+        .sb-user-info { overflow: hidden; flex: 1; min-width: 0; }
+        .sb-user-name {
+          font-size: 12.5px; font-weight: 600; color: #1a2e1a;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
           font-family: 'Manrope', sans-serif;
-          font-weight: 800;
-          font-size: 12px;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 2px solid white;
-          box-shadow: 0 2px 8px rgba(0,69,13,0.2);
-          flex-shrink: 0;
         }
+        .sb-user-role { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: #3d7a47; text-transform: uppercase; }
 
-        .signout-btn {
-          font-family: 'Manrope', sans-serif;
-          font-size: 12px;
-          font-weight: 700;
-          color: #ba1a1a;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          cursor: pointer;
-          padding: 6px 10px;
-          border-radius: 8px;
-          transition: background 0.2s;
-          background: none;
-          border: none;
-          white-space: nowrap;
+        .sb-foot-btn {
+          display: flex; align-items: center; gap: 9px;
+          padding: 8px 12px; margin: 1px 0; border-radius: 8px;
+          font-size: 12.5px; font-weight: 500; cursor: pointer;
+          width: 100%; white-space: nowrap; overflow: hidden;
+          transition: background 0.15s; font-family: 'Inter', sans-serif;
+          background: none; border: none; text-decoration: none;
         }
-        .signout-btn:hover { background: rgba(186,26,26,0.06); }
+        .sb-foot-btn .ms { font-size: 17px; flex-shrink: 0; }
+        .sb-foot-btn.account { color: #6b7280; }
+        .sb-foot-btn.account:hover { background: rgba(0,69,13,0.05); color: #00450d; }
+        .sb-foot-btn.account.active { color: #00450d; background: #edf7ee; }
+        .sb-foot-btn.logout { color: #c0392b; }
+        .sb-foot-btn.logout:hover { background: rgba(192,57,43,0.06); }
 
-        .primary-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 7px 14px;
-          border-radius: 99px;
-          font-family: 'Manrope', sans-serif;
-          font-weight: 700;
-          font-size: 12px;
-          background: #1b5e20;
-          color: white;
-          text-decoration: none;
-          transition: all 0.2s ease;
-          box-shadow: 0 4px 12px rgba(27,94,32,0.2);
-          white-space: nowrap;
-          flex-shrink: 0;
+        /* ── Mobile topbar ── */
+        .sb-topbar {
+          display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+          height: 54px; background: #fff; border-bottom: 1px solid rgba(0,69,13,0.07);
+          padding: 0 16px; align-items: center; justify-content: space-between;
         }
-        .primary-btn:hover {
-          background: #00450d;
-          transform: scale(1.03);
-        }
+        .sb-topbar-title { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 16px; color: #00450d; }
+        .sb-topbar-btn { background: none; border: none; cursor: pointer; padding: 6px; display: flex; }
+        .sb-topbar-btn .ms { font-size: 22px; color: #00450d; }
 
-        /* Mobile drawer */
-        .mobile-drawer {
-          position: fixed;
-          inset: 0;
-          z-index: 200;
-          display: flex;
-        }
-        .mobile-drawer-overlay {
-          position: absolute;
-          inset: 0;
-          background: rgba(0,0,0,0.3);
-          backdrop-filter: blur(4px);
-        }
-        .mobile-drawer-panel {
-          position: relative;
-          width: 260px;
-          background: white;
-          height: 100%;
-          padding: 24px 16px;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          z-index: 10;
-          box-shadow: 20px 0 60px rgba(0,0,0,0.15);
-        }
+        /* ── Mobile overlay ── */
+        .sb-overlay { display: none; position: fixed; inset: 0; z-index: 49; background: rgba(0,0,0,0.35); }
 
-        @keyframes fadeSlideUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
+        /* ── Main ── */
+        .sb-main { flex: 1; min-height: 100vh; padding: 28px 28px 48px; transition: margin-left 0.22s ease; }
+        .sb-page { animation: fadeUp 0.25s ease both; }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
+
+        @media (max-width: 768px) {
+          .sb-topbar { display: flex !important; }
+          .sb { transform: translateX(-100%); transition: transform 0.22s ease; width: 240px !important; overflow: hidden; }
+          .sb.open { transform: translateX(0); }
+          .sb-overlay { display: block !important; }
+          .sb-toggle { display: none; }
+          .sb-main { margin-left: 0 !important; padding-top: 68px; }
+          .sb-dropdown { position: static; left: auto; top: auto; width: auto; box-shadow: none; border: none; border-radius: 0; padding: 0 0 0 28px; animation: none; background: transparent; }
+          .sb-dropdown::before { display: none; }
+          .sb-dropdown-grid { grid-template-columns: 1fr; gap: 0; }
+          .sb-dropdown-item { padding: 7px 8px; border-radius: 6px; }
+          .sb-dropdown-icon { width: 26px; height: 26px; }
+          .sb-dropdown-icon .ms { font-size: 14px; }
+          .sb-dropdown-label { font-size: 12px; }
+          .sb-dropdown-desc { display: none; }
         }
-        .page-enter { animation: fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1) both; }
       `}</style>
 
-            {/* FLOATING PILL NAVBAR */}
-            <header className="top-nav sticky top-4 mx-4 px-5 rounded-full z-50 flex items-center justify-between h-14"
-                style={{ maxWidth: '1280px', marginLeft: 'auto', marginRight: 'auto', width: 'calc(100% - 2rem)' }}>
+            {/* ── SIDEBAR ── */}
+            <aside className={`sb${mobileOpen ? ' open' : ''}`} style={{ width: SW }}>
 
-                {/* LEFT — brand + nav */}
-                <div className="flex items-center gap-6 flex-shrink-0">
-                    {/* Brand */}
-                    <Link href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
-                        <div className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '20px' }}>eco</span>
-                            <span className="font-headline font-black text-lg tracking-tighter" style={{ color: '#14532d' }}>
-                                EcoLedger
-                            </span>
-                        </div>
-                    </Link>
+                <button className="sb-toggle" onClick={() => { setCollapsed(c => !c); setOpenDropdown(null) }}>
+                    <span className="ms">{collapsed ? 'chevron_right' : 'chevron_left'}</span>
+                </button>
 
-                    {/* Desktop nav */}
-                    <nav className="hidden lg:flex items-center gap-5">
-                        {visibleNav.map((item) => {
-                            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-                            return (
-                                <Link key={item.href} href={item.href} className={`nav-link ${isActive ? 'active' : ''}`}>
-                                    {item.label}
-                                </Link>
-                            )
-                        })}
-
-                        {overflowNav.length > 0 && (
-                            <div className="more-wrapper relative">
-                                <button className="more-btn">
-                                    More
-                                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>expand_more</span>
-                                </button>
-                                <div className="more-dropdown">
-                                    {overflowNav.map((item) => {
-                                        const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-                                        return (
-                                            <Link key={item.href} href={item.href} className={`dropdown-link ${isActive ? 'active' : ''}`}>
-                                                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: isActive ? '#00450d' : '#94a3b8' }}>
-                                                    {item.icon}
-                                                </span>
-                                                {item.label}
-                                            </Link>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        )}
-                    </nav>
+                <div className="sb-brand">
+                    <div className="sb-logo"><span className="ms">eco</span></div>
+                    <span className={`sb-brand-text${collapsed ? ' hidden' : ''}`}>EcoLedger</span>
                 </div>
 
-                {/* RIGHT — actions + user */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-
-                    {/* Primary action — desktop only */}
-                    {primaryAction && (
-                        <Link href={primaryAction.href} className="primary-btn hidden lg:flex">
-                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
-                                {primaryAction.icon || 'add'}
-                            </span>
+                {primaryAction && (
+                    collapsed ? (
+                        <Link href={primaryAction.href} className="sb-action-icon" title={primaryAction.label}>
+                            <span className="ms">{primaryAction.icon || 'add'}</span>
+                        </Link>
+                    ) : (
+                        <Link href={primaryAction.href} className="sb-action" onClick={() => setMobileOpen(false)}>
+                            <span className="ms">{primaryAction.icon || 'add'}</span>
                             {primaryAction.label}
                         </Link>
+                    )
+                )}
+
+                <div className="sb-scroll">
+                    {ungrouped.length > 0 && (
+                        <>
+                            {!collapsed && <div className="sb-section-label">Navigation</div>}
+                            {ungrouped.map(item => renderNavItem(item))}
+                        </>
                     )}
-
-                    {/* Role badge */}
-                    <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full"
-                        style={{ background: '#f0fdf4' }}>
-                        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#16a34a' }} />
-                        <span className="font-label font-bold" style={{ fontSize: '10px', letterSpacing: '0.06em', color: '#14532d' }}>
-                            {role}
-                        </span>
-                    </div>
-
-                    {/* Notifications */}
-                    <button className="p-1.5 rounded-full transition-colors hover:bg-slate-100 hidden md:block"
-                        style={{ color: '#64748b' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>notifications</span>
-                    </button>
-
-                    {/* Divider */}
-                    <div className="w-px h-6 hidden md:block" style={{ background: 'rgba(0,69,13,0.1)' }} />
-
-                    {/* User info + signout */}
-                    <div className="hidden md:flex items-center gap-2">
-                        <div className="text-right hidden xl:block">
-                            <p className="font-headline font-bold leading-none" style={{ fontSize: '12px', color: '#181c22' }}>
-                                {userName || 'User'}
-                            </p>
-                            <p style={{ fontSize: '10px', color: '#717a6d', marginTop: '1px' }}>{role}</p>
+                    {sections.map(section => (
+                        <div key={section.title}>
+                            <div className={`sb-section-label${collapsed ? ' hidden' : ''}`}>{section.title}</div>
+                            {section.items.map(item => renderNavItem(item))}
                         </div>
-                        <div className="avatar-ring">{getInitials(userName)}</div>
-                        <button onClick={handleLogout} disabled={loggingOut} className="signout-btn">
-                            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>logout</span>
-                            <span className="hidden xl:block">{loggingOut ? '...' : 'Sign out'}</span>
-                        </button>
-                    </div>
-
-                    {/* Mobile hamburger */}
-                    <button
-                        className="lg:hidden p-1.5 rounded-full hover:bg-slate-100 transition-colors"
-                        style={{ color: '#64748b' }}
-                        onClick={() => setMobileOpen(true)}
-                    >
-                        <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>menu</span>
-                    </button>
+                    ))}
                 </div>
-            </header>
 
-            {/* MOBILE DRAWER */}
-            {mobileOpen && (
-                <div className="mobile-drawer">
-                    <div className="mobile-drawer-overlay" onClick={() => setMobileOpen(false)} />
-                    <div className="mobile-drawer-panel">
-                        <div className="flex items-center justify-between mb-6 px-2">
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '20px' }}>eco</span>
-                                <span className="font-headline font-black text-lg tracking-tighter" style={{ color: '#14532d' }}>
-                                    EcoLedger
-                                </span>
+                <div className="sb-foot">
+                    <div className="sb-user">
+                        <div className="sb-avatar">{getInitials(userName)}</div>
+                        {!collapsed && (
+                            <div className="sb-user-info">
+                                <div className="sb-user-name">{userName || 'User'}</div>
+                                <div className="sb-user-role">{role}</div>
                             </div>
-                            <button onClick={() => setMobileOpen(false)} style={{ color: '#64748b' }}>
-                                <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>close</span>
-                            </button>
-                        </div>
-
-                        <div className="px-2 mb-4">
-                            <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: '#f0fdf4' }}>
-                                <div className="avatar-ring">{getInitials(userName)}</div>
-                                <div>
-                                    <p className="font-headline font-bold text-sm" style={{ color: '#181c22' }}>{userName || 'User'}</p>
-                                    <p className="text-xs" style={{ color: '#717a6d' }}>{role}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {navItems.map((item) => {
-                            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-                            return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    onClick={() => setMobileOpen(false)}
-                                    className={`dropdown-link ${isActive ? 'active' : ''}`}
-                                    style={{ marginBottom: '2px' }}
-                                >
-                                    <span className="material-symbols-outlined" style={{ fontSize: '18px', color: isActive ? '#00450d' : '#94a3b8' }}>
-                                        {item.icon}
-                                    </span>
-                                    {item.label}
-                                </Link>
-                            )
-                        })}
-
-                        {primaryAction && (
-                            <Link
-                                href={primaryAction.href}
-                                onClick={() => setMobileOpen(false)}
-                                className="primary-btn mt-4 justify-center"
-                                style={{ borderRadius: '12px' }}
-                            >
-                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-                                    {primaryAction.icon || 'add'}
-                                </span>
-                                {primaryAction.label}
-                            </Link>
                         )}
-
-                        <div className="mt-auto pt-4" style={{ borderTop: '1px solid rgba(0,69,13,0.08)' }}>
-                            <button onClick={handleLogout} disabled={loggingOut} className="signout-btn w-full justify-center">
-                                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>logout</span>
-                                {loggingOut ? 'Signing out...' : 'Sign out'}
-                            </button>
-                        </div>
                     </div>
+                    <Link
+                        href="/dashboard/account"
+                        onClick={() => setMobileOpen(false)}
+                        className={`sb-foot-btn account${pathname === '/dashboard/account' ? ' active' : ''}`}
+                        title={collapsed ? 'Manage Account' : undefined}
+                    >
+                        <span className="ms">manage_accounts</span>
+                        {!collapsed && 'Manage Account'}
+                    </Link>
+                    <button
+                        className="sb-foot-btn logout"
+                        onClick={handleLogout}
+                        disabled={loggingOut}
+                        title={collapsed ? 'Sign out' : undefined}
+                    >
+                        <span className="ms">logout</span>
+                        {!collapsed && (loggingOut ? 'Signing out…' : 'Sign out')}
+                    </button>
                 </div>
-            )}
+            </aside>
 
-            {/* MAIN CONTENT */}
-            <main className="px-4 mt-6 pb-24 page-enter" style={{ maxWidth: '1280px', margin: '24px auto 96px' }}>
+            {mobileOpen && <div className="sb-overlay" onClick={() => setMobileOpen(false)} />}
+
+            <div className="sb-topbar">
+                <button className="sb-topbar-btn" onClick={() => setMobileOpen(o => !o)}>
+                    <span className="ms">menu</span>
+                </button>
+                <span className="sb-topbar-title">EcoLedger</span>
+                <div className="sb-avatar">{getInitials(userName)}</div>
+            </div>
+
+            <main className="sb-main sb-page" style={{ marginLeft: SW }}>
                 {children}
             </main>
-
-            {/* FOOTER */}
-            <footer className="border-t py-8 px-6" style={{ background: '#f1f5f9', borderColor: 'rgba(0,69,13,0.06)' }}>
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4"
-                    style={{ maxWidth: '1280px', margin: '0 auto' }}>
-                    <div>
-                        <span className="font-headline font-bold" style={{ color: '#14532d' }}>EcoLedger</span>
-                        <p className="text-xs mt-1 uppercase tracking-wider" style={{ color: '#94a3b8' }}>
-                            © 2026 Colombo Municipal Council · All rights reserved
-                        </p>
-                    </div>
-                    <div className="flex gap-6">
-                        {['Privacy', 'Terms', 'Support'].map(l => (
-                            <a key={l} href="#"
-                                className="text-xs font-medium uppercase tracking-wider transition-colors hover:text-green-700"
-                                style={{ color: '#94a3b8' }}>{l}
-                            </a>
-                        ))}
-                    </div>
-                </div>
-            </footer>
         </div>
     )
 }

@@ -67,6 +67,9 @@ interface RouteStop {
     frequency: string
     skip_reason: string
     is_commercial: boolean
+    bin_size: string
+    waste_type: string
+    bin_quantity: number
 }
 
 interface Stop {
@@ -75,6 +78,9 @@ interface Stop {
     is_commercial: boolean
     commercial_id: string
     frequency: string
+    bin_size: string
+    waste_type: string
+    bin_quantity: number
 }
 
 export default function DERoutesPage() {
@@ -96,7 +102,8 @@ export default function DERoutesPage() {
     const [loadingStops, setLoadingStops] = useState<string | null>(null)
     const [wards, setWards] = useState<string[]>([])
     const [stops, setStops] = useState<Stop[]>([{
-        road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day'
+        road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day',
+        bin_size: '240L', waste_type: 'general', bin_quantity: 1,
     }])
     const [formData, setFormData] = useState({
         route_name: '',
@@ -129,21 +136,18 @@ export default function DERoutesPage() {
             .order('date', { ascending: false })
         setRoutes(routesData || [])
 
-        // Load contractors in this district
         const { data: contractorData } = await supabase
             .from('profiles')
             .select('id, full_name, organisation_name')
             .eq('role', 'contractor')
         setContractors(contractorData || [])
 
-        // Load all drivers
         const { data: driverData } = await supabase
             .from('profiles')
             .select('id, full_name, contractor_id')
             .eq('role', 'driver')
         setDrivers(driverData || [])
 
-        // Load commercial establishments in this district
         const { data: commercialData } = await supabase
             .from('profiles')
             .select('id, full_name, organisation_name, address')
@@ -151,7 +155,6 @@ export default function DERoutesPage() {
             .eq('district', p?.district || '')
         setCommercials(commercialData || [])
 
-        // Published schedules for this district
         const { data: schedulesData } = await supabase
             .from('schedules')
             .select('*')
@@ -163,12 +166,10 @@ export default function DERoutesPage() {
         setLoading(false)
     }
 
-    // Filter drivers by selected contractor
     const filteredDrivers = formData.contractor_id
         ? drivers.filter(d => d.contractor_id === formData.contractor_id)
         : drivers
 
-    // Filter schedules by selected ward
     const wardSchedules = formData.ward
         ? schedules.filter(s => !s.ward || s.ward === formData.ward)
         : schedules
@@ -187,17 +188,25 @@ export default function DERoutesPage() {
     }
 
     function addStop() {
-        setStops([...stops, { road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day' }])
+        setStops([...stops, {
+            road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day',
+            bin_size: '240L', waste_type: 'general', bin_quantity: 1,
+        }])
     }
 
     function removeStop(index: number) {
         if (stops.length > 1) setStops(stops.filter((_, i) => i !== index))
     }
 
-    function updateStop(index: number, field: keyof Stop, value: string | boolean) {
+    function updateStop(index: number, field: keyof Stop, value: string | boolean | number) {
         const updated = [...stops]
         updated[index] = { ...updated[index], [field]: value }
-        if (field === 'is_commercial' && value === false) updated[index].commercial_id = ''
+        if (field === 'is_commercial' && value === false) {
+            updated[index].commercial_id = ''
+            updated[index].bin_size = '240L'
+            updated[index].waste_type = 'general'
+            updated[index].bin_quantity = 1
+        }
         if (field === 'commercial_id' && typeof value === 'string') {
             const found = commercials.find(c => c.id === value)
             if (found?.address) updated[index].address = found.address
@@ -250,6 +259,9 @@ export default function DERoutesPage() {
             frequency: stop.frequency,
             is_commercial: stop.is_commercial,
             commercial_id: stop.is_commercial && stop.commercial_id ? stop.commercial_id : null,
+            bin_size: stop.is_commercial ? stop.bin_size : null,
+            waste_type: stop.is_commercial ? stop.waste_type : null,
+            bin_quantity: stop.is_commercial ? stop.bin_quantity : null,
         }))
 
         const { error: stopsError } = await supabase.from('collection_stops').insert(stopsToInsert)
@@ -264,7 +276,10 @@ export default function DERoutesPage() {
                 vehicle_number: '', date: new Date().toISOString().split('T')[0],
                 shift: 'day', schedule_id: '',
             })
-            setStops([{ road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day' }])
+            setStops([{
+                road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day',
+                bin_size: '240L', waste_type: 'general', bin_quantity: 1,
+            }])
             loadData()
         }
         setSaving(false)
@@ -409,6 +424,11 @@ export default function DERoutesPage() {
           padding: 6px 14px; border-radius: 99px; font-size: 11px; font-weight: 700;
           font-family: 'Manrope', sans-serif; cursor: pointer; transition: all 0.2s ease;
           border: 1.5px solid; white-space: nowrap;
+        }
+        .sub-label {
+          display: block; font-size: 10px; font-weight: 700; color: #94a3b8;
+          text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px;
+          font-family: 'Manrope', sans-serif;
         }
         @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         .s1 { animation: staggerIn 0.5s ease 0.05s both; }
@@ -633,20 +653,20 @@ export default function DERoutesPage() {
                                     <div key={index} className="stop-card">
                                         <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr auto', gap: '10px', alignItems: 'start' }}>
                                             <div>
-                                                <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontFamily: 'Manrope, sans-serif' }}>Road Name *</label>
+                                                <label className="sub-label">Road Name *</label>
                                                 <input type="text" className="form-field" placeholder="e.g. Kotahena Street"
                                                     value={stop.road_name}
                                                     onChange={e => updateStop(index, 'road_name', e.target.value)} />
                                             </div>
                                             <div>
-                                                <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontFamily: 'Manrope, sans-serif' }}>Frequency</label>
+                                                <label className="sub-label">Frequency</label>
                                                 <select className="select-field" value={stop.frequency}
                                                     onChange={e => updateStop(index, 'frequency', e.target.value)}>
                                                     {FREQUENCIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontFamily: 'Manrope, sans-serif' }}>Type</label>
+                                                <label className="sub-label">Type</label>
                                                 <button type="button"
                                                     onClick={() => updateStop(index, 'is_commercial', !stop.is_commercial)}
                                                     style={{ width: '100%', padding: '10px 8px', borderRadius: '10px', border: `1.5px solid ${stop.is_commercial ? 'rgba(217,119,6,0.3)' : '#e5e7eb'}`, background: stop.is_commercial ? '#fefce8' : 'white', color: stop.is_commercial ? '#92400e' : '#64748b', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', cursor: 'pointer', transition: 'all 0.2s ease' }}>
@@ -662,21 +682,64 @@ export default function DERoutesPage() {
                                                 )}
                                             </div>
                                         </div>
+
+                                        {/* Commercial expanded section */}
                                         {stop.is_commercial && (
-                                            <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e5e7eb' }}>
-                                                <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontFamily: 'Manrope, sans-serif' }}>Commercial Establishment</label>
-                                                <select className="select-field" value={stop.commercial_id}
-                                                    onChange={e => updateStop(index, 'commercial_id', e.target.value)}>
-                                                    <option value="">Select establishment</option>
-                                                    {commercials.map(c => (
-                                                        <option key={c.id} value={c.id}>
-                                                            {c.organisation_name || c.full_name} — {c.address}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                {stop.commercial_id
-                                                    ? <p style={{ fontSize: '11px', color: '#00450d', marginTop: '4px' }}>✓ Billing auto-generated on collection</p>
-                                                    : <p style={{ fontSize: '11px', color: '#d97706', marginTop: '4px' }}>⚠ Select an establishment to enable billing</p>}
+                                            <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+                                                {/* Establishment picker */}
+                                                <div>
+                                                    <label className="sub-label">Commercial Establishment</label>
+                                                    <select className="select-field" value={stop.commercial_id}
+                                                        onChange={e => updateStop(index, 'commercial_id', e.target.value)}>
+                                                        <option value="">Select establishment</option>
+                                                        {commercials.map(c => (
+                                                            <option key={c.id} value={c.id}>
+                                                                {c.organisation_name || c.full_name} — {c.address}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    {stop.commercial_id
+                                                        ? <p style={{ fontSize: '11px', color: '#00450d', marginTop: '4px' }}>✓ Billing auto-generated on collection</p>
+                                                        : <p style={{ fontSize: '11px', color: '#d97706', marginTop: '4px' }}>⚠ Select an establishment to enable billing</p>}
+                                                </div>
+
+                                                {/* Bin details */}
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                                                    <div>
+                                                        <label className="sub-label">Bin Size</label>
+                                                        <select className="select-field" value={stop.bin_size}
+                                                            onChange={e => updateStop(index, 'bin_size', e.target.value)}>
+                                                            <option value="120L">120L</option>
+                                                            <option value="240L">240L</option>
+                                                            <option value="660L">660L</option>
+                                                            <option value="1100L">1100L</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="sub-label">Waste Type</label>
+                                                        <select className="select-field" value={stop.waste_type}
+                                                            onChange={e => updateStop(index, 'waste_type', e.target.value)}>
+                                                            <option value="general">General</option>
+                                                            <option value="recyclable">Recyclable</option>
+                                                            <option value="organic">Organic</option>
+                                                            <option value="hazardous">Hazardous</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="sub-label">Bin Quantity</label>
+                                                        <input type="number" min={1} max={999} className="form-field"
+                                                            value={stop.bin_quantity}
+                                                            onChange={e => updateStop(index, 'bin_quantity', Number(e.target.value))} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Charge summary */}
+                                                <div style={{ padding: '8px 12px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)' }}>
+                                                    <p style={{ fontSize: '11px', color: '#00450d', margin: 0 }}>
+                                                        💰 Charge basis: <strong>{stop.bin_quantity} × {stop.bin_size}</strong> bin{stop.bin_quantity !== 1 ? 's' : ''} of <strong>{stop.waste_type}</strong> waste
+                                                    </p>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -886,7 +949,7 @@ export default function DERoutesPage() {
                                                                         </p>
                                                                     )}
                                                                 </div>
-                                                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                                                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                                                     {stop.frequency && (
                                                                         <span className="badge" style={{ background: fs.bg, color: fs.color }}>
                                                                             {stop.frequency.replace(/_/g, ' ')}
@@ -894,6 +957,16 @@ export default function DERoutesPage() {
                                                                     )}
                                                                     {stop.is_commercial && (
                                                                         <span className="badge" style={{ background: '#eff6ff', color: '#1d4ed8' }}>Commercial</span>
+                                                                    )}
+                                                                    {stop.is_commercial && stop.bin_quantity > 0 && (
+                                                                        <span className="badge" style={{ background: '#fefce8', color: '#92400e' }}>
+                                                                            {stop.bin_quantity} × {stop.bin_size}
+                                                                        </span>
+                                                                    )}
+                                                                    {stop.is_commercial && stop.waste_type && (
+                                                                        <span className="badge" style={{ background: '#f0fdf4', color: '#00450d' }}>
+                                                                            {stop.waste_type}
+                                                                        </span>
                                                                     )}
                                                                 </div>
                                                             </div>
