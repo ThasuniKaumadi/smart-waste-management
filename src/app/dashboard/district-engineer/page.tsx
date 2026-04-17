@@ -15,6 +15,7 @@ const DE_NAV = [
   { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
   { label: 'Zones', href: '/dashboard/district-engineer/zones', icon: 'map' },
   { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+  { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
 ]
 
 const COLORS = ['#00450d', '#1b5e20', '#2e7d32', '#388e3c', '#43a047']
