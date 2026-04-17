@@ -11,6 +11,7 @@ const COMMERCIAL_NAV = [
   { label: 'Track Vehicle', href: '/dashboard/commercial/track', icon: 'location_on' },
   { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
   { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
+  { label: 'Rate Service', href: '/dashboard/commercial/feedback', icon: 'star' },
 ]
 
 export default function CommercialDashboardPage() {

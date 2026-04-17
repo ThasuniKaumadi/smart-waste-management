@@ -11,6 +11,7 @@ const RESIDENT_NAV = [
   { label: 'Track Vehicle', href: '/dashboard/resident/track', icon: 'location_on' },
   { label: 'Report Dumping', href: '/dashboard/resident/report-dumping', icon: 'report_problem' },
   { label: 'Complaints', href: '/dashboard/resident/complaints', icon: 'feedback' },
+  { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star' },
 ]
 
 const WASTE_COLORS: Record<string, { label: string; color: string; bg: string; icon: string; pill: string }> = {
