@@ -16,10 +16,7 @@ const COMMERCIAL_NAV = [
 ]
 
 declare global {
-    interface Window {
-        google: any
-        initMap: () => void
-    }
+    interface Window { google: any; initMap: () => void }
 }
 
 export default function CommercialTrackPage() {
@@ -30,20 +27,26 @@ export default function CommercialTrackPage() {
     const [collectionStops, setCollectionStops] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [mapLoaded, setMapLoaded] = useState(false)
+    const [mapError, setMapError] = useState(false)
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
     const [eta, setEta] = useState<string | null>(null)
 
     const mapRef = useRef<HTMLDivElement>(null)
     const mapInstanceRef = useRef<any>(null)
     const vehicleMarkerRef = useRef<any>(null)
-    const myStopMarkerRef = useRef<any>(null)
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
     const scriptRef = useRef(false)
+    const mapTimerRef = useRef<NodeJS.Timeout | null>(null)
 
     useEffect(() => {
         loadData()
+        // Timeout map loading after 8s to avoid infinite spinner
+        mapTimerRef.current = setTimeout(() => {
+            if (!mapLoaded) setMapError(true)
+        }, 8000)
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current)
+            if (mapTimerRef.current) clearTimeout(mapTimerRef.current)
         }
     }, [])
 
@@ -52,28 +55,17 @@ export default function CommercialTrackPage() {
             const supabase = createClient()
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) { setLoading(false); return }
-
-            const { data: p } = await supabase
-                .from('profiles').select('*').eq('id', user.id).single()
+            const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
             setProfile(p)
             if (!p) { setLoading(false); return }
 
-            // Get today's active routes in user's ward
             const today = new Date().toISOString().split('T')[0]
             const { data: routeData } = await supabase
-                .from('routes')
-                .select('*')
-                .eq('ward', p.ward)
-                .eq('date', today)
-                .in('status', ['active', 'in_progress'])
-                .order('created_at', { ascending: false })
+                .from('routes').select('*').eq('ward', p.ward).eq('date', today)
+                .in('status', ['active', 'in_progress']).order('created_at', { ascending: false })
 
             setRoutes(routeData ?? [])
-
-            // Auto-select first route
-            if (routeData && routeData.length > 0) {
-                await selectRoute(routeData[0], user.id, p)
-            }
+            if (routeData && routeData.length > 0) await selectRoute(routeData[0], user.id, p)
         } catch (err: any) {
             console.error('Load error:', err)
         } finally {
@@ -86,66 +78,40 @@ export default function CommercialTrackPage() {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
         const uid = userId || user?.id
-        const prof = profileData || profile
 
-        // Fetch vehicle location for this route
-        const { data: loc } = await supabase
-            .from('vehicle_locations')
-            .select('*')
-            .eq('route_id', route.id)
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
+        const { data: loc } = await supabase.from('vehicle_locations').select('*')
+            .eq('route_id', route.id).order('updated_at', { ascending: false }).limit(1).maybeSingle()
         setVehicleLocation(loc)
         if (loc) setLastUpdated(new Date(loc.updated_at))
 
-        // Fetch commercial stops for this route belonging to this user
-        const { data: stops } = await supabase
-            .from('collection_stops')
-            .select('*')
-            .eq('route_id', route.id)
-            .eq('commercial_id', uid)
-            .eq('is_commercial', true)
-
+        const { data: stops } = await supabase.from('collection_stops').select('*')
+            .eq('route_id', route.id).eq('commercial_id', uid).eq('is_commercial', true)
         setCollectionStops(stops ?? [])
 
-        // Start polling for location updates
         if (intervalRef.current) clearInterval(intervalRef.current)
         intervalRef.current = setInterval(async () => {
-            const { data: fresh } = await supabase
-                .from('vehicle_locations')
-                .select('*')
-                .eq('route_id', route.id)
-                .order('updated_at', { ascending: false })
-                .limit(1)
-                .maybeSingle()
-
+            const { data: fresh } = await supabase.from('vehicle_locations').select('*')
+                .eq('route_id', route.id).order('updated_at', { ascending: false }).limit(1).maybeSingle()
             if (fresh) {
                 setVehicleLocation(fresh)
                 setLastUpdated(new Date(fresh.updated_at))
                 updateVehicleMarker(fresh)
                 computeEta(fresh, stops ?? [])
             }
-        }, 10000) // poll every 10 seconds
+        }, 10000)
     }
 
     function computeEta(loc: any, stops: any[]) {
         const myStop = stops.find(s => s.status !== 'completed' && s.status !== 'skipped')
-        if (!myStop || !myStop.latitude || !myStop.longitude) { setEta(null); return }
-
-        // Haversine distance estimate
+        if (!myStop?.latitude || !myStop?.longitude) { setEta(null); return }
         const R = 6371
         const dLat = (myStop.latitude - loc.latitude) * Math.PI / 180
         const dLon = (myStop.longitude - loc.longitude) * Math.PI / 180
-        const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(loc.latitude * Math.PI / 180) *
-            Math.cos(myStop.latitude * Math.PI / 180) *
-            Math.sin(dLon / 2) ** 2
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(loc.latitude * Math.PI / 180) * Math.cos(myStop.latitude * Math.PI / 180) * Math.sin(dLon / 2) ** 2
         const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        const speed = loc.speed && loc.speed > 1 ? loc.speed : 20 // km/h fallback
-        const minutes = Math.round((dist / speed) * 60)
-        setEta(minutes <= 1 ? 'Arriving now' : minutes < 60 ? `~${minutes} min away` : `~${Math.round(minutes / 60)}h away`)
+        const speed = loc.speed > 1 ? loc.speed : 20
+        const mins = Math.round((dist / speed) * 60)
+        setEta(mins <= 1 ? 'Arriving now' : mins < 60 ? `~${mins} min` : `~${Math.round(mins / 60)}h`)
     }
 
     function updateVehicleMarker(loc: any) {
@@ -153,501 +119,335 @@ export default function CommercialTrackPage() {
         const pos = { lat: loc.latitude, lng: loc.longitude }
         if (vehicleMarkerRef.current) {
             vehicleMarkerRef.current.setPosition(pos)
-        } else {
-            vehicleMarkerRef.current = new window.google.maps.Marker({
-                position: pos,
-                map: mapInstanceRef.current,
-                title: 'Collection Vehicle',
-                icon: {
-                    path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                    scale: 6,
-                    fillColor: '#00450d',
-                    fillOpacity: 1,
-                    strokeColor: 'white',
-                    strokeWeight: 2,
-                    rotation: loc.heading || 0,
-                },
-            })
-        }
+            vehicleMarkerRef.current.setIcon({ ...vehicleMarkerRef.current.getIcon(), rotation: loc.heading || 0 })
+        } else createVehicleMarker(loc)
+    }
+
+    function createVehicleMarker(loc: any) {
+        vehicleMarkerRef.current = new window.google.maps.Marker({
+            position: { lat: loc.latitude, lng: loc.longitude },
+            map: mapInstanceRef.current,
+            title: 'Collection Vehicle',
+            icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 7, fillColor: '#00450d', fillOpacity: 1, strokeColor: 'white', strokeWeight: 2, rotation: loc.heading || 0 },
+        })
     }
 
     const initMap = useCallback((loc: any, stops: any[]) => {
         if (!mapRef.current || !window.google) return
-
-        const center = loc
-            ? { lat: loc.latitude, lng: loc.longitude }
-            : stops.length > 0 && stops[0].latitude
-                ? { lat: stops[0].latitude, lng: stops[0].longitude }
-                : { lat: 6.9271, lng: 79.8612 } // Colombo default
+        const center = loc ? { lat: loc.latitude, lng: loc.longitude }
+            : stops.length > 0 && stops[0].latitude ? { lat: stops[0].latitude, lng: stops[0].longitude }
+                : { lat: 6.9271, lng: 79.8612 }
 
         const map = new window.google.maps.Map(mapRef.current, {
-            zoom: 15,
-            center,
-            mapTypeControl: false,
-            fullscreenControl: false,
-            streetViewControl: false,
+            zoom: 15, center,
+            mapTypeControl: false, fullscreenControl: true, streetViewControl: false,
+            zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER },
             styles: [
                 { featureType: 'poi', stylers: [{ visibility: 'off' }] },
                 { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+                { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+                { featureType: 'water', stylers: [{ color: '#c8e6f5' }] },
+                { featureType: 'landscape', stylers: [{ color: '#f9f9f9' }] },
             ],
         })
         mapInstanceRef.current = map
+        if (loc) createVehicleMarker(loc)
 
-        // Vehicle marker
-        if (loc) {
-            vehicleMarkerRef.current = new window.google.maps.Marker({
-                position: { lat: loc.latitude, lng: loc.longitude },
-                map,
-                title: 'Collection Vehicle',
-                icon: {
-                    path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                    scale: 6,
-                    fillColor: '#00450d',
-                    fillOpacity: 1,
-                    strokeColor: 'white',
-                    strokeWeight: 2,
-                    rotation: loc.heading || 0,
-                },
-            })
-        }
-
-        // My stop markers
-        stops.forEach((stop, i) => {
+        stops.forEach(stop => {
             if (!stop.latitude || !stop.longitude) return
             const isCompleted = stop.status === 'completed'
             new window.google.maps.Marker({
                 position: { lat: stop.latitude, lng: stop.longitude },
                 map,
-                title: stop.road_name || stop.address || `Your stop`,
-                icon: {
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    scale: 8,
-                    fillColor: isCompleted ? '#16a34a' : '#f59e0b',
-                    fillOpacity: 1,
-                    strokeColor: 'white',
-                    strokeWeight: 2,
-                },
-                label: {
-                    text: isCompleted ? '✓' : '●',
-                    color: 'white',
-                    fontSize: '10px',
-                },
+                title: stop.road_name || stop.address || 'Your stop',
+                icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: isCompleted ? '#16a34a' : '#f59e0b', fillOpacity: 1, strokeColor: 'white', strokeWeight: 2 },
             })
         })
-
         setMapLoaded(true)
+        if (mapTimerRef.current) clearTimeout(mapTimerRef.current)
     }, [])
 
-    // Load Google Maps script
     useEffect(() => {
         if (scriptRef.current) return
         scriptRef.current = true
-
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-        if (!apiKey) {
-            console.error('Google Maps API key not found')
-            return
-        }
-
-        window.initMap = () => {
-            initMap(vehicleLocation, collectionStops)
-        }
-
+        if (!apiKey) { setMapError(true); return }
+        window.initMap = () => initMap(vehicleLocation, collectionStops)
         const script = document.createElement('script')
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`
-        script.async = true
-        script.defer = true
+        script.async = true; script.defer = true
+        script.onerror = () => setMapError(true)
         document.head.appendChild(script)
     }, [])
 
-    // Re-init map when data loads
     useEffect(() => {
         if (window.google && mapRef.current && (vehicleLocation || collectionStops.length > 0)) {
             initMap(vehicleLocation, collectionStops)
         }
     }, [vehicleLocation, collectionStops, initMap])
 
-    function formatTime(date: Date | null) {
-        if (!date) return '—'
-        return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    }
-
-    function formatSpeed(speed: number | null) {
-        if (!speed || speed < 0.5) return 'Stationary'
-        return `${Math.round(speed)} km/h`
-    }
-
     const myNextStop = collectionStops.find(s => s.status !== 'completed' && s.status !== 'skipped')
     const completedStops = collectionStops.filter(s => s.status === 'completed').length
     const isCollectionDay = routes.length > 0
+
+    function fTime(d: Date | null) {
+        if (!d) return '—'
+        return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    }
 
     return (
         <DashboardLayout
             role="Commercial"
             userName={profile?.full_name || profile?.organisation_name || ''}
             navItems={COMMERCIAL_NAV}
-            primaryAction={{ label: 'View Schedule', href: '/dashboard/commercial/schedule', icon: 'calendar_month' }}
+            primaryAction={{ label: 'Schedule', href: '/dashboard/commercial/schedule', icon: 'calendar_month' }}
         >
             <style>{`
-                .material-symbols-outlined {
-                    font-family: 'Material Symbols Outlined';
-                    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-                    display: inline-block; vertical-align: middle; line-height: 1;
-                }
-                .font-headline { font-family: 'Manrope', sans-serif; }
-                .bento-card {
-                    background: white; border-radius: 16px;
-                    box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08);
-                    border: 1px solid rgba(0,69,13,0.04); overflow: hidden;
-                }
-                .bento-card-green {
-                    background: #00450d; border-radius: 16px; color: white;
-                    overflow: hidden; position: relative;
-                }
-                .stat-row {
-                    display: flex; align-items: center; justify-content: space-between;
-                    padding: 12px 0; border-bottom: 1px solid rgba(0,69,13,0.05);
-                }
-                .stat-row:last-child { border-bottom: none; }
-                .pulse {
-                    width: 8px; height: 8px; border-radius: 50%;
-                    background: #16a34a;
-                    box-shadow: 0 0 0 0 rgba(22,163,74,0.4);
-                    animation: pulse 2s infinite;
-                }
-                .pulse.offline { background: #94a3b8; box-shadow: none; animation: none; }
-                @keyframes pulse {
-                    0% { box-shadow: 0 0 0 0 rgba(22,163,74,0.4); }
-                    70% { box-shadow: 0 0 0 8px rgba(22,163,74,0); }
-                    100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); }
-                }
-                .stop-row {
-                    padding: 14px 24px; display: flex; align-items: center; gap: 14px;
-                    border-bottom: 1px solid rgba(0,69,13,0.05);
-                }
-                .stop-row:last-child { border-bottom: none; }
-                @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-                .s1 { animation: staggerIn 0.5s ease 0.05s both; }
-                .s2 { animation: staggerIn 0.5s ease 0.1s both; }
-                .s3 { animation: staggerIn 0.5s ease 0.15s both; }
-                .s4 { animation: staggerIn 0.5s ease 0.2s both; }
+                .msf { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+                .card { background:white; border-radius:20px; box-shadow:0 2px 12px rgba(0,0,0,0.06); border:1px solid rgba(0,69,13,0.05); overflow:hidden; }
+                .pulse-dot { width:8px; height:8px; border-radius:50%; background:#16a34a; animation:pls 2s infinite; }
+                .pulse-dot.off { background:#94a3b8; animation:none; }
+                @keyframes pls { 0%{box-shadow:0 0 0 0 rgba(22,163,74,0.4)} 70%{box-shadow:0 0 0 8px rgba(22,163,74,0)} 100%{box-shadow:0 0 0 0 rgba(22,163,74,0)} }
+                .stop-item { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid rgba(0,69,13,0.05); }
+                .stop-item:last-child { border-bottom:none; }
+                .chip { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:99px; font-size:10px; font-weight:700; font-family:'Manrope',sans-serif; border:1px solid transparent; }
+                .route-btn { width:100%; display:flex; align-items:center; gap:12px; padding:12px 20px; background:white; border:none; cursor:pointer; text-align:left; transition:background 0.15s; border-bottom:1px solid rgba(0,69,13,0.05); }
+                .route-btn:hover { background:#f0fdf4; }
+                .route-btn:last-child { border-bottom:none; }
+                .map-container { position:relative; border-radius:0; overflow:hidden; }
+                .map-overlay { position:absolute; top:16px; left:16px; z-index:10; }
+                .map-legend { position:absolute; bottom:16px; left:16px; z-index:10; background:white; border-radius:12px; padding:10px 14px; box-shadow:0 2px 12px rgba(0,0,0,0.12); display:flex; align-items:center; gap:16px; }
+                @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+                .a1{animation:fadeUp 0.4s ease 0.05s both}
+                .a2{animation:fadeUp 0.4s ease 0.1s both}
+                .a3{animation:fadeUp 0.4s ease 0.15s both}
             `}</style>
 
             {/* Header */}
-            <section className="mb-8 s1">
-                <span className="text-xs font-bold uppercase block mb-2"
-                    style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
+            <div className="a1" style={{ marginBottom: '20px' }}>
+                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: '6px' }}>
                     Live Tracking · ClearPath
-                </span>
-                <h1 className="font-headline font-extrabold tracking-tight"
-                    style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
-                    Track <span style={{ color: '#1b5e20' }}>Vehicle</span>
-                </h1>
-                {profile?.ward && (
-                    <p className="text-sm mt-2" style={{ color: '#717a6d' }}>
-                        Ward: {profile.ward}
-                        {profile.district && ` · District: ${profile.district}`}
-                    </p>
-                )}
-            </section>
+                </p>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                    <h1 style={{ fontSize: '42px', fontWeight: 900, color: '#181c22', lineHeight: 1.1, fontFamily: 'Manrope,sans-serif' }}>
+                        Track <span style={{ color: '#00450d' }}>Vehicle</span>
+                    </h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div className={`pulse-dot ${vehicleLocation ? '' : 'off'}`} />
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: vehicleLocation ? '#00450d' : '#94a3b8', fontFamily: 'Manrope,sans-serif' }}>
+                            {vehicleLocation ? `Live · ${fTime(lastUpdated)}` : isCollectionDay ? 'No vehicle signal' : 'No collection today'}
+                        </span>
+                    </div>
+                </div>
+            </div>
 
             {loading ? (
-                <div className="flex items-center justify-center py-24">
-                    <div className="w-8 h-8 border-2 rounded-full animate-spin"
-                        style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '2px solid #00450d', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
                 </div>
             ) : (
                 <>
-                    {/* No collection today banner */}
+                    {/* No collection today */}
                     {!isCollectionDay && (
-                        <div className="rounded-2xl p-6 mb-6 flex items-start gap-4 s1"
-                            style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                            <span className="material-symbols-outlined mt-0.5" style={{ color: '#94a3b8', fontSize: '24px' }}>
-                                event_busy
-                            </span>
-                            <div>
-                                <p className="font-bold text-sm mb-1" style={{ color: '#475569', fontFamily: 'Manrope, sans-serif' }}>
-                                    No active collection today
-                                </p>
-                                <p className="text-sm" style={{ color: '#94a3b8' }}>
-                                    There are no active routes in your ward right now. Check your schedule for upcoming collection days.
-                                </p>
+                        <div className="a1" style={{ borderRadius: '20px', padding: '40px', background: 'white', border: '1px solid rgba(0,69,13,0.06)', marginBottom: '20px', textAlign: 'center' }}>
+                            <div style={{ width: '64px', height: '64px', borderRadius: '20px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                                <span className="msf" style={{ fontSize: '32px', color: '#cbd5e1' }}>directions_bus</span>
                             </div>
+                            <p style={{ fontSize: '17px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', marginBottom: '8px' }}>No active collection today</p>
+                            <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '20px', maxWidth: '360px', margin: '0 auto 20px' }}>
+                                No routes are active in your ward right now. Check your schedule to see upcoming collection days.
+                            </p>
+                            <a href="/dashboard/commercial/schedule"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 20px', borderRadius: '99px', background: '#00450d', color: 'white', textDecoration: 'none', fontSize: '13px', fontWeight: 700, fontFamily: 'Manrope,sans-serif' }}>
+                                <span className="msf" style={{ fontSize: '16px' }}>calendar_month</span>
+                                View schedule
+                            </a>
                         </div>
                     )}
 
-                    {/* ETA hero card — only when vehicle is active */}
+                    {/* ETA banner — when vehicle is live */}
                     {vehicleLocation && (
-                        <div className="bento-card-green p-8 mb-6 s2">
-                            <div className="absolute top-0 right-0 w-48 h-48 rounded-full -mr-16 -mt-16"
-                                style={{ background: 'rgba(163,246,156,0.06)' }} />
-                            <div className="relative z-10">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <div className="pulse" />
-                                    <span className="text-xs font-bold uppercase"
-                                        style={{ letterSpacing: '0.2em', color: 'rgba(163,246,156,0.7)', fontFamily: 'Manrope, sans-serif' }}>
-                                        Live · Updated {formatTime(lastUpdated)}
-                                    </span>
-                                </div>
-                                <h2 className="font-headline font-extrabold tracking-tight mb-2"
-                                    style={{ fontSize: '36px', lineHeight: 1.1 }}>
-                                    {eta ?? 'Calculating...'}
-                                </h2>
-                                <p style={{ color: 'rgba(163,246,156,0.7)', fontSize: '14px' }}>
-                                    {myNextStop
-                                        ? `Vehicle en route to ${myNextStop.road_name || myNextStop.address || 'your stop'}`
-                                        : completedStops > 0
-                                            ? 'Your stop has been collected today'
+                        <div className="a2" style={{ borderRadius: '20px', background: '#00450d', color: 'white', padding: '24px 28px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '20px', position: 'relative', overflow: 'hidden' }}>
+                            <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(163,246,156,0.07)' }} />
+                            <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <span className="msf" style={{ fontSize: '28px' }}>local_shipping</span>
+                            </div>
+                            <div style={{ flex: 1, zIndex: 1 }}>
+                                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.15em', color: 'rgba(163,246,156,0.7)', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                    Vehicle en route
+                                </p>
+                                <p style={{ fontSize: '26px', fontWeight: 900, fontFamily: 'Manrope,sans-serif', lineHeight: 1, marginBottom: '4px' }}>
+                                    {eta ?? 'Calculating ETA...'}
+                                </p>
+                                <p style={{ fontSize: '13px', color: 'rgba(163,246,156,0.75)' }}>
+                                    {myNextStop ? `Heading to ${myNextStop.road_name || myNextStop.address || 'your stop'}`
+                                        : completedStops > 0 ? 'Your stop has been collected today'
                                             : 'Vehicle is active in your ward'}
                                 </p>
-                                {selectedRoute && (
-                                    <p style={{ color: 'rgba(163,246,156,0.5)', fontSize: '12px', marginTop: '8px' }}>
-                                        {selectedRoute.route_name || 'Active route'}
-                                        {selectedRoute.vehicle_number && ` · ${selectedRoute.vehicle_number}`}
-                                        {selectedRoute.shift && ` · ${selectedRoute.shift} shift`}
-                                    </p>
-                                )}
                             </div>
+                            {selectedRoute && (
+                                <div style={{ textAlign: 'right', zIndex: 1, flexShrink: 0 }}>
+                                    <p style={{ fontSize: '13px', fontWeight: 700, color: 'rgba(255,255,255,0.9)', fontFamily: 'Manrope,sans-serif' }}>
+                                        {selectedRoute.vehicle_number || 'Vehicle'}
+                                    </p>
+                                    <p style={{ fontSize: '11px', color: 'rgba(163,246,156,0.6)' }}>
+                                        {selectedRoute.shift && `${selectedRoute.shift} shift`}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
 
-                    {/* Summary cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 s2">
-                        <div className="bento-card p-6">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className={`pulse ${vehicleLocation ? '' : 'offline'}`} />
-                                <span className="text-xs font-bold uppercase"
-                                    style={{ letterSpacing: '0.15em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
-                                    Vehicle Status
-                                </span>
+                    {/* Main layout: map + sidebar */}
+                    <div className="a2" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '16px', marginBottom: '20px' }}>
+
+                        {/* Map — hero */}
+                        <div className="card map-container" style={{ height: '520px' }}>
+                            <div ref={mapRef} style={{ width: '100%', height: '100%', background: '#f1f5f9' }}>
+                                {!mapLoaded && !mapError && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '12px' }}>
+                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '2px solid #00450d', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+                                        <p style={{ fontSize: '13px', color: '#94a3b8' }}>Loading map...</p>
+                                    </div>
+                                )}
+                                {mapError && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '12px', padding: '24px', textAlign: 'center' }}>
+                                        <span className="msf" style={{ fontSize: '48px', color: '#e2e8f0' }}>map</span>
+                                        <p style={{ fontSize: '14px', fontWeight: 600, color: '#475569' }}>Map unavailable</p>
+                                        <p style={{ fontSize: '12px', color: '#94a3b8' }}>Check your Google Maps API key in .env.local</p>
+                                    </div>
+                                )}
                             </div>
-                            <p className="font-headline font-extrabold text-2xl" style={{ color: '#181c22' }}>
-                                {vehicleLocation ? 'Active' : 'No signal'}
-                            </p>
-                            <p className="text-xs mt-1 font-semibold" style={{ color: '#00450d' }}>
-                                {vehicleLocation ? formatSpeed(vehicleLocation.speed) : 'Not tracking'}
-                            </p>
+
+                            {/* Map legend */}
+                            {mapLoaded && (
+                                <div className="map-legend">
+                                    {[
+                                        { color: '#00450d', label: 'Vehicle' },
+                                        { color: '#f59e0b', label: 'Pending' },
+                                        { color: '#16a34a', label: 'Collected' },
+                                    ].map(item => (
+                                        <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: item.color, border: '1.5px solid white', boxShadow: `0 0 0 1px ${item.color}` }} />
+                                            <span style={{ fontSize: '11px', color: '#475569', fontFamily: 'Manrope,sans-serif', fontWeight: 600 }}>{item.label}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
-                        <div className="bento-card p-6">
-                            <span className="material-symbols-outlined mb-3 block"
-                                style={{ color: '#00450d', fontSize: '26px' }}>delete</span>
-                            <p className="text-xs font-bold uppercase mb-1"
-                                style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
-                                Your Stops
-                            </p>
-                            <p className="font-headline font-extrabold text-2xl" style={{ color: '#181c22' }}>
-                                {completedStops} / {collectionStops.length}
-                            </p>
-                            <p className="text-xs mt-1 font-semibold" style={{ color: '#00450d' }}>
-                                {collectionStops.length === 0 ? 'No stops on this route'
-                                    : completedStops === collectionStops.length ? 'All collected today'
-                                        : `${collectionStops.length - completedStops} remaining`}
-                            </p>
-                        </div>
+                        {/* Sidebar */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {/* Vehicle status */}
+                            <div className="card" style={{ padding: '20px' }}>
+                                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: '12px' }}>
+                                    Vehicle Status
+                                </p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {[
+                                        { label: 'Status', value: vehicleLocation ? 'Active' : 'No signal', color: vehicleLocation ? '#00450d' : '#94a3b8' },
+                                        { label: 'Speed', value: vehicleLocation ? (vehicleLocation.speed > 0.5 ? `${Math.round(vehicleLocation.speed)} km/h` : 'Stationary') : '—', color: '#181c22' },
+                                        { label: 'Updated', value: lastUpdated ? fTime(lastUpdated) : '—', color: '#181c22' },
+                                        { label: 'Routes today', value: `${routes.length}`, color: '#181c22' },
+                                    ].map(item => (
+                                        <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>{item.label}</span>
+                                            <span style={{ fontSize: '13px', fontWeight: 700, color: item.color, fontFamily: 'Manrope,sans-serif' }}>{item.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
 
-                        <div className="bento-card p-6">
-                            <span className="material-symbols-outlined mb-3 block"
-                                style={{ color: '#00450d', fontSize: '26px' }}>route</span>
-                            <p className="text-xs font-bold uppercase mb-1"
-                                style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
-                                Active Routes
-                            </p>
-                            <p className="font-headline font-extrabold text-2xl" style={{ color: '#181c22' }}>
-                                {routes.length}
-                            </p>
-                            <p className="text-xs mt-1 font-semibold" style={{ color: '#00450d' }}>
-                                in your ward today
-                            </p>
+                            {/* Your stops progress */}
+                            <div className="card" style={{ padding: '20px', flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                    <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase' }}>
+                                        Your Stops
+                                    </p>
+                                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#00450d', fontFamily: 'Manrope,sans-serif' }}>
+                                        {completedStops}/{collectionStops.length}
+                                    </span>
+                                </div>
+
+                                {collectionStops.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                                        <span className="msf" style={{ fontSize: '28px', color: '#e2e8f0', display: 'block', marginBottom: '8px' }}>location_off</span>
+                                        <p style={{ fontSize: '12px', color: '#94a3b8' }}>No stops on today's route</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Progress bar */}
+                                        <div style={{ height: '4px', borderRadius: '99px', background: '#f0f0f0', marginBottom: '14px', overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', borderRadius: '99px', background: '#00450d', width: `${collectionStops.length > 0 ? (completedStops / collectionStops.length) * 100 : 0}%`, transition: 'width 0.5s ease' }} />
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            {collectionStops.map((stop, i) => {
+                                                const isCompleted = stop.status === 'completed'
+                                                const isSkipped = stop.status === 'skipped'
+                                                const isNext = !isCompleted && !isSkipped && collectionStops.slice(0, i).every(s => s.status === 'completed')
+                                                return (
+                                                    <div key={stop.id} className="stop-item">
+                                                        <div style={{ width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isCompleted ? '#f0fdf4' : isSkipped ? '#fef2f2' : isNext ? '#fffbeb' : '#f8fafc', border: `1px solid ${isCompleted ? '#bbf7d0' : isSkipped ? '#fecaca' : isNext ? '#fde68a' : '#e2e8f0'}` }}>
+                                                            <span className="msf" style={{ fontSize: '14px', color: isCompleted ? '#00450d' : isSkipped ? '#ba1a1a' : isNext ? '#d97706' : '#cbd5e1' }}>
+                                                                {isCompleted ? 'check_circle' : isSkipped ? 'cancel' : isNext ? 'pending' : 'radio_button_unchecked'}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <p style={{ fontSize: '12px', fontWeight: 600, color: '#181c22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                {stop.road_name || stop.address || `Stop ${i + 1}`}
+                                                            </p>
+                                                            <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px' }}>
+                                                                {stop.waste_type || 'General'}{stop.bin_size ? ` · ${stop.bin_size}` : ''}
+                                                            </p>
+                                                        </div>
+                                                        {isNext && <span className="chip" style={{ background: '#fffbeb', color: '#d97706', borderColor: '#fde68a', flexShrink: 0 }}>Next</span>}
+                                                        {isCompleted && stop.blockchain_tx && (
+                                                            <a href={`https://amoy.polygonscan.com/tx/${stop.blockchain_tx}`} target="_blank" rel="noopener noreferrer"
+                                                                className="chip" style={{ background: '#f5f3ff', color: '#7c3aed', borderColor: '#ddd6fe', textDecoration: 'none', flexShrink: 0 }}>
+                                                                ↗
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 
                     {/* Route selector — only if multiple routes */}
                     {routes.length > 1 && (
-                        <div className="bento-card mb-6 s3">
-                            <div className="px-6 py-4" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
-                                <p className="font-headline font-bold text-base" style={{ color: '#181c22' }}>
-                                    Active Routes Today
-                                </p>
+                        <div className="card a3">
+                            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
+                                <p style={{ fontSize: '14px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>Active Routes Today</p>
                             </div>
-                            <div className="divide-y" style={{ borderColor: 'rgba(0,69,13,0.04)' }}>
-                                {routes.map(route => (
-                                    <button
-                                        key={route.id}
-                                        onClick={() => selectRoute(route)}
-                                        className="w-full text-left px-6 py-4 flex items-center gap-4 transition-colors hover:bg-slate-50"
-                                        style={selectedRoute?.id === route.id ? { background: '#f0fdf4' } : {}}
-                                    >
-                                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                                            style={{ background: selectedRoute?.id === route.id ? '#00450d' : '#f0fdf4' }}>
-                                            <span className="material-symbols-outlined"
-                                                style={{ fontSize: '16px', color: selectedRoute?.id === route.id ? 'white' : '#00450d' }}>
-                                                route
-                                            </span>
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-semibold" style={{ color: '#181c22' }}>
-                                                {route.route_name || 'Unnamed route'}
-                                            </p>
-                                            <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>
-                                                {route.vehicle_number && `${route.vehicle_number} · `}
-                                                {route.shift && `${route.shift} shift · `}
-                                                {route.status}
-                                            </p>
-                                        </div>
-                                        {selectedRoute?.id === route.id && (
-                                            <span className="text-xs font-bold px-2 py-1 rounded-full"
-                                                style={{ background: '#f0fdf4', color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>
-                                                Tracking
-                                            </span>
-                                        )}
-                                    </button>
-                                ))}
-                            </div>
+                            {routes.map(route => (
+                                <button key={route.id} className="route-btn" onClick={() => selectRoute(route)}
+                                    style={{ background: selectedRoute?.id === route.id ? '#f0fdf4' : 'white' }}>
+                                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: selectedRoute?.id === route.id ? '#00450d' : '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <span className="msf" style={{ fontSize: '16px', color: selectedRoute?.id === route.id ? 'white' : '#00450d' }}>route</span>
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <p style={{ fontSize: '13px', fontWeight: 700, color: '#181c22' }}>{route.route_name || 'Unnamed route'}</p>
+                                        <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                                            {route.vehicle_number && `${route.vehicle_number} · `}{route.shift && `${route.shift} shift`}
+                                        </p>
+                                    </div>
+                                    {selectedRoute?.id === route.id && (
+                                        <span className="chip" style={{ background: '#f0fdf4', color: '#00450d', borderColor: '#bbf7d0' }}>Tracking</span>
+                                    )}
+                                </button>
+                            ))}
                         </div>
                     )}
 
-                    {/* Map */}
-                    <div className="bento-card mb-6 s3">
-                        <div className="px-8 py-6 flex items-center justify-between"
-                            style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
-                            <div>
-                                <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>
-                                    Live Map
-                                </h3>
-                                <p className="text-xs mt-1" style={{ color: '#94a3b8' }}>
-                                    {vehicleLocation
-                                        ? `Vehicle location · Refreshes every 10 seconds`
-                                        : 'Showing your collection stops'}
-                                </p>
-                            </div>
-                            {vehicleLocation && (
-                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: '#f0fdf4' }}>
-                                    <div className="pulse" style={{ width: '6px', height: '6px' }} />
-                                    <span className="text-xs font-bold" style={{ color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>
-                                        Live
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                        <div
-                            ref={mapRef}
-                            style={{ width: '100%', height: '420px', background: '#f1f5f9' }}
-                        >
-                            {!mapLoaded && (
-                                <div className="flex flex-col items-center justify-center h-full gap-3">
-                                    <div className="w-8 h-8 border-2 rounded-full animate-spin"
-                                        style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
-                                    <p className="text-sm" style={{ color: '#94a3b8' }}>Loading map...</p>
-                                </div>
-                            )}
-                        </div>
-                        <div className="px-8 py-3 flex items-center gap-6"
-                            style={{ borderTop: '1px solid rgba(0,69,13,0.06)', background: '#fafaf9' }}>
-                            <div className="flex items-center gap-2">
-                                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#00450d', border: '2px solid white', boxShadow: '0 0 0 1px #00450d' }} />
-                                <span className="text-xs" style={{ color: '#717a6d' }}>Collection vehicle</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b', border: '2px solid white', boxShadow: '0 0 0 1px #f59e0b' }} />
-                                <span className="text-xs" style={{ color: '#717a6d' }}>Your stop (pending)</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#16a34a', border: '2px solid white', boxShadow: '0 0 0 1px #16a34a' }} />
-                                <span className="text-xs" style={{ color: '#717a6d' }}>Your stop (collected)</span>
-                            </div>
-                        </div>
+                    {/* Footer note */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', padding: '12px 0' }}>
+                        <span className="msf" style={{ color: '#7c3aed', fontSize: '14px' }}>verified</span>
+                        <p style={{ fontSize: '11px', color: '#94a3b8' }}>Collections verified on Polygon Amoy · Location updates every 10 seconds · CMC EcoLedger 2026</p>
                     </div>
-
-                    {/* My stops detail */}
-                    {collectionStops.length > 0 && (
-                        <div className="bento-card s4">
-                            <div className="px-8 py-6" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
-                                <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>
-                                    Your Stops Today
-                                </h3>
-                                <p className="text-xs mt-1" style={{ color: '#94a3b8' }}>
-                                    {completedStops} of {collectionStops.length} collected
-                                </p>
-                            </div>
-                            <div>
-                                {collectionStops.map((stop, i) => {
-                                    const isCompleted = stop.status === 'completed'
-                                    const isSkipped = stop.status === 'skipped'
-                                    const isNext = !isCompleted && !isSkipped &&
-                                        collectionStops.slice(0, i).every(s => s.status === 'completed')
-                                    return (
-                                        <div key={stop.id} className="stop-row">
-                                            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                                                style={{
-                                                    background: isCompleted ? '#f0fdf4' : isSkipped ? '#fef2f2' : isNext ? '#fffbeb' : '#f8fafc',
-                                                    border: `1px solid ${isCompleted ? '#bbf7d0' : isSkipped ? '#fecaca' : isNext ? '#fde68a' : '#e2e8f0'}`
-                                                }}>
-                                                <span className="material-symbols-outlined" style={{
-                                                    fontSize: '18px',
-                                                    color: isCompleted ? '#00450d' : isSkipped ? '#ba1a1a' : isNext ? '#d97706' : '#94a3b8'
-                                                }}>
-                                                    {isCompleted ? 'check_circle' : isSkipped ? 'cancel' : isNext ? 'pending' : 'radio_button_unchecked'}
-                                                </span>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <p className="text-sm font-semibold" style={{ color: '#181c22' }}>
-                                                        {stop.road_name || stop.address || `Stop ${i + 1}`}
-                                                    </p>
-                                                    {isNext && (
-                                                        <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                                                            style={{ background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontFamily: 'Manrope, sans-serif' }}>
-                                                            Next
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>
-                                                    {stop.bin_quantity && `${stop.bin_quantity}× `}
-                                                    {stop.bin_size && `${stop.bin_size} · `}
-                                                    {stop.waste_type && `${stop.waste_type}`}
-                                                    {stop.completed_at && ` · Collected at ${new Date(stop.completed_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`}
-                                                    {isSkipped && stop.skip_reason && ` · ${stop.skip_reason}`}
-                                                </p>
-                                            </div>
-                                            <div className="flex-shrink-0">
-                                                {isCompleted && (
-                                                    <span className="text-xs font-bold px-2 py-1 rounded-full"
-                                                        style={{ background: '#f0fdf4', color: '#00450d', border: '1px solid #bbf7d0', fontFamily: 'Manrope, sans-serif' }}>
-                                                        Collected
-                                                    </span>
-                                                )}
-                                                {isSkipped && (
-                                                    <span className="text-xs font-bold px-2 py-1 rounded-full"
-                                                        style={{ background: '#fef2f2', color: '#ba1a1a', border: '1px solid #fecaca', fontFamily: 'Manrope, sans-serif' }}>
-                                                        Skipped
-                                                    </span>
-                                                )}
-                                                {stop.blockchain_tx && (
-                                                    <a
-                                                        href={`https://amoy.polygonscan.com/tx/${stop.blockchain_tx}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="ml-2 text-xs font-bold px-2 py-1 rounded-full"
-                                                        style={{ background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontFamily: 'Manrope, sans-serif', textDecoration: 'none' }}
-                                                    >
-                                                        Chain ↗
-                                                    </a>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                            <div className="px-8 py-4 flex items-center gap-3"
-                                style={{ borderTop: '1px solid rgba(0,69,13,0.06)', background: '#f9f9ff' }}>
-                                <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '18px' }}>verified</span>
-                                <p className="text-xs" style={{ color: '#717a6d' }}>
-                                    Collections verified on Polygon Amoy · Refreshing every 10 seconds · CMC EcoLedger 2026
-                                </p>
-                            </div>
-                        </div>
-                    )}
                 </>
             )}
         </DashboardLayout>
