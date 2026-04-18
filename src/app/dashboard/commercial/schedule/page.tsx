@@ -8,10 +8,11 @@ const COMMERCIAL_NAV = [
     { label: 'Overview', href: '/dashboard/commercial', icon: 'dashboard' },
     { label: 'Schedule', href: '/dashboard/commercial/schedule', icon: 'calendar_month' },
     { label: 'Track Vehicle', href: '/dashboard/commercial/track', icon: 'location_on' },
-    { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
-    { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
     { label: 'Bins', href: '/dashboard/commercial/bins', icon: 'delete' },
     { label: 'Collection History', href: '/dashboard/commercial/collection-history', icon: 'history' },
+    { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
+    { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
+    { label: 'Rate Service', href: '/dashboard/commercial/feedback', icon: 'star' },
 ]
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
