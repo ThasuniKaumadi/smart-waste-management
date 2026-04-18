@@ -14,6 +14,7 @@ const COMMERCIAL_NAV = [
   { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
   { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
   { label: 'Rate Service', href: '/dashboard/commercial/feedback', icon: 'star' },
+  { label: 'Profile', href: '/dashboard/commercial/profile', icon: 'manage_accounts' },
 ]
 
 const TODAY = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
