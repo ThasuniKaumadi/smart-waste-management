@@ -9,9 +9,10 @@ const RESIDENT_NAV = [
   { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard' },
   { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' },
   { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on' },
-  { label: 'Report Dumping', href: '/dashboard/resident/report-dumping', icon: 'report_problem' },
+  { label: 'Report Issue', href: '/dashboard/resident/report-dumping', icon: 'report_problem' },
   { label: 'Complaints', href: '/dashboard/resident/complaints', icon: 'feedback' },
   { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star' },
+  { label: 'My Profile', desc: 'Update your details', icon: 'person', href: '/dashboard/resident/profile', color: '#7c3aed', bg: 'rgba(124,58,237,0.07)' },
 ]
 
 const WASTE_COLORS: Record<string, { label: string; color: string; bg: string; icon: string; pill: string }> = {
@@ -83,7 +84,7 @@ export default function ResidentDashboardPage() {
     }
 
     const { data: comp } = await supabase
-      .from('complaints').select('*').eq('resident_id', user.id)
+      .from('complaints').select('*').eq('submitted_by', user.id)
       .order('created_at', { ascending: false }).limit(3)
     setComplaints(comp || [])
 

@@ -6,11 +6,12 @@ import DashboardLayout from '@/components/DashboardLayout'
 
 const RESIDENT_NAV = [
     { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard' },
-    { label: 'Schedule', href: '/dashboard/resident/schedule', icon: 'calendar_today' },
-    { label: 'Track Vehicle', href: '/dashboard/resident/track', icon: 'location_on' },
-    { label: 'Report Dumping', href: '/dashboard/resident/report-dumping', icon: 'report_problem' },
+    { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' },
+    { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on' },
+    { label: 'Report Issue', href: '/dashboard/resident/report-dumping', icon: 'report_problem' },
     { label: 'Complaints', href: '/dashboard/resident/complaints', icon: 'feedback' },
     { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star' },
+    { label: 'My Profile', desc: 'Update your details', icon: 'person', href: '/dashboard/resident/profile', color: '#7c3aed', bg: 'rgba(124,58,237,0.07)' },
 ]
 
 const ASPECTS = [
@@ -103,7 +104,7 @@ export default function ResidentFeedbackPage() {
 
     return (
         <DashboardLayout role="Resident" userName={profile?.full_name || ''} navItems={RESIDENT_NAV}
-            primaryAction={{ label: 'View Schedule', href: '/dashboard/resident/schedule', icon: 'calendar_today' }}>
+            primaryAction={{ label: 'View Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' }}>
             <style>{`
         .material-symbols-outlined { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
         .font-headline { font-family:'Manrope',sans-serif; }
