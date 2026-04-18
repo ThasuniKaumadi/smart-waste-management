@@ -89,7 +89,6 @@ export default function DriverRoutesPage() {
       .eq('route_id', route.id).order('stop_order', { ascending: true })
     const stops = stopsData || []
     setStops(stops)
-    // Pre-fill binCounts with scheduled bin_quantity for commercial stops
     const prefilled: Record<string, number> = {}
     stops.forEach(s => {
       if (s.is_commercial && s.bin_quantity) prefilled[s.id] = s.bin_quantity
@@ -132,9 +131,25 @@ export default function DriverRoutesPage() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const bins = binCounts[stop.id] || 0
+
+    // Capture GPS coordinates at the moment of marking
+    let lat: number | null = null
+    let lng: number | null = null
+    try {
+      if (navigator.geolocation) {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000, maximumAge: 10000 })
+        )
+        lat = pos.coords.latitude
+        lng = pos.coords.longitude
+      }
+    } catch { /* GPS unavailable — continue without coordinates */ }
+
     const updateData: any = { status, completed_at: new Date().toISOString(), bin_count: bins }
     if (status === 'skipped') updateData.skip_reason = selectedSkipReason[stop.id]
+    if (lat !== null) { updateData.latitude = lat; updateData.longitude = lng }
     const { error } = await supabase.from('collection_stops').update(updateData).eq('id', stop.id)
+
     if (!error) {
       const txHash = await logCollectionOnChain(selectedRoute?.id || '', user?.id || '', status)
       const { data: eventData } = await supabase.from('collection_events').insert({
@@ -412,8 +427,6 @@ export default function DriverRoutesPage() {
                 return (
                   <div key={stop.id} className="stop-card" style={{ background: 'white', borderRadius: '14px', padding: '16px 20px', border: `1px solid ${stop.status === 'completed' ? 'rgba(0,69,13,0.12)' : stop.status === 'skipped' ? 'rgba(220,38,38,0.12)' : 'rgba(0,0,0,0.05)'}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-
-                      {/* Stop number / status icon */}
                       <div style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0, background: stop.status === 'completed' ? 'rgba(0,69,13,0.1)' : stop.status === 'skipped' ? 'rgba(220,38,38,0.1)' : '#f0f4f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope,sans-serif', color: stop.status === 'completed' ? '#00450d' : stop.status === 'skipped' ? '#dc2626' : '#717a6d' }}>
                         {stop.status === 'completed'
                           ? <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>check</span>
@@ -421,13 +434,9 @@ export default function DriverRoutesPage() {
                             ? <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
                             : stop.stop_order}
                       </div>
-
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        {/* Road name + badges */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '14px', fontWeight: 600, color: '#181c22' }}>
-                            {stop.road_name || stop.address}
-                          </span>
+                          <span style={{ fontSize: '14px', fontWeight: 600, color: '#181c22' }}>{stop.road_name || stop.address}</span>
                           {freqStyle && (
                             <span className="freq-badge" style={{ background: freqStyle.bg, color: freqStyle.color }}>
                               {stop.frequency.replace(/_/g, ' ')}
@@ -446,23 +455,18 @@ export default function DriverRoutesPage() {
                             <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: 'rgba(124,58,237,0.08)', color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Invoiced</span>
                           )}
                         </div>
-
-                        {/* Address if different from road name */}
                         {stop.road_name && stop.address && stop.road_name !== stop.address && (
                           <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}>
                             <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>location_on</span>
                             {stop.address}
                           </p>
                         )}
-
-                        {/* Completed commercial — show what was collected */}
                         {stop.status === 'completed' && stop.is_commercial && (stop.bin_count > 0 || stop.bin_size) && (
                           <p style={{ fontSize: '12px', color: '#00450d', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
                             <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>delete_sweep</span>
                             Collected: {stop.bin_count} × {stop.bin_size || 'bin'}{stop.waste_type ? ` · ${stop.waste_type}` : ''}
                           </p>
                         )}
-
                         {stop.skip_reason && (
                           <p style={{ fontSize: '12px', color: '#dc2626', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}>
                             <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>info</span>
@@ -475,15 +479,10 @@ export default function DriverRoutesPage() {
                             {stop.blockchain_tx.slice(0, 22)}...
                           </p>
                         )}
-
-                        {/* Pending stop actions */}
                         {stop.status === 'pending' && (
                           <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-
-                            {/* Commercial bin panel */}
                             {stop.is_commercial && (
                               <div className="bin-panel">
-                                {/* Scheduled bin details from DE */}
                                 {(stop.bin_size || stop.waste_type || stop.bin_quantity) && (
                                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                                     <span style={{ fontSize: '11px', color: '#717a6d', fontWeight: 600, whiteSpace: 'nowrap' }}>Scheduled:</span>
@@ -499,21 +498,13 @@ export default function DriverRoutesPage() {
                                     )}
                                   </div>
                                 )}
-                                {/* Actual count input */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontSize: '12px', color: '#41493e', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                    Actual bins collected:
-                                  </span>
-                                  <input
-                                    type="number" min="0" max="999"
-                                    className="bin-input"
+                                  <span style={{ fontSize: '12px', color: '#41493e', fontWeight: 600, whiteSpace: 'nowrap' }}>Actual bins collected:</span>
+                                  <input type="number" min="0" max="999" className="bin-input"
                                     value={binCounts[stop.id] ?? (stop.bin_quantity ?? '')}
                                     onChange={e => setBinCounts({ ...binCounts, [stop.id]: parseInt(e.target.value) || 0 })}
-                                    placeholder="0"
-                                  />
-                                  {stop.bin_size && (
-                                    <span style={{ fontSize: '11px', color: '#717a6d' }}>× {stop.bin_size}</span>
-                                  )}
+                                    placeholder="0" />
+                                  {stop.bin_size && <span style={{ fontSize: '11px', color: '#717a6d' }}>× {stop.bin_size}</span>}
                                 </div>
                                 {!stop.commercial_id && (
                                   <span style={{ fontSize: '11px', color: '#f97316', display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -523,7 +514,6 @@ export default function DriverRoutesPage() {
                                 )}
                               </div>
                             )}
-
                             <select className="skip-select"
                               value={selectedSkipReason[stop.id] || ''}
                               onChange={e => setSelectedSkipReason({ ...selectedSkipReason, [stop.id]: e.target.value })}>

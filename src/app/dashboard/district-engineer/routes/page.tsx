@@ -9,6 +9,7 @@ const DE_NAV = [
     { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
     { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
     { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
+    { label: 'Heatmap', href: '/dashboard/district-engineer/heatmap', icon: 'thermostat' },
     { label: 'Complaints', href: '/dashboard/district-engineer/complaints', icon: 'feedback' },
     { label: 'Waste Reports', href: '/dashboard/district-engineer/waste-reports', icon: 'report' },
     { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
