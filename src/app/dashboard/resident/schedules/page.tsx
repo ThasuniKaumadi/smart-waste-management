@@ -11,21 +11,23 @@ const RESIDENT_NAV = [
   { label: 'Report Issue', href: '/dashboard/resident/report-dumping', icon: 'report_problem' },
   { label: 'Complaints', href: '/dashboard/resident/complaints', icon: 'feedback' },
   { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star' },
-  { label: 'My Profile', desc: 'Update your details', icon: 'person', href: '/dashboard/resident/profile', color: '#7c3aed', bg: 'rgba(124,58,237,0.07)' },
+  { label: 'My Profile', href: '/dashboard/resident/profile', icon: 'person' },
 ]
 
-const WASTE_COLORS: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  organic: { label: 'Organic Waste', color: '#00450d', bg: 'rgba(0,69,13,0.08)', icon: 'compost' },
-  non_recyclable: { label: 'Non-Recyclable', color: '#dc2626', bg: 'rgba(220,38,38,0.08)', icon: 'delete' },
-  recyclable: { label: 'Recyclable', color: '#1d4ed8', bg: 'rgba(29,78,216,0.08)', icon: 'recycling' },
-  e_waste: { label: 'E-Waste', color: '#7c3aed', bg: 'rgba(124,58,237,0.08)', icon: 'computer' },
-  bulk: { label: 'Bulk Waste', color: '#d97706', bg: 'rgba(217,119,6,0.08)', icon: 'inventory_2' },
+const WASTE_COLORS: Record<string, { label: string; color: string; bg: string; border: string; icon: string; dot: string }> = {
+  organic: { label: 'Organic', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', icon: 'compost', dot: '#22c55e' },
+  non_recyclable: { label: 'Non-Recyclable', color: '#dc2626', bg: '#fef2f2', border: '#fecaca', icon: 'delete', dot: '#ef4444' },
+  recyclable: { label: 'Recyclable', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', icon: 'recycling', dot: '#3b82f6' },
+  e_waste: { label: 'E-Waste', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff', icon: 'computer', dot: '#a855f7' },
+  bulk: { label: 'Bulk Waste', color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: 'inventory_2', dot: '#f59e0b' },
 }
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const DAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 const FREQUENCIES: Record<string, string> = {
-  daily: 'Daily', twice_weekly: 'Twice a week', weekly: 'Once a week',
+  daily: 'Daily', twice_weekly: '2× week', weekly: 'Weekly',
 }
 
 interface Schedule {
@@ -38,345 +40,374 @@ export default function ResidentSchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<any>(null)
-  const [view, setView] = useState<'upcoming' | 'weekly'>('upcoming')
+  const [view, setView] = useState<'calendar' | 'list'>('calendar')
+  const [currentDate, setCurrentDate] = useState(new Date())
   const [confirmStatuses, setConfirmStatuses] = useState<Record<string, 'confirmed' | 'unable'>>({})
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
+  const [selectedDay, setSelectedDay] = useState<number | null>(null)
 
   useEffect(() => { loadData() }, [])
 
   function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(''), 3000)
+    setToast(msg); setTimeout(() => setToast(''), 3000)
   }
 
   async function loadData() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
-
     const today = new Date().toISOString().split('T')[0]
-    const { data } = await supabase
-      .from('schedules').select('*')
+    const { data } = await supabase.from('schedules').select('*')
       .eq('district', p?.district || '').eq('published', true)
       .gte('scheduled_date', today).order('scheduled_date', { ascending: true })
-
     let filtered = data || []
     if (p?.ward && filtered.length > 0) {
-      const wardSpecific = filtered.filter(s => (s.wards && s.wards.includes(p.ward)) || (s.ward && s.ward === p.ward))
-      const districtWide = filtered.filter(s => !s.wards?.length && !s.ward)
+      const wardSpecific = filtered.filter((s: Schedule) => (s.wards && s.wards.includes(p.ward)) || (s.ward && s.ward === p.ward))
+      const districtWide = filtered.filter((s: Schedule) => !s.wards?.length && !s.ward)
       filtered = wardSpecific.length > 0 ? [...wardSpecific, ...districtWide] : districtWide.length > 0 ? districtWide : filtered
     }
     setSchedules(filtered)
-
-    // Load existing confirmations for this user
-    const { data: confirmations } = await supabase
-      .from('waste_confirmations').select('schedule_id, status').eq('user_id', user.id)
+    const { data: confirmations } = await supabase.from('waste_confirmations').select('schedule_id, status').eq('user_id', user.id)
     const statusMap: Record<string, 'confirmed' | 'unable'> = {}
       ; (confirmations || []).forEach((c: any) => { statusMap[c.schedule_id] = c.status })
     setConfirmStatuses(statusMap)
-
     setLoading(false)
   }
 
   async function confirmHandover(schedule: Schedule, status: 'confirmed' | 'unable') {
-    if (confirmStatuses[schedule.id]) return
     setConfirmingId(schedule.id)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
+    if (!user) { setConfirmingId(null); return }
+    if (confirmStatuses[schedule.id]) {
+      await supabase.from('waste_confirmations').delete().eq('schedule_id', schedule.id).eq('user_id', user.id)
+    }
     const { error } = await supabase.from('waste_confirmations').insert({
-      schedule_id: schedule.id,
-      user_id: user.id,
-      role: 'resident',
-      district: profile?.district,
-      ward: profile?.ward || null,
-      status,
+      schedule_id: schedule.id, user_id: user.id, role: 'resident',
+      district: profile?.district, ward: profile?.ward || null, status,
     })
-
     if (!error) {
       setConfirmStatuses(prev => ({ ...prev, [schedule.id]: status }))
-      showToast(status === 'confirmed' ? '✓ Confirmed! Your district engineer has been notified.' : 'Noted — marked as unable to hand over.')
+      showToast(status === 'confirmed' ? '✓ Confirmed! District engineer notified.' : 'Noted — marked as unable to hand over.')
     }
     setConfirmingId(null)
   }
 
-  async function cancelConfirmation(scheduleId: string) {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    await supabase.from('waste_confirmations').delete().eq('schedule_id', scheduleId).eq('user_id', user.id)
-    setConfirmStatuses(prev => { const next = { ...prev }; delete next[scheduleId]; return next })
-    showToast('Confirmation cancelled.')
+  // Calendar helpers
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const today = new Date()
+  const todayDate = today.getDate()
+  const todayMonth = today.getMonth()
+  const todayYear = today.getFullYear()
+
+  function schedulesForDay(day: number): Schedule[] {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    return schedules.filter(s => s.scheduled_date === dateStr)
   }
 
-  const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
-  const todaySchedules = schedules.filter(s => s.collection_day === todayName)
+  function schedulesForDayName(dayName: string): Schedule[] {
+    return schedules.filter(s => s.collection_day === dayName)
+  }
+
+  const todayDayName = DAYS_FULL[today.getDay()]
+  const todaySchedules = schedules.filter(s => s.collection_day === todayDayName)
   const nextSchedule = schedules[0]
-
-  function ConfirmButton({ schedule }: { schedule: Schedule }) {
-    const status = confirmStatuses[schedule.id]
-    const isConfirmed = status === 'confirmed'
-    const isUnable = status === 'unable'
-    const loading = confirmingId === schedule.id
-    return (
-      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(0,69,13,0.06)' }}>
-        {status ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '99px', background: isConfirmed ? 'rgba(0,69,13,0.08)' : 'rgba(186,26,26,0.08)', flex: 1 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: isConfirmed ? '#00450d' : '#ba1a1a', fontVariationSettings: "'FILL' 1" }}>
-                {isConfirmed ? 'check_circle' : 'cancel'}
-              </span>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: isConfirmed ? '#00450d' : '#ba1a1a', fontFamily: 'Manrope, sans-serif' }}>
-                {isConfirmed ? 'Waste handover confirmed' : 'Marked as unable to hand over'}
-              </span>
-            </div>
-            <button onClick={() => cancelConfirmation(schedule.id)}
-              style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', fontFamily: 'Manrope, sans-serif' }}>
-              Change
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button onClick={() => confirmHandover(schedule, 'confirmed')} disabled={!!loading}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '99px', background: '#00450d', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', opacity: loading ? 0.6 : 1 }}>
-              {loading ? <div style={{ width: '12px', height: '12px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> : <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>thumb_up</span>}
-              I'll have my waste ready
-            </button>
-            <button onClick={() => confirmHandover(schedule, 'unable')} disabled={!!loading}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '99px', background: 'white', color: '#ba1a1a', border: '1.5px solid rgba(186,26,26,0.2)', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', opacity: loading ? 0.6 : 1 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>cancel</span>
-              Unable to hand over
-            </button>
-          </div>
-        )}
-      </div>
-    )
-  }
 
   return (
     <DashboardLayout role="Resident" userName={profile?.full_name || ''} navItems={RESIDENT_NAV}
       primaryAction={{ label: 'Report Issue', href: '/dashboard/resident/report-dumping', icon: 'report_problem' }}>
       <style>{`
-        .material-symbols-outlined { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
-        .font-headline { font-family:'Manrope',sans-serif; }
-        .bento-card { background:white; border-radius:16px; box-shadow:0 10px 40px -10px rgba(24,28,34,0.08); border:1px solid rgba(0,69,13,0.04); overflow:hidden; transition:all 0.3s; }
-        .bento-card-green { background:#00450d; border-radius:16px; color:white; overflow:hidden; position:relative; }
-        .schedule-card { background:white; border-radius:14px; padding:18px 20px; border:1px solid rgba(0,0,0,0.05); box-shadow:0 1px 4px rgba(0,0,0,0.04); transition:transform 0.15s,box-shadow 0.15s; }
-        .schedule-card:hover { transform:translateY(-1px); box-shadow:0 4px 16px rgba(0,0,0,0.08); }
-        .view-btn { padding:8px 18px; border-radius:99px; font-size:12px; font-weight:700; font-family:'Manrope',sans-serif; border:none; cursor:pointer; transition:all 0.2s; }
-        .view-btn.active { background:#00450d; color:white; }
-        .view-btn:not(.active) { background:#f1f5f9; color:#64748b; }
-        .toast { animation:slideUp 0.3s ease; }
-        @keyframes slideUp { from { transform:translateY(12px) translateX(-50%); opacity:0; } to { transform:translateY(0) translateX(-50%); opacity:1; } }
-        @keyframes spin { to { transform:rotate(360deg); } }
-        @keyframes staggerIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-        .s1{animation:staggerIn 0.5s ease 0.05s both} .s2{animation:staggerIn 0.5s ease 0.10s both} .s3{animation:staggerIn 0.5s ease 0.15s both}
+        .msf{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;vertical-align:middle;line-height:1}
+        .card{background:white;border-radius:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);border:1px solid rgba(0,69,13,0.05);overflow:hidden}
+        .cal-day{min-height:72px;border-radius:10px;padding:6px;cursor:pointer;transition:all 0.15s;position:relative;border:1.5px solid transparent;}
+        .cal-day:hover{background:#f0fdf4;border-color:rgba(0,69,13,0.1)}
+        .cal-day.today{border-color:#00450d;background:#f0fdf4}
+        .cal-day.has-event{cursor:pointer}
+        .cal-day.selected{background:#00450d;border-color:#00450d}
+        .view-btn{padding:8px 18px;border-radius:99px;font-size:12px;font-weight:700;font-family:'Manrope',sans-serif;border:none;cursor:pointer;transition:all 0.2s}
+        .view-btn.active{background:#00450d;color:white}
+        .view-btn:not(.active){background:#f1f5f9;color:#64748b}
+        .confirm-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:99px;font-size:11px;font-weight:700;font-family:'Manrope',sans-serif;cursor:pointer;border:none;transition:all 0.2s}
+        .toast-msg{animation:slideUp .3s ease}
+        @keyframes slideUp{from{transform:translateY(12px) translateX(-50%);opacity:0}to{transform:translateY(0) translateX(-50%);opacity:1}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .a1{animation:fadeUp .4s ease .04s both}.a2{animation:fadeUp .4s ease .09s both}.a3{animation:fadeUp .4s ease .14s both}
       `}</style>
 
       {toast && (
-        <div className="toast" style={{ position: 'fixed', bottom: '24px', left: '50%', background: '#181c22', color: 'white', padding: '10px 20px', borderRadius: '9999px', fontSize: '13px', fontWeight: 500, zIndex: 1000, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>
+        <div className="toast-msg" style={{ position: 'fixed', bottom: 24, left: '50%', background: '#181c22', color: 'white', padding: '10px 20px', borderRadius: 9999, fontSize: 13, fontWeight: 500, zIndex: 1000, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>
           {toast}
         </div>
       )}
 
-      <section className="mb-10 s1">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <span className="text-xs font-bold uppercase block mb-2" style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>Resident Portal</span>
-            <h1 className="font-headline font-extrabold tracking-tight" style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
-              Collection <span style={{ color: '#1b5e20' }}>Schedule</span>
-            </h1>
-            <p className="text-sm mt-1" style={{ color: '#717a6d' }}>
-              {profile?.district || 'CMC District'}{profile?.ward ? ` · Ward: ${profile.ward}` : ''}
-              {Object.keys(confirmStatuses).length > 0 && <span style={{ marginLeft: '8px', color: '#00450d', fontWeight: 600 }}>· {Object.values(confirmStatuses).filter(s => s === 'confirmed').length} confirmed, {Object.values(confirmStatuses).filter(s => s === 'unable').length} unable</span>}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className={`view-btn ${view === 'upcoming' ? 'active' : ''}`} onClick={() => setView('upcoming')}>Upcoming</button>
-            <button className={`view-btn ${view === 'weekly' ? 'active' : ''}`} onClick={() => setView('weekly')}>By Day</button>
+      {/* Header */}
+      <div className="a1" style={{ marginBottom: 24 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: 6 }}>Resident Portal</p>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <h1 style={{ fontSize: 42, fontWeight: 900, color: '#181c22', lineHeight: 1.1, fontFamily: 'Manrope,sans-serif' }}>
+            Collection <span style={{ color: '#00450d' }}>Schedule</span>
+          </h1>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className={`view-btn ${view === 'calendar' ? 'active' : ''}`} onClick={() => setView('calendar')}>
+              <span className="msf" style={{ fontSize: 14, marginRight: 4 }}>calendar_month</span>Calendar
+            </button>
+            <button className={`view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+              <span className="msf" style={{ fontSize: 14, marginRight: 4 }}>list</span>List
+            </button>
           </div>
         </div>
-      </section>
+        <p style={{ fontSize: 13, color: '#717a6d', marginTop: 6 }}>
+          {profile?.district || 'CMC District'}{profile?.ward ? ` · Ward ${profile.ward}` : ''}
+        </p>
+      </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
-        </div>
-      ) : schedules.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center s2">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#f0fdf4' }}>
-            <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '32px' }}>calendar_month</span>
-          </div>
-          <p className="font-headline font-bold text-lg mb-1" style={{ color: '#181c22' }}>No schedules published yet</p>
-          <p className="text-sm" style={{ color: '#94a3b8' }}>Your district engineer will publish schedules soon</p>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
+          <div style={{ width: 28, height: 28, border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
         </div>
       ) : (
         <>
-          {/* Info banner about confirmations */}
-          <div className="s2 mb-6 p-4 rounded-xl flex items-center gap-3" style={{ background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)' }}>
-            <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '20px', flexShrink: 0 }}>info</span>
-            <p className="text-sm" style={{ color: '#41493e' }}>
-              Tap <strong>"I'll have my waste ready"</strong> on any collection to confirm handover. Your district engineer uses this to plan the best collection days.
-            </p>
-          </div>
-
-          {/* Today's collections banner */}
+          {/* Today alert */}
           {todaySchedules.length > 0 && (
-            <div className="s2 mb-6" style={{ background: 'linear-gradient(135deg,#00450d,#1b5e20)', borderRadius: '16px', padding: '20px 24px', color: 'white', display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>today</span>
+            <div className="a1" style={{ marginBottom: 16, borderRadius: 14, padding: '14px 18px', background: 'linear-gradient(135deg,#00450d,#1b5e20)', color: 'white', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span className="msf" style={{ fontSize: 21 }}>notifications_active</span>
               </div>
               <div style={{ flex: 1 }}>
-                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(163,246,156,0.7)', margin: '0 0 4px', fontFamily: 'Manrope, sans-serif' }}>Today's Collections</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {todaySchedules.map(s => (
-                    <span key={s.id} style={{ background: 'rgba(255,255,255,0.15)', color: 'white', padding: '4px 12px', borderRadius: '99px', fontSize: '13px', fontWeight: 600, fontFamily: 'Manrope, sans-serif' }}>
-                      {WASTE_COLORS[s.waste_type]?.label || s.waste_type} at {s.collection_time}
-                    </span>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(163,246,156,0.75)', marginBottom: 3, fontFamily: 'Manrope,sans-serif' }}>Collection Today</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {todaySchedules.map(s => {
+                    const wc = WASTE_COLORS[s.waste_type]
+                    return (
+                      <span key={s.id} style={{ background: 'rgba(255,255,255,0.13)', color: 'white', padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif' }}>
+                        {wc?.label || s.waste_type} · {s.collection_time}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Next collection + waste legend */}
+          {nextSchedule && (
+            <div className="a2" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, marginBottom: 20, alignItems: 'start' }}>
+              {/* Next collection card */}
+              <div className="card" style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                {(() => {
+                  const wc = WASTE_COLORS[nextSchedule.waste_type] || { label: nextSchedule.waste_type, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0', icon: 'delete_sweep', dot: '#94a3b8' }
+                  const cs = confirmStatuses[nextSchedule.id]
+                  return (
+                    <>
+                      <div style={{ width: 48, height: 48, borderRadius: 14, background: wc.bg, border: `1px solid ${wc.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span className="msf" style={{ fontSize: 24, color: wc.color }}>{wc.icon}</span>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', marginBottom: 3 }}>Next Collection</p>
+                        <p style={{ fontSize: 17, fontWeight: 800, color: '#181c22', fontFamily: 'Manrope,sans-serif', marginBottom: 2 }}>
+                          {new Date(nextSchedule.scheduled_date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        </p>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: wc.color, padding: '2px 8px', borderRadius: 99, background: wc.bg, border: `1px solid ${wc.border}` }}>{wc.label}</span>
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>{nextSchedule.collection_time} · {FREQUENCIES[nextSchedule.frequency]}</span>
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0 }}>
+                        {cs ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 99, background: cs === 'confirmed' ? 'rgba(0,69,13,0.08)' : 'rgba(220,38,38,0.08)' }}>
+                            <span className="msf" style={{ fontSize: 14, color: cs === 'confirmed' ? '#00450d' : '#dc2626', fontVariationSettings: "'FILL' 1" }}>{cs === 'confirmed' ? 'check_circle' : 'cancel'}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: cs === 'confirmed' ? '#00450d' : '#dc2626', fontFamily: 'Manrope,sans-serif' }}>{cs === 'confirmed' ? 'Confirmed' : 'Unable'}</span>
+                          </div>
+                        ) : (
+                          <button onClick={() => confirmHandover(nextSchedule, 'confirmed')} disabled={confirmingId === nextSchedule.id}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, background: '#00450d', color: 'white', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'Manrope,sans-serif' }}>
+                            <span className="msf" style={{ fontSize: 14 }}>thumb_up</span>
+                            Ready
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )
+                })()}
+              </div>
+
+              {/* Waste type legend */}
+              <div className="card" style={{ padding: '14px 18px' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', marginBottom: 10 }}>Waste Types</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {Object.entries(WASTE_COLORS).map(([key, wc]) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: wc.dot, flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>{wc.label}</span>
+                    </div>
                   ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Next upcoming highlight */}
-          {nextSchedule && view === 'upcoming' && (
-            <div className="bento-card-green p-8 mb-6 s2">
-              <div className="absolute top-0 right-0 w-48 h-48 rounded-full -mr-16 -mt-16" style={{ background: 'rgba(163,246,156,0.06)' }} />
-              <div className="relative z-10">
-                <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'rgba(163,246,156,0.6)', display: 'block', marginBottom: '12px', fontFamily: 'Manrope, sans-serif' }}>Next Scheduled Collection</span>
-                <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 900, fontSize: '32px', letterSpacing: '-0.02em', marginBottom: '8px', lineHeight: 1.1 }}>
-                  {new Date(nextSchedule.scheduled_date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
-                </h2>
-                <p style={{ color: 'rgba(163,246,156,0.8)', fontSize: '14px', marginBottom: '16px' }}>
-                  {WASTE_COLORS[nextSchedule.waste_type]?.label || nextSchedule.waste_type} · {nextSchedule.collection_day} at {nextSchedule.collection_time} · {FREQUENCIES[nextSchedule.frequency]}
-                </p>
-                {nextSchedule.notes && (
-                  <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>info</span>{nextSchedule.notes}
-                  </p>
-                )}
-                {/* Confirm button on hero */}
-                <div style={{ marginTop: '20px' }}>
-                  {confirmStatuses[nextSchedule.id] ? (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '99px', background: 'rgba(255,255,255,0.15)', color: 'rgba(163,246,156,0.9)' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '16px', fontVariationSettings: "'FILL' 1" }}>{confirmStatuses[nextSchedule.id] === 'confirmed' ? 'check_circle' : 'cancel'}</span>
-                      <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'Manrope, sans-serif' }}>{confirmStatuses[nextSchedule.id] === 'confirmed' ? 'Waste handover confirmed' : 'Unable to hand over'}</span>
-                    </div>
-                  ) : (
-                    <button onClick={() => confirmHandover(nextSchedule, 'confirmed')} disabled={confirmingId === nextSchedule.id}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 20px', borderRadius: '99px', background: 'white', color: '#00450d', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', opacity: confirmingId === nextSchedule.id ? 0.7 : 1 }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>thumb_up</span>
-                      I'll have my waste ready
-                    </button>
-                  )}
+          {/* Calendar view */}
+          {view === 'calendar' && (
+            <div className="a3">
+              <div className="card">
+                {/* Month nav */}
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))}
+                    style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="msf" style={{ fontSize: 18, color: '#374151' }}>chevron_left</span>
+                  </button>
+                  <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 16, color: '#181c22' }}>
+                    {MONTHS[month]} {year}
+                  </h3>
+                  <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))}
+                    style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="msf" style={{ fontSize: 18, color: '#374151' }}>chevron_right</span>
+                  </button>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* Upcoming list */}
-          {view === 'upcoming' && (
-            <div className="s3">
-              <h3 className="font-headline font-bold text-base mb-4" style={{ color: '#181c22' }}>All Upcoming ({schedules.length})</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {schedules.map(s => {
-                  const wc = WASTE_COLORS[s.waste_type] || { label: s.waste_type, color: '#64748b', bg: 'rgba(100,116,139,0.08)', icon: 'delete_sweep' }
-                  const scheduleWards = s.wards?.length > 0 ? s.wards : s.ward ? [s.ward] : []
-                  return (
-                    <div key={s.id} className="schedule-card">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: wc.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: '22px', color: wc.color }}>{wc.icon}</span>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '14px', fontWeight: 700, color: '#181c22' }}>{wc.label}</span>
-                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: wc.bg, color: wc.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{FREQUENCIES[s.frequency]}</span>
-                          </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px', color: '#717a6d' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>event</span>
-                              {new Date(s.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>schedule</span>
-                              {s.collection_day} at {s.collection_time}
-                            </span>
-                            {scheduleWards.length > 0 && (
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>location_on</span>
-                                {scheduleWards.join(', ')}
-                              </span>
+                <div style={{ padding: 16 }}>
+                  {/* Day headers */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 4 }}>
+                    {DAYS_SHORT.map(d => (
+                      <div key={d} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#94a3b8', fontFamily: 'Manrope,sans-serif', padding: '4px 0' }}>{d}</div>
+                    ))}
+                  </div>
+
+                  {/* Calendar grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
+                    {/* Empty cells */}
+                    {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+
+                    {/* Day cells */}
+                    {Array.from({ length: daysInMonth }).map((_, i) => {
+                      const day = i + 1
+                      const daySchedules = schedulesForDay(day)
+                      const isToday = day === todayDate && month === todayMonth && year === todayYear
+                      const isSelected = selectedDay === day
+                      return (
+                        <div key={day}
+                          className={`cal-day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${daySchedules.length > 0 ? 'has-event' : ''}`}
+                          onClick={() => setSelectedDay(isSelected ? null : day)}>
+                          <p style={{ fontSize: 12, fontWeight: isToday ? 800 : 500, color: isSelected ? 'white' : isToday ? '#00450d' : '#374151', fontFamily: 'Manrope,sans-serif', marginBottom: 4 }}>{day}</p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {daySchedules.slice(0, 2).map(s => {
+                              const wc = WASTE_COLORS[s.waste_type]
+                              return (
+                                <div key={s.id} style={{ height: 4, borderRadius: 99, background: isSelected ? 'rgba(255,255,255,0.6)' : wc?.dot || '#94a3b8' }} />
+                              )
+                            })}
+                            {daySchedules.length > 2 && (
+                              <p style={{ fontSize: 8, color: isSelected ? 'rgba(255,255,255,0.7)' : '#94a3b8', fontFamily: 'Manrope,sans-serif' }}>+{daySchedules.length - 2}</p>
                             )}
                           </div>
-                          {s.notes && <p style={{ fontSize: '12px', color: '#717a6d', marginTop: '4px', fontStyle: 'italic' }}>{s.notes}</p>}
                         </div>
-                      </div>
-                      <ConfirmButton schedule={s} />
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Selected day detail */}
+                {selectedDay && schedulesForDay(selectedDay).length > 0 && (
+                  <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(0,69,13,0.06)', background: '#fafbfa' }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', marginBottom: 12 }}>
+                      {MONTHS[month]} {selectedDay}
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {schedulesForDay(selectedDay).map(s => {
+                        const wc = WASTE_COLORS[s.waste_type] || { label: s.waste_type, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0', icon: 'delete_sweep', dot: '#94a3b8' }
+                        const cs = confirmStatuses[s.id]
+                        return (
+                          <div key={s.id} style={{ background: 'white', borderRadius: 12, padding: '12px 14px', border: `1px solid ${wc.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 10, background: wc.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <span className="msf" style={{ fontSize: 18, color: wc.color }}>{wc.icon}</span>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>{wc.label}</p>
+                              <p style={{ fontSize: 11, color: '#717a6d' }}>{s.collection_time} · {FREQUENCIES[s.frequency] || s.frequency}</p>
+                            </div>
+                            {cs ? (
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: cs === 'confirmed' ? 'rgba(0,69,13,0.08)' : 'rgba(220,38,38,0.08)', color: cs === 'confirmed' ? '#00450d' : '#dc2626', fontFamily: 'Manrope,sans-serif' }}>
+                                {cs === 'confirmed' ? '✓ Ready' : '✗ Unable'}
+                              </span>
+                            ) : (
+                              <button onClick={() => confirmHandover(s, 'confirmed')} disabled={confirmingId === s.id}
+                                className="confirm-btn"
+                                style={{ background: '#00450d', color: 'white' }}>
+                                <span className="msf" style={{ fontSize: 13 }}>thumb_up</span>
+                                Ready
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                })}
+                  </div>
+                )}
+                {selectedDay && schedulesForDay(selectedDay).length === 0 && (
+                  <div style={{ padding: '14px 20px', borderTop: '1px solid rgba(0,69,13,0.06)', background: '#fafbfa' }}>
+                    <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>No collections on {MONTHS[month]} {selectedDay}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* By day view */}
-          {view === 'weekly' && (
-            <div className="s3">
-              <h3 className="font-headline font-bold text-base mb-4" style={{ color: '#181c22' }}>Schedule by Day</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {DAYS.map(day => {
-                  const daySchedules = schedules.filter(s => s.collection_day === day)
-                  if (daySchedules.length === 0) return null
-                  return (
-                    <div key={day} className="bento-card">
-                      <div style={{ padding: '14px 20px', background: day === todayName ? 'rgba(0,69,13,0.04)' : 'white', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '15px', color: day === todayName ? '#00450d' : '#181c22' }}>{day}</span>
-                        {day === todayName && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: 'rgba(0,69,13,0.1)', color: '#00450d', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Today</span>}
-                      </div>
-                      <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {daySchedules.map(s => {
-                          const wc = WASTE_COLORS[s.waste_type] || { label: s.waste_type, color: '#64748b', bg: 'rgba(100,116,139,0.08)', icon: 'delete_sweep' }
-                          const confirmStatus = confirmStatuses[s.id]
-                          return (
-                            <div key={s.id} style={{ padding: '12px 14px', borderRadius: '10px', background: '#f9fbf9', border: confirmStatus ? `1px solid ${confirmStatus === 'confirmed' ? 'rgba(0,69,13,0.15)' : 'rgba(186,26,26,0.15)'}` : '1px solid transparent' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: confirmStatus ? '8px' : '0' }}>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: wc.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <span className="material-symbols-outlined" style={{ fontSize: '16px', color: wc.color }}>{wc.icon}</span>
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#181c22' }}>{wc.label}</span>
-                                  <div style={{ fontSize: '11px', color: '#717a6d', display: 'flex', gap: '8px', marginTop: '2px' }}>
-                                    <span>{s.collection_time}</span><span>·</span><span>{FREQUENCIES[s.frequency]}</span>
-                                    {s.notes && <><span>·</span><span>{s.notes}</span></>}
-                                  </div>
-                                </div>
-                                {confirmStatus ? (
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, color: confirmStatus === 'confirmed' ? '#00450d' : '#ba1a1a', fontFamily: 'Manrope, sans-serif' }}>
-                                    <span className="material-symbols-outlined" style={{ fontSize: '14px', fontVariationSettings: "'FILL' 1" }}>{confirmStatus === 'confirmed' ? 'check_circle' : 'cancel'}</span>
-                                    {confirmStatus === 'confirmed' ? 'Confirmed' : 'Unable'}
-                                  </span>
-                                ) : (
-                                  <button onClick={() => confirmHandover(s, 'confirmed')} disabled={confirmingId === s.id}
-                                    style={{ fontSize: '11px', fontWeight: 700, padding: '5px 10px', borderRadius: '99px', background: '#00450d', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'Manrope, sans-serif', flexShrink: 0, opacity: confirmingId === s.id ? 0.6 : 1 }}>
-                                    Confirm
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
+          {/* List view */}
+          {view === 'list' && (
+            <div className="a3 card">
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 15, color: '#181c22' }}>All Upcoming</h3>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>{schedules.length} collections</span>
               </div>
+              {schedules.length === 0 ? (
+                <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+                  <span className="msf" style={{ fontSize: 36, color: '#d1d5db', display: 'block', marginBottom: 12 }}>event_busy</span>
+                  <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, color: '#181c22', marginBottom: 6 }}>No schedules published yet</p>
+                  <p style={{ fontSize: 13, color: '#94a3b8' }}>Your district engineer will publish schedules soon</p>
+                </div>
+              ) : schedules.map(s => {
+                const wc = WASTE_COLORS[s.waste_type] || { label: s.waste_type, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0', icon: 'delete_sweep', dot: '#94a3b8' }
+                const cs = confirmStatuses[s.id]
+                const date = new Date(s.scheduled_date)
+                const isToday = date.toDateString() === today.toDateString()
+                return (
+                  <div key={s.id} style={{ padding: '14px 20px', borderBottom: '1px solid rgba(0,69,13,0.04)', display: 'flex', alignItems: 'center', gap: 14, background: isToday ? 'rgba(0,69,13,0.02)' : undefined }}>
+                    {/* Date block */}
+                    <div style={{ width: 44, flexShrink: 0, textAlign: 'center' }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: isToday ? '#00450d' : '#94a3b8', fontFamily: 'Manrope,sans-serif' }}>
+                        {isToday ? 'TODAY' : date.toLocaleDateString('en-GB', { weekday: 'short' })}
+                      </p>
+                      <p style={{ fontSize: 22, fontWeight: 800, color: isToday ? '#00450d' : '#181c22', fontFamily: 'Manrope,sans-serif', lineHeight: 1.1 }}>{date.getDate()}</p>
+                      <p style={{ fontSize: 10, color: '#94a3b8' }}>{date.toLocaleDateString('en-GB', { month: 'short' })}</p>
+                    </div>
+                    <div style={{ width: 1, height: 40, background: '#f0f0f0', flexShrink: 0 }} />
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: wc.bg, border: `1px solid ${wc.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span className="msf" style={{ fontSize: 18, color: wc.color }}>{wc.icon}</span>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', marginBottom: 2 }}>{wc.label}</p>
+                      <p style={{ fontSize: 11, color: '#717a6d' }}>{s.collection_time} · {FREQUENCIES[s.frequency] || s.frequency}</p>
+                    </div>
+                    {cs ? (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: cs === 'confirmed' ? 'rgba(0,69,13,0.08)' : 'rgba(220,38,38,0.08)', color: cs === 'confirmed' ? '#00450d' : '#dc2626', fontFamily: 'Manrope,sans-serif', flexShrink: 0 }}>
+                        {cs === 'confirmed' ? '✓ Ready' : '✗ Unable'}
+                      </span>
+                    ) : (
+                      <button onClick={() => confirmHandover(s, 'confirmed')} disabled={confirmingId === s.id}
+                        className="confirm-btn" style={{ background: '#00450d', color: 'white', flexShrink: 0 }}>
+                        <span className="msf" style={{ fontSize: 13 }}>thumb_up</span>Ready
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </>
