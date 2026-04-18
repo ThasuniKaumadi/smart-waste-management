@@ -10,22 +10,74 @@ const COMMERCIAL_NAV = [
     { label: 'Track Vehicle', href: '/dashboard/commercial/track', icon: 'location_on' },
     { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
     { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
+    { label: 'Bins', href: '/dashboard/commercial/bins', icon: 'delete' },
+    { label: 'Collection History', href: '/dashboard/commercial/collection-history', icon: 'history' },
 ]
 
 declare global {
     interface Window { payhere: any }
 }
 
+type Invoice = {
+    id: string
+    invoice_number: string | null
+    commercial_id: string
+    period_start: string | null
+    period_end: string | null
+    billing_cycle: string | null
+    total_bins: number | null
+    tier: string | null
+    rate_per_bin: number | null
+    amount: number
+    status: string
+    due_date: string | null
+    paid_at: string | null
+    payhere_order_id: string | null
+    payhere_payment_id: string | null
+    created_at: string
+}
+
+type LineItem = {
+    id: string
+    invoice_id: string
+    description: string | null
+    quantity: number
+    unit_price: number
+    total: number
+    created_at: string
+}
+
+type BillingSummary = {
+    commercial_id: string
+    organisation_name: string | null
+    full_name: string | null
+    district: string | null
+    ward: string | null
+    billing_cycle: string | null
+    billing_suspended: boolean | null
+    total_bins_this_period: number | null
+    bins_this_week: number | null
+    total_stops_completed: number | null
+    last_collection: string | null
+    current_tier: string | null
+}
+
+const UNPAID_STATUSES = ['pending', 'unpaid', 'failed', 'overdue']
+const PAYABLE_STATUSES = ['pending', 'unpaid', 'overdue']
+
 export default function CommercialBillingPage() {
     const [profile, setProfile] = useState<any>(null)
-    const [invoices, setInvoices] = useState<any[]>([])
+    const [summary, setSummary] = useState<BillingSummary | null>(null)
+    const [invoices, setInvoices] = useState<Invoice[]>([])
+    const [lineItemsByInvoice, setLineItemsByInvoice] = useState<Record<string, LineItem[]>>({})
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
     const [loading, setLoading] = useState(true)
+    const [loadError, setLoadError] = useState<string | null>(null)
     const [payingId, setPayingId] = useState<string | null>(null)
     const [payhereReady, setPayhereReady] = useState(false)
     const scriptRef = useRef(false)
 
     useEffect(() => {
-        // Load PayHere script with onload callback
         if (!scriptRef.current) {
             scriptRef.current = true
             if (window.payhere) {
@@ -43,30 +95,68 @@ export default function CommercialBillingPage() {
     }, [])
 
     async function loadData() {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
+        try {
+            const supabase = createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) {
+                setLoadError('Not signed in')
+                setLoading(false)
+                return
+            }
 
-        const { data: p } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-        setProfile(p)
+            const [profileRes, summaryRes, invoicesRes] = await Promise.all([
+                supabase.from('profiles').select('*').eq('id', user.id).single(),
+                supabase.from('commercial_billing_summary').select('*').eq('commercial_id', user.id).maybeSingle(),
+                supabase.from('invoices').select('*').eq('commercial_id', user.id).order('created_at', { ascending: false }),
+            ])
 
-        // Fix: query billing_records table, not invoices
-        const { data: records, error } = await supabase
-            .from('billing_records')
-            .select('*')
-            .eq('commercial_id', user.id)
-            .order('created_at', { ascending: false })
+            if (profileRes.error) console.error('Profile fetch error:', profileRes.error)
+            if (summaryRes.error) console.error('Summary fetch error:', summaryRes.error)
+            if (invoicesRes.error) {
+                console.error('Invoices fetch error:', invoicesRes.error)
+                setLoadError('Could not load invoices. Please refresh.')
+            }
 
-        if (error) console.error('Billing fetch error:', error)
-        setInvoices(records || [])
-        setLoading(false)
+            setProfile(profileRes.data)
+            setSummary(summaryRes.data)
+            const invoiceList = (invoicesRes.data ?? []) as Invoice[]
+            setInvoices(invoiceList)
+
+            if (invoiceList.length > 0) {
+                const invoiceIds = invoiceList.map(i => i.id)
+                const { data: lineItems, error: lineError } = await supabase
+                    .from('invoice_line_items')
+                    .select('*')
+                    .in('invoice_id', invoiceIds)
+                    .order('created_at', { ascending: true })
+
+                if (lineError) console.error('Line items fetch error:', lineError)
+
+                const grouped: Record<string, LineItem[]> = {}
+                    ; (lineItems ?? []).forEach((li: LineItem) => {
+                        if (!grouped[li.invoice_id]) grouped[li.invoice_id] = []
+                        grouped[li.invoice_id].push(li)
+                    })
+                setLineItemsByInvoice(grouped)
+            }
+        } catch (err: any) {
+            console.error('Load error:', err)
+            setLoadError(err?.message || 'Failed to load billing data')
+        } finally {
+            setLoading(false)
+        }
     }
 
-    async function handlePay(invoice: any) {
+    function toggleExpanded(invoiceId: string) {
+        setExpandedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(invoiceId)) next.delete(invoiceId)
+            else next.add(invoiceId)
+            return next
+        })
+    }
+
+    async function handlePay(invoice: Invoice) {
         if (!payhereReady || !window.payhere) {
             alert('PayHere is still loading. Please wait a moment and try again.')
             return
@@ -80,7 +170,6 @@ export default function CommercialBillingPage() {
                 body: JSON.stringify({ invoice_id: invoice.id }),
             })
             const data = await res.json()
-            console.log('PayHere order data:', JSON.stringify(data))
 
             if (data.error) {
                 alert('Failed to create payment order: ' + data.error)
@@ -119,13 +208,18 @@ export default function CommercialBillingPage() {
     }
 
     const totalPaid = invoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + Number(i.amount), 0)
-    const totalUnpaid = invoices.filter(i => ['pending', 'failed'].includes(i.status)).reduce((sum, i) => sum + Number(i.amount), 0)
+    const totalUnpaid = invoices.filter(i => UNPAID_STATUSES.includes(i.status)).reduce((sum, i) => sum + Number(i.amount), 0)
     const overdueInvoices = invoices.filter(i => i.status === 'overdue')
-    const isSuspended = profile?.billing_suspended === true
+    const pendingCount = invoices.filter(i => UNPAID_STATUSES.includes(i.status)).length
+    const isSuspended = profile?.billing_suspended === true || summary?.billing_suspended === true
+
+    const binsThisWeek = summary?.bins_this_week ?? 0
+    const totalBinsThisPeriod = summary?.total_bins_this_period ?? 0
+    const currentTier = (summary?.current_tier || profile?.tier || '—').replace(/_/g, ' ')
 
     function statusStyle(status: string) {
         if (status === 'paid') return { background: '#f0fdf4', color: '#00450d' }
-        if (status === 'pending') return { background: '#fefce8', color: '#92400e' }
+        if (status === 'pending' || status === 'unpaid') return { background: '#fefce8', color: '#92400e' }
         if (status === 'overdue') return { background: '#fef2f2', color: '#ba1a1a' }
         if (status === 'failed') return { background: '#fef2f2', color: '#ba1a1a' }
         if (status === 'cancelled') return { background: '#f1f5f9', color: '#475569' }
@@ -133,7 +227,7 @@ export default function CommercialBillingPage() {
     }
 
     function statusLabel(status: string) {
-        if (status === 'pending') return 'Due'
+        if (status === 'pending' || status === 'unpaid') return 'Due'
         if (status === 'overdue') return 'Overdue'
         if (status === 'paid') return 'Paid'
         if (status === 'failed') return 'Failed'
@@ -141,9 +235,29 @@ export default function CommercialBillingPage() {
         return status
     }
 
-    function formatDate(dateStr: string) {
+    function formatDate(dateStr: string | null) {
         if (!dateStr) return '—'
         return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    }
+
+    function formatPeriod(start: string | null, end: string | null) {
+        if (!start || !end) return null
+        const s = new Date(start)
+        const e = new Date(end)
+        const sameYear = s.getFullYear() === e.getFullYear()
+        const sStr = s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: sameYear ? undefined : 'numeric' })
+        const eStr = e.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+        return `${sStr} – ${eStr}`
+    }
+
+    function invoiceTitle(inv: Invoice) {
+        if (inv.invoice_number) return `Invoice ${inv.invoice_number}`
+        return `Invoice #${inv.id.slice(0, 8).toUpperCase()}`
+    }
+
+    function tierLabel(tier: string | null) {
+        if (!tier) return ''
+        return tier.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
     }
 
     return (
@@ -183,11 +297,35 @@ export default function CommercialBillingPage() {
                     border-radius: 99px; font-size: 10px; font-weight: 700;
                     font-family: 'Manrope', sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
                 }
+                .expand-btn {
+                    width: 28px; height: 28px; border-radius: 8px; border: none;
+                    background: transparent; cursor: pointer; display: flex;
+                    align-items: center; justify-content: center; color: #717a6d;
+                    transition: all 0.2s ease;
+                }
+                .expand-btn:hover { background: rgba(0,69,13,0.06); color: #00450d; }
+                .line-items-section {
+                    background: #f9fbf7; padding: 20px 32px; border-top: 1px solid rgba(0,69,13,0.06);
+                    animation: expandIn 0.25s ease-out;
+                }
+                @keyframes expandIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+                .line-item-row {
+                    display: grid;
+                    grid-template-columns: 1fr 80px 120px 120px;
+                    gap: 16px; padding: 10px 0;
+                    border-bottom: 1px dashed rgba(0,69,13,0.08);
+                    font-size: 13px;
+                }
+                .line-item-row:last-child { border-bottom: none; }
+                .line-item-header {
+                    font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+                    text-transform: uppercase; color: #717a6d;
+                    font-family: 'Manrope', sans-serif;
+                }
                 @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
                 .s1 { animation: staggerIn 0.5s ease 0.05s both; }
                 .s2 { animation: staggerIn 0.5s ease 0.1s both; }
                 .s3 { animation: staggerIn 0.5s ease 0.15s both; }
-                .s4 { animation: staggerIn 0.5s ease 0.2s both; }
             `}</style>
 
             {/* Header */}
@@ -209,6 +347,20 @@ export default function CommercialBillingPage() {
                 </div>
             ) : (
                 <>
+                    {/* Error banner */}
+                    {loadError && (
+                        <div className="rounded-2xl p-5 mb-6 flex items-start gap-4 s1"
+                            style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+                            <span className="material-symbols-outlined mt-0.5" style={{ color: '#ba1a1a', fontSize: '22px' }}>error</span>
+                            <div>
+                                <p className="font-bold text-sm mb-1" style={{ color: '#ba1a1a', fontFamily: 'Manrope, sans-serif' }}>
+                                    Something went wrong
+                                </p>
+                                <p className="text-sm" style={{ color: '#991b1b' }}>{loadError}</p>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Suspension warning */}
                     {isSuspended && (
                         <div className="rounded-2xl p-5 mb-6 flex items-start gap-4 s1"
@@ -243,55 +395,71 @@ export default function CommercialBillingPage() {
                         </div>
                     )}
 
-                    {/* Summary cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 s2">
-                        <div className="bento-card-green p-8">
+                    {/* 4 summary cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 s2">
+                        <div className="bento-card-green p-6">
                             <div className="absolute top-0 right-0 w-32 h-32 rounded-full -mr-10 -mt-10"
                                 style={{ background: 'rgba(163,246,156,0.06)' }} />
                             <div className="relative z-10">
                                 <span className="material-symbols-outlined mb-3 block"
-                                    style={{ color: 'rgba(163,246,156,0.7)', fontSize: '28px' }}>check_circle</span>
+                                    style={{ color: 'rgba(163,246,156,0.7)', fontSize: '26px' }}>check_circle</span>
                                 <p className="text-xs font-bold uppercase mb-1"
                                     style={{ letterSpacing: '0.2em', color: 'rgba(163,246,156,0.6)', fontFamily: 'Manrope, sans-serif' }}>
                                     Total Paid
                                 </p>
-                                <p className="font-headline font-extrabold text-3xl tracking-tight">
+                                <p className="font-headline font-extrabold tracking-tight" style={{ fontSize: '26px' }}>
                                     LKR {totalPaid.toLocaleString()}
                                 </p>
                                 <p className="text-xs mt-1" style={{ color: 'rgba(163,246,156,0.5)' }}>
-                                    {invoices.filter(i => i.status === 'paid').length} invoice{invoices.filter(i => i.status === 'paid').length !== 1 ? 's' : ''} settled
+                                    {invoices.filter(i => i.status === 'paid').length} settled
                                 </p>
                             </div>
                         </div>
 
-                        <div className="bento-card p-8">
+                        <div className="bento-card p-6">
                             <span className="material-symbols-outlined mb-3 block"
-                                style={{ color: overdueInvoices.length > 0 ? '#ba1a1a' : '#92400e', fontSize: '28px' }}>
+                                style={{ color: overdueInvoices.length > 0 ? '#ba1a1a' : '#92400e', fontSize: '26px' }}>
                                 {overdueInvoices.length > 0 ? 'error' : 'pending'}
                             </span>
                             <p className="text-xs font-bold uppercase mb-1"
                                 style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
                                 Outstanding
                             </p>
-                            <p className="font-headline font-extrabold text-3xl tracking-tight" style={{ color: '#181c22' }}>
+                            <p className="font-headline font-extrabold tracking-tight" style={{ fontSize: '26px', color: '#181c22' }}>
                                 LKR {totalUnpaid.toLocaleString()}
                             </p>
                             <p className="text-xs mt-1 font-semibold"
                                 style={{ color: overdueInvoices.length > 0 ? '#ba1a1a' : '#92400e' }}>
-                                {invoices.filter(i => ['pending', 'overdue'].includes(i.status)).length} invoice{invoices.filter(i => ['pending', 'overdue'].includes(i.status)).length !== 1 ? 's' : ''} pending
+                                {pendingCount} pending
                                 {overdueInvoices.length > 0 && ` · ${overdueInvoices.length} overdue`}
                             </p>
                         </div>
 
-                        <div className="bento-card p-8">
+                        <div className="bento-card p-6">
                             <span className="material-symbols-outlined mb-3 block"
-                                style={{ color: '#00450d', fontSize: '28px' }}>receipt_long</span>
+                                style={{ color: '#00450d', fontSize: '26px' }}>delete</span>
                             <p className="text-xs font-bold uppercase mb-1"
                                 style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
-                                Billing Cycle
+                                Bins This Week
                             </p>
-                            <p className="font-headline font-extrabold text-3xl tracking-tight" style={{ color: '#181c22' }}>
-                                {invoices.length}
+                            <p className="font-headline font-extrabold tracking-tight" style={{ fontSize: '26px', color: '#181c22' }}>
+                                {binsThisWeek}
+                            </p>
+                            <p className="text-xs mt-1 font-semibold" style={{ color: '#00450d' }}>
+                                {totalBinsThisPeriod} this period
+                            </p>
+                        </div>
+
+                        <div className="bento-card p-6">
+                            <span className="material-symbols-outlined mb-3 block"
+                                style={{ color: '#00450d', fontSize: '26px' }}>verified</span>
+                            <p className="text-xs font-bold uppercase mb-1"
+                                style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
+                                Current Tier
+                            </p>
+                            <p className="font-headline font-extrabold tracking-tight"
+                                style={{ fontSize: '26px', color: '#181c22' }}>
+                                {currentTier}
                             </p>
                             <p className="text-xs mt-1 font-semibold" style={{ color: '#00450d' }}>
                                 {profile?.billing_cycle === 'quarterly' ? 'Quarterly' : 'Monthly'} billing
@@ -303,9 +471,14 @@ export default function CommercialBillingPage() {
                     <div className="bento-card s3">
                         <div className="px-8 py-6 flex items-center justify-between"
                             style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
-                            <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>
-                                Invoice History
-                            </h3>
+                            <div>
+                                <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>
+                                    Invoice History
+                                </h3>
+                                <p className="text-xs mt-1" style={{ color: '#94a3b8' }}>
+                                    Click any invoice to view its line items
+                                </p>
+                            </div>
                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: '#f0fdf4' }}>
                                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: payhereReady ? '#16a34a' : '#f59e0b' }} />
                                 <span className="text-xs font-bold" style={{ color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>
@@ -331,73 +504,142 @@ export default function CommercialBillingPage() {
                             </div>
                         ) : (
                             <div className="divide-y" style={{ borderColor: 'rgba(0,69,13,0.04)' }}>
-                                {invoices.map(invoice => (
-                                    <div key={invoice.id}
-                                        className="px-8 py-5 flex items-center gap-6 hover:bg-slate-50 transition-colors"
-                                        style={invoice.status === 'overdue' ? { background: '#fff9f9' } : {}}>
+                                {invoices.map(invoice => {
+                                    const isExpanded = expandedIds.has(invoice.id)
+                                    const lineItems = lineItemsByInvoice[invoice.id] ?? []
+                                    const period = formatPeriod(invoice.period_start, invoice.period_end)
+                                    const isPayable = PAYABLE_STATUSES.includes(invoice.status)
+                                    return (
+                                        <div key={invoice.id}>
+                                            <div
+                                                className="px-8 py-5 flex items-center gap-6 hover:bg-slate-50 transition-colors cursor-pointer"
+                                                style={invoice.status === 'overdue' ? { background: '#fff9f9' } : {}}
+                                                onClick={() => toggleExpanded(invoice.id)}
+                                            >
+                                                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                                                    style={{
+                                                        background: invoice.status === 'paid' ? '#f0fdf4'
+                                                            : invoice.status === 'overdue' ? '#fef2f2' : '#fefce8'
+                                                    }}>
+                                                    <span className="material-symbols-outlined"
+                                                        style={{
+                                                            color: invoice.status === 'paid' ? '#00450d'
+                                                                : invoice.status === 'overdue' ? '#ba1a1a' : '#92400e',
+                                                            fontSize: '20px'
+                                                        }}>
+                                                        {invoice.status === 'paid' ? 'check_circle'
+                                                            : invoice.status === 'overdue' ? 'error' : 'receipt'}
+                                                    </span>
+                                                </div>
 
-                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                                            style={{
-                                                background: invoice.status === 'paid' ? '#f0fdf4'
-                                                    : invoice.status === 'overdue' ? '#fef2f2' : '#fefce8'
-                                            }}>
-                                            <span className="material-symbols-outlined"
-                                                style={{
-                                                    color: invoice.status === 'paid' ? '#00450d'
-                                                        : invoice.status === 'overdue' ? '#ba1a1a' : '#92400e',
-                                                    fontSize: '20px'
-                                                }}>
-                                                {invoice.status === 'paid' ? 'check_circle'
-                                                    : invoice.status === 'overdue' ? 'error' : 'receipt'}
-                                            </span>
-                                        </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-semibold" style={{ color: '#181c22' }}>
+                                                        {invoiceTitle(invoice)}
+                                                    </p>
+                                                    <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>
+                                                        {period ?? formatDate(invoice.created_at)}
+                                                        {invoice.total_bins !== null && ` · ${invoice.total_bins} bins`}
+                                                        {invoice.tier && ` · ${tierLabel(invoice.tier)}`}
+                                                        {invoice.due_date && invoice.status !== 'paid' && ` · Due ${formatDate(invoice.due_date)}`}
+                                                    </p>
+                                                </div>
 
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-semibold" style={{ color: '#181c22' }}>
-                                                {invoice.description || `Invoice #${invoice.id.slice(0, 8).toUpperCase()}`}
-                                            </p>
-                                            <p className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>
-                                                {formatDate(invoice.created_at)}
-                                                {invoice.currency && ` · ${invoice.currency}`}
-                                            </p>
-                                        </div>
+                                                <div className="text-right flex-shrink-0">
+                                                    <p className="font-headline font-bold text-lg" style={{ color: '#181c22' }}>
+                                                        LKR {Number(invoice.amount).toLocaleString()}
+                                                    </p>
+                                                    {invoice.rate_per_bin && (
+                                                        <p className="text-xs" style={{ color: '#94a3b8' }}>
+                                                            @ LKR {Number(invoice.rate_per_bin).toLocaleString()}/bin
+                                                        </p>
+                                                    )}
+                                                </div>
 
-                                        <div className="text-right flex-shrink-0">
-                                            <p className="font-headline font-bold text-lg" style={{ color: '#181c22' }}>
-                                                LKR {Number(invoice.amount).toLocaleString()}
-                                            </p>
-                                        </div>
+                                                <div className="flex items-center gap-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                                    <span className="status-badge" style={statusStyle(invoice.status)}>
+                                                        {statusLabel(invoice.status)}
+                                                    </span>
+                                                    {isPayable && (
+                                                        <button
+                                                            onClick={() => handlePay(invoice)}
+                                                            disabled={payingId === invoice.id || !payhereReady}
+                                                            className="pay-btn"
+                                                            style={invoice.status === 'overdue' ? { background: '#ba1a1a' } : {}}
+                                                        >
+                                                            {payingId === invoice.id ? (
+                                                                <>
+                                                                    <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                                    </svg>
+                                                                    Processing...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>payments</span>
+                                                                    Pay Now
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        className="expand-btn"
+                                                        onClick={(e) => { e.stopPropagation(); toggleExpanded(invoice.id) }}
+                                                        aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                                                    >
+                                                        <span className="material-symbols-outlined" style={{ fontSize: '20px', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                                                            expand_more
+                                                        </span>
+                                                    </button>
+                                                </div>
+                                            </div>
 
-                                        <div className="flex items-center gap-3 flex-shrink-0">
-                                            <span className="status-badge" style={statusStyle(invoice.status)}>
-                                                {statusLabel(invoice.status)}
-                                            </span>
-                                            {(invoice.status === 'pending' || invoice.status === 'overdue') && (
-                                                <button
-                                                    onClick={() => handlePay(invoice)}
-                                                    disabled={payingId === invoice.id || !payhereReady}
-                                                    className="pay-btn"
-                                                    style={invoice.status === 'overdue' ? { background: '#ba1a1a' } : {}}
-                                                >
-                                                    {payingId === invoice.id ? (
-                                                        <>
-                                                            <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                                            </svg>
-                                                            Processing...
-                                                        </>
+                                            {isExpanded && (
+                                                <div className="line-items-section">
+                                                    <p className="text-xs font-bold uppercase mb-3"
+                                                        style={{ letterSpacing: '0.12em', color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>
+                                                        Line Items · {lineItems.length} entries
+                                                    </p>
+                                                    {lineItems.length === 0 ? (
+                                                        <p className="text-xs italic" style={{ color: '#94a3b8' }}>
+                                                            No line items recorded for this invoice.
+                                                        </p>
                                                     ) : (
                                                         <>
-                                                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>payments</span>
-                                                            Pay Now
+                                                            <div className="line-item-row line-item-header" style={{ color: '#717a6d', paddingBottom: '8px' }}>
+                                                                <span>Description</span>
+                                                                <span style={{ textAlign: 'right' }}>Qty</span>
+                                                                <span style={{ textAlign: 'right' }}>Unit Price</span>
+                                                                <span style={{ textAlign: 'right' }}>Total</span>
+                                                            </div>
+                                                            {lineItems.map(li => (
+                                                                <div key={li.id} className="line-item-row">
+                                                                    <span style={{ color: '#181c22' }}>
+                                                                        {li.description || 'Collection charge'}
+                                                                        <span style={{ color: '#94a3b8', fontSize: '11px', display: 'block', marginTop: '2px' }}>
+                                                                            {formatDate(li.created_at)}
+                                                                        </span>
+                                                                    </span>
+                                                                    <span style={{ textAlign: 'right', color: '#181c22' }}>{li.quantity}</span>
+                                                                    <span style={{ textAlign: 'right', color: '#181c22' }}>LKR {Number(li.unit_price).toLocaleString()}</span>
+                                                                    <span style={{ textAlign: 'right', color: '#181c22', fontWeight: 600 }}>LKR {Number(li.total).toLocaleString()}</span>
+                                                                </div>
+                                                            ))}
+                                                            <div className="line-item-row" style={{ borderTop: '1px solid rgba(0,69,13,0.15)', borderBottom: 'none', marginTop: '8px', paddingTop: '12px' }}>
+                                                                <span style={{ fontWeight: 700, color: '#00450d' }}>Invoice Total</span>
+                                                                <span></span>
+                                                                <span></span>
+                                                                <span style={{ textAlign: 'right', fontWeight: 700, color: '#00450d' }}>
+                                                                    LKR {Number(invoice.amount).toLocaleString()}
+                                                                </span>
+                                                            </div>
                                                         </>
                                                     )}
-                                                </button>
+                                                </div>
                                             )}
                                         </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         )}
 

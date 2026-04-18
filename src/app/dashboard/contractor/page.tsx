@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import DashboardLayout from '@/components/DashboardLayout'
+import AnnouncementsWidget from '@/components/AnnouncementsWidget'
 
 const CONTRACTOR_NAV = [
   { label: 'Overview', href: '/dashboard/contractor', icon: 'dashboard' },
@@ -239,7 +240,7 @@ export default function ContractorDashboardPage() {
               </div>
             </div>
           </div>
-
+          <AnnouncementsWidget role="contractor" district={profile?.district} compact />
           {/* Row 2 — 4 stat cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6 s3">
             {[

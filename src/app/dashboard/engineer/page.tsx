@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import DashboardLayout from '@/components/DashboardLayout'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import AnnouncementsWidget from '@/components/AnnouncementsWidget'
 
 const ENGINEER_NAV = [
   { label: 'Overview', href: '/dashboard/engineer', icon: 'dashboard' },

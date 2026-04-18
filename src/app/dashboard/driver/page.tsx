@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import DashboardLayout from '@/components/DashboardLayout'
+import AnnouncementsWidget from '@/components/AnnouncementsWidget'
 
 const DRIVER_NAV = [
   { label: 'Overview', href: '/dashboard/driver', icon: 'dashboard' },
@@ -256,7 +257,7 @@ export default function DriverDashboardPage() {
               </div>
             </div>
           </div>
-
+          <AnnouncementsWidget role="driver" district={profile?.district} compact />
           {/* Row 2 — 4 stat cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6 s3">
             {[

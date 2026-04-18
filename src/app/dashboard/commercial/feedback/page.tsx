@@ -11,6 +11,8 @@ const COMMERCIAL_NAV = [
     { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
     { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
     { label: 'Rate Service', href: '/dashboard/commercial/feedback', icon: 'star' },
+    { label: 'Bins', href: '/dashboard/commercial/bins', icon: 'delete' },
+    { label: 'Collection History', href: '/dashboard/commercial/collection-history', icon: 'history' },
 ]
 
 const ASPECTS = [

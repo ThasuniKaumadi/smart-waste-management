@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { ROLE_DASHBOARDS } from '@/lib/types'
+import AnnouncementsWidget from '@/components/AnnouncementsWidget'
 
 interface Profile {
   id: string
@@ -320,7 +321,7 @@ export default function SupervisorDashboard() {
             </div>
           </div>
         </div>
-
+        <AnnouncementsWidget role="supervisor" district={profile?.district} compact />
         {/* Stat Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
           {[
