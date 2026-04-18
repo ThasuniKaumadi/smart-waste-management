@@ -32,23 +32,19 @@ function ws(type: string | null) {
     if (!type) return WASTE_STYLES.general
     return WASTE_STYLES[type.toLowerCase().replace(/\s+/g, '-')] || WASTE_STYLES.general
 }
-
 function wl(type: string | null) {
     if (!type) return 'General'
     return type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()
 }
-
 function formatTime(t: string | null) {
     if (!t) return ''
     const [h, m] = t.split(':').map(Number)
     return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
 }
-
 function getDow(day: string | null) {
     if (!day) return -1
     return DAYS.findIndex(d => d.toLowerCase() === day.toLowerCase())
 }
-
 function nextOccurrence(dow: number): Date {
     const today = new Date()
     let diff = dow - today.getDay()
@@ -57,7 +53,6 @@ function nextOccurrence(dow: number): Date {
     d.setDate(today.getDate() + diff)
     return d
 }
-
 function daysUntil(d: Date) {
     const now = new Date(); now.setHours(0, 0, 0, 0)
     const target = new Date(d); target.setHours(0, 0, 0, 0)
@@ -70,8 +65,16 @@ export default function CommercialSchedulePage() {
     const [myStops, setMyStops] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [activeDay, setActiveDay] = useState<number | null>(null)
+    const [confirmStatuses, setConfirmStatuses] = useState<Record<string, 'confirmed' | 'unable'>>({})
+    const [confirmingId, setConfirmingId] = useState<string | null>(null)
+    const [toast, setToast] = useState('')
 
     useEffect(() => { loadData() }, [])
+
+    function showToast(msg: string) {
+        setToast(msg)
+        setTimeout(() => setToast(''), 3000)
+    }
 
     async function loadData() {
         try {
@@ -82,21 +85,56 @@ export default function CommercialSchedulePage() {
             setProfile(p)
             if (!p) { setLoading(false); return }
 
-            const [rsRes, stopsRes] = await Promise.all([
+            const [rsRes, stopsRes, confirmRes] = await Promise.all([
                 supabase.from('route_schedules').select('*').eq('ward', p.ward).eq('status', 'active'),
                 supabase.from('collection_stops').select('*').eq('commercial_id', user.id).eq('is_commercial', true).order('stop_order'),
+                supabase.from('waste_confirmations').select('schedule_id, status').eq('user_id', user.id),
             ])
             setRouteSchedules(rsRes.data ?? [])
             setMyStops(stopsRes.data ?? [])
+
+            const statusMap: Record<string, 'confirmed' | 'unable'> = {}
+                ; (confirmRes.data || []).forEach((c: any) => { statusMap[c.schedule_id] = c.status })
+            setConfirmStatuses(statusMap)
         } finally {
             setLoading(false)
         }
     }
 
-    const today = new Date()
-    const todayDow = today.getDay()
+    async function confirmHandover(scheduleId: string, status: 'confirmed' | 'unable') {
+        if (confirmStatuses[scheduleId]) return
+        setConfirmingId(scheduleId)
+        try {
+            const supabase = createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+            const { error } = await supabase.from('waste_confirmations').insert({
+                schedule_id: scheduleId,
+                user_id: user.id,
+                role: 'commercial_establishment',
+                district: profile?.district,
+                ward: profile?.ward || null,
+                status,
+            })
+            if (!error) {
+                setConfirmStatuses(prev => ({ ...prev, [scheduleId]: status }))
+                showToast(status === 'confirmed' ? '✓ Confirmed — your District Engineer has been notified.' : 'Noted — marked as unable to hand over.')
+            }
+        } finally {
+            setConfirmingId(null)
+        }
+    }
 
-    // Build day → schedules map
+    async function cancelConfirmation(scheduleId: string) {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        await supabase.from('waste_confirmations').delete().eq('schedule_id', scheduleId).eq('user_id', user.id)
+        setConfirmStatuses(prev => { const next = { ...prev }; delete next[scheduleId]; return next })
+        showToast('Confirmation cancelled.')
+    }
+
+    const today = new Date()
     const byDay: Record<number, any[]> = {}
     routeSchedules.forEach(rs => {
         const dow = getDow(rs.day_of_week)
@@ -105,7 +143,6 @@ export default function CommercialSchedulePage() {
         byDay[dow].push(rs)
     })
 
-    // Next 7 days
     const week = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(today)
         d.setDate(today.getDate() + i)
@@ -113,7 +150,6 @@ export default function CommercialSchedulePage() {
         return { d, dow, date: d.getDate(), isToday: i === 0, isTomorrow: i === 1, collections: byDay[dow] ?? [] }
     })
 
-    // Timeline: upcoming collections sorted
     const timeline = routeSchedules
         .map(rs => {
             const dow = getDow(rs.day_of_week)
@@ -127,6 +163,7 @@ export default function CommercialSchedulePage() {
     const selectedCollections = activeDay !== null ? (byDay[activeDay] ?? []) : []
     const completedStops = myStops.filter(s => s.status === 'completed').length
     const nextCollection = timeline[0]
+    const confirmedCount = Object.values(confirmStatuses).filter(s => s === 'confirmed').length
 
     return (
         <DashboardLayout
@@ -150,12 +187,24 @@ export default function CommercialSchedulePage() {
                 .stop-card { border-radius:14px; border:1px solid rgba(0,69,13,0.08); background:white; padding:16px; transition:background 0.15s; }
                 .stop-card:hover { background:#f9fbf7; }
                 .chip { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:99px; font-size:10px; font-weight:700; font-family:'Manrope',sans-serif; border:1px solid transparent; }
+                .confirm-btn { display:inline-flex; align-items:center; gap:5px; padding:6px 12px; border-radius:99px; font-size:11px; font-weight:700; font-family:'Manrope',sans-serif; border:none; cursor:pointer; transition:all 0.15s; }
+                .confirm-btn:disabled { opacity:0.6; cursor:not-allowed; }
+                .toast-pill { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#181c22; color:white; padding:10px 20px; border-radius:9999px; font-size:13px; font-weight:500; z-index:1000; display:flex; align-items:center; gap:8px; box-shadow:0 4px 20px rgba(0,0,0,0.2); white-space:nowrap; animation:slideUp 0.3s ease; }
+                @keyframes slideUp { from{transform:translateY(12px) translateX(-50%);opacity:0} to{transform:translateY(0) translateX(-50%);opacity:1} }
                 @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
                 .a1 { animation:fadeUp 0.4s ease 0.05s both; }
                 .a2 { animation:fadeUp 0.4s ease 0.1s both; }
                 .a3 { animation:fadeUp 0.4s ease 0.15s both; }
                 .a4 { animation:fadeUp 0.4s ease 0.2s both; }
             `}</style>
+
+            {/* Toast */}
+            {toast && (
+                <div className="toast-pill">
+                    <span className="msf" style={{ fontSize: '16px', color: '#4ade80' }}>check_circle</span>
+                    {toast}
+                </div>
+            )}
 
             {/* Header */}
             <div className="mb-6 a1">
@@ -166,14 +215,22 @@ export default function CommercialSchedulePage() {
                     <h1 style={{ fontSize: '42px', fontWeight: 900, color: '#181c22', lineHeight: 1.1, fontFamily: 'Manrope,sans-serif' }}>
                         Your <span style={{ color: '#00450d' }}>Schedule</span>
                     </h1>
-                    {profile?.ward && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '99px', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-                            <span className="msf" style={{ fontSize: '14px', color: '#00450d' }}>location_on</span>
-                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#00450d', fontFamily: 'Manrope,sans-serif' }}>
-                                {profile.ward}{profile.district && ` · ${profile.district}`}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {confirmedCount > 0 && (
+                            <span style={{ fontSize: '12px', fontWeight: 700, padding: '5px 12px', borderRadius: '99px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#00450d', fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <span className="msf" style={{ fontSize: '13px' }}>check_circle</span>
+                                {confirmedCount} confirmed
                             </span>
-                        </div>
-                    )}
+                        )}
+                        {profile?.ward && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '99px', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                                <span className="msf" style={{ fontSize: '14px', color: '#00450d' }}>location_on</span>
+                                <span style={{ fontSize: '12px', fontWeight: 700, color: '#00450d', fontFamily: 'Manrope,sans-serif' }}>
+                                    {profile.ward}{profile.district && ` · ${profile.district}`}
+                                </span>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -183,9 +240,18 @@ export default function CommercialSchedulePage() {
                 </div>
             ) : (
                 <>
-                    {/* Top row: next collection hero + 2 stats */}
+                    {/* Info banner */}
+                    {timeline.length > 0 && (
+                        <div className="a1" style={{ borderRadius: '14px', padding: '12px 16px', marginBottom: '20px', background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span className="msf" style={{ color: '#00450d', fontSize: '18px', flexShrink: 0 }}>info</span>
+                            <p style={{ fontSize: '12px', color: '#41493e', lineHeight: 1.5 }}>
+                                Tap <strong>"I'll have waste ready"</strong> on any upcoming collection to notify your District Engineer. This helps CMC plan the best collection days.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Top row */}
                     <div className="a2" style={{ display: 'grid', gridTemplateColumns: '1fr 180px 180px', gap: '16px', marginBottom: '20px' }}>
-                        {/* Next collection hero */}
                         <div className="card-green" style={{ padding: '28px' }}>
                             <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(163,246,156,0.07)' }} />
                             <div style={{ position: 'relative', zIndex: 1 }}>
@@ -200,7 +266,7 @@ export default function CommercialSchedulePage() {
                                         <p style={{ color: 'rgba(163,246,156,0.75)', fontSize: '13px', marginBottom: '16px' }}>
                                             {nextCollection.next.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
                                         </p>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
                                             {timeline.filter((t: any) => t.days === nextCollection.days).map((t: any, i: number) => {
                                                 const style = ws(t.waste_type)
                                                 return (
@@ -212,6 +278,28 @@ export default function CommercialSchedulePage() {
                                                 )
                                             })}
                                         </div>
+                                        {/* Quick confirm on hero */}
+                                        {nextCollection.id && (
+                                            confirmStatuses[nextCollection.id] ? (
+                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '99px', background: 'rgba(255,255,255,0.12)' }}>
+                                                    <span className="msf" style={{ fontSize: '14px', color: '#a3f69c', fontVariationSettings: "'FILL' 1" }}>
+                                                        {confirmStatuses[nextCollection.id] === 'confirmed' ? 'check_circle' : 'cancel'}
+                                                    </span>
+                                                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'rgba(163,246,156,0.9)', fontFamily: 'Manrope,sans-serif' }}>
+                                                        {confirmStatuses[nextCollection.id] === 'confirmed' ? 'Waste ready confirmed' : 'Unable to hand over'}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => confirmHandover(nextCollection.id, 'confirmed')}
+                                                    disabled={confirmingId === nextCollection.id}
+                                                    className="confirm-btn"
+                                                    style={{ background: 'white', color: '#00450d' }}>
+                                                    <span className="msf" style={{ fontSize: '14px' }}>thumb_up</span>
+                                                    I'll have waste ready
+                                                </button>
+                                            )
+                                        )}
                                     </>
                                 ) : (
                                     <div>
@@ -222,7 +310,6 @@ export default function CommercialSchedulePage() {
                             </div>
                         </div>
 
-                        {/* Stops stat */}
                         <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                             <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
                                 <span className="msf" style={{ color: '#00450d', fontSize: '20px' }}>delete</span>
@@ -234,7 +321,6 @@ export default function CommercialSchedulePage() {
                             </div>
                         </div>
 
-                        {/* Collection days stat */}
                         <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                             <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
                                 <span className="msf" style={{ color: '#1d4ed8', fontSize: '20px' }}>today</span>
@@ -247,7 +333,7 @@ export default function CommercialSchedulePage() {
                         </div>
                     </div>
 
-                    {/* Weekly calendar — hero section */}
+                    {/* Weekly calendar */}
                     <div className="card a3" style={{ marginBottom: '20px' }}>
                         <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -263,31 +349,19 @@ export default function CommercialSchedulePage() {
                                 )}
                             </div>
                         </div>
-
-                        {/* Day tiles */}
                         <div style={{ padding: '20px', display: 'flex', gap: '10px' }}>
                             {week.map(({ d, dow, date, isToday, isTomorrow, collections }) => {
                                 const isEmpty = collections.length === 0
                                 const isActive = activeDay === dow
                                 return (
-                                    <div
-                                        key={dow}
-                                        className={`day-tile ${isEmpty ? 'empty' : ''} ${isToday ? 'today-tile' : ''} ${isActive ? 'active' : ''}`}
-                                        onClick={() => !isEmpty && setActiveDay(isActive ? null : dow)}
-                                    >
-                                        {/* Date header */}
+                                    <div key={dow} className={`day-tile ${isEmpty ? 'empty' : ''} ${isToday ? 'today-tile' : ''} ${isActive ? 'active' : ''}`}
+                                        onClick={() => !isEmpty && setActiveDay(isActive ? null : dow)}>
                                         <div style={{ padding: '10px 8px 8px', textAlign: 'center', background: isToday ? '#00450d' : isActive ? '#f0fdf4' : 'transparent', borderBottom: collections.length > 0 ? '1px solid rgba(0,69,13,0.06)' : 'none' }}>
-                                            <p style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', color: isToday ? 'rgba(163,246,156,0.8)' : '#94a3b8', fontFamily: 'Manrope,sans-serif' }}>
-                                                {DAYS_SHORT[dow]}
-                                            </p>
-                                            <p style={{ fontSize: '18px', fontWeight: 900, color: isToday ? 'white' : isActive ? '#00450d' : '#181c22', fontFamily: 'Manrope,sans-serif', lineHeight: 1.2 }}>
-                                                {date}
-                                            </p>
+                                            <p style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', color: isToday ? 'rgba(163,246,156,0.8)' : '#94a3b8', fontFamily: 'Manrope,sans-serif' }}>{DAYS_SHORT[dow]}</p>
+                                            <p style={{ fontSize: '18px', fontWeight: 900, color: isToday ? 'white' : isActive ? '#00450d' : '#181c22', fontFamily: 'Manrope,sans-serif', lineHeight: 1.2 }}>{date}</p>
                                             {isToday && <p style={{ fontSize: '8px', fontWeight: 700, color: 'rgba(163,246,156,0.7)', letterSpacing: '0.12em', fontFamily: 'Manrope,sans-serif' }}>TODAY</p>}
                                             {isTomorrow && !isToday && <p style={{ fontSize: '8px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.1em', fontFamily: 'Manrope,sans-serif' }}>TMR</p>}
                                         </div>
-
-                                        {/* Collection dots */}
                                         <div style={{ padding: '8px', minHeight: '40px', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
                                             {isEmpty ? (
                                                 <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#e2e8f0', margin: '8px auto' }} />
@@ -297,9 +371,7 @@ export default function CommercialSchedulePage() {
                                                     return (
                                                         <div key={i} style={{ width: '100%', background: s.bg, borderRadius: '6px', padding: '4px 6px', display: 'flex', alignItems: 'center', gap: '4px', border: `1px solid ${s.border}` }}>
                                                             <span className="msf" style={{ fontSize: '10px', color: s.text }}>{s.icon}</span>
-                                                            <span style={{ fontSize: '9px', fontWeight: 700, color: s.text, fontFamily: 'Manrope,sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                {wl(c.waste_type)}
-                                                            </span>
+                                                            <span style={{ fontSize: '9px', fontWeight: 700, color: s.text, fontFamily: 'Manrope,sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wl(c.waste_type)}</span>
                                                         </div>
                                                     )
                                                 })
@@ -309,8 +381,6 @@ export default function CommercialSchedulePage() {
                                 )
                             })}
                         </div>
-
-                        {/* Selected day detail */}
                         {activeDay !== null && selectedCollections.length > 0 && (
                             <div style={{ padding: '0 20px 20px' }}>
                                 <div style={{ borderRadius: '14px', background: '#f9fbf7', border: '1px solid rgba(0,69,13,0.08)', padding: '16px 20px' }}>
@@ -344,11 +414,11 @@ export default function CommercialSchedulePage() {
                     {/* Two-column: timeline + your stops */}
                     <div className="a4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
-                        {/* Upcoming timeline */}
+                        {/* Upcoming timeline with confirm buttons */}
                         <div className="card">
                             <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
                                 <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>Upcoming</h2>
-                                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Next scheduled collections</p>
+                                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Confirm waste handover for each collection</p>
                             </div>
                             <div style={{ padding: '16px 24px' }}>
                                 {timeline.length === 0 ? (
@@ -361,31 +431,66 @@ export default function CommercialSchedulePage() {
                                     timeline.map((t: any, i: number) => {
                                         const s = ws(t.waste_type)
                                         const isFirst = i === 0
+                                        const confirmStatus = confirmStatuses[t.id]
+                                        const isConfirming = confirmingId === t.id
                                         return (
                                             <div key={t.id || i} className="timeline-item">
                                                 <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '2px' }}>
-                                                    <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: isFirst ? '#00450d' : s.bg, border: `1px solid ${isFirst ? '#00450d' : s.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        <span className="msf" style={{ fontSize: '18px', color: isFirst ? 'white' : s.text }}>{s.icon}</span>
+                                                    <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: confirmStatus === 'confirmed' ? '#f0fdf4' : confirmStatus === 'unable' ? '#fef2f2' : isFirst ? '#00450d' : s.bg, border: `1px solid ${confirmStatus === 'confirmed' ? '#bbf7d0' : confirmStatus === 'unable' ? '#fecaca' : isFirst ? '#00450d' : s.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <span className="msf" style={{ fontSize: '18px', color: confirmStatus === 'confirmed' ? '#00450d' : confirmStatus === 'unable' ? '#ba1a1a' : isFirst ? 'white' : s.text }}>
+                                                            {confirmStatus === 'confirmed' ? 'check_circle' : confirmStatus === 'unable' ? 'cancel' : s.icon}
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 <div style={{ flex: 1, paddingTop: '2px' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px', flexWrap: 'wrap' }}>
                                                         <p style={{ fontSize: '13px', fontWeight: 700, color: '#181c22' }}>{wl(t.waste_type)} collection</p>
-                                                        {isFirst && (
-                                                            <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#f0fdf4', color: '#00450d', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                                                                Next
-                                                            </span>
+                                                        {isFirst && !confirmStatus && (
+                                                            <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#f0fdf4', color: '#00450d', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Next</span>
                                                         )}
                                                     </div>
-                                                    <p style={{ fontSize: '12px', color: '#94a3b8' }}>
+                                                    <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>
                                                         {t.next.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
                                                         {t.estimated_start_time && ` · ${formatTime(t.estimated_start_time)}`}
+                                                        <span style={{ marginLeft: '8px', fontWeight: 700, color: t.days === 0 ? '#00450d' : t.days === 1 ? '#d97706' : '#94a3b8' }}>
+                                                            {t.days === 0 ? '· Today' : t.days === 1 ? '· Tomorrow' : `· ${t.days}d`}
+                                                        </span>
                                                     </p>
-                                                </div>
-                                                <div style={{ flexShrink: 0, paddingTop: '4px' }}>
-                                                    <span style={{ fontSize: '13px', fontWeight: 800, color: t.days === 0 ? '#00450d' : t.days === 1 ? '#d97706' : '#94a3b8', fontFamily: 'Manrope,sans-serif' }}>
-                                                        {t.days === 0 ? 'Today' : t.days === 1 ? 'Tmr' : `${t.days}d`}
-                                                    </span>
+
+                                                    {/* Confirm / confirmed state */}
+                                                    {confirmStatus ? (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '99px', background: confirmStatus === 'confirmed' ? '#f0fdf4' : '#fef2f2' }}>
+                                                                <span className="msf" style={{ fontSize: '12px', color: confirmStatus === 'confirmed' ? '#00450d' : '#ba1a1a', fontVariationSettings: "'FILL' 1" }}>
+                                                                    {confirmStatus === 'confirmed' ? 'check_circle' : 'cancel'}
+                                                                </span>
+                                                                <span style={{ fontSize: '11px', fontWeight: 700, color: confirmStatus === 'confirmed' ? '#00450d' : '#ba1a1a', fontFamily: 'Manrope,sans-serif' }}>
+                                                                    {confirmStatus === 'confirmed' ? 'Waste ready' : 'Unable to hand over'}
+                                                                </span>
+                                                            </div>
+                                                            <button onClick={() => cancelConfirmation(t.id)}
+                                                                style={{ fontSize: '10px', fontWeight: 600, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 6px', borderRadius: '6px', fontFamily: 'Manrope,sans-serif' }}>
+                                                                Change
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                                            <button onClick={() => confirmHandover(t.id, 'confirmed')} disabled={isConfirming}
+                                                                className="confirm-btn"
+                                                                style={{ background: '#00450d', color: 'white' }}>
+                                                                {isConfirming
+                                                                    ? <div style={{ width: '10px', height: '10px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.8s linear infinite' }} />
+                                                                    : <span className="msf" style={{ fontSize: '13px' }}>thumb_up</span>}
+                                                                I'll have waste ready
+                                                            </button>
+                                                            <button onClick={() => confirmHandover(t.id, 'unable')} disabled={isConfirming}
+                                                                className="confirm-btn"
+                                                                style={{ background: 'white', color: '#ba1a1a', border: '1.5px solid rgba(186,26,26,0.2)' }}>
+                                                                <span className="msf" style={{ fontSize: '13px' }}>cancel</span>
+                                                                Unable
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )
@@ -394,7 +499,7 @@ export default function CommercialSchedulePage() {
                             </div>
                         </div>
 
-                        {/* Your stops */}
+                        {/* Your stops — unchanged */}
                         <div className="card">
                             <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
                                 <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>Your Stops</h2>
@@ -423,9 +528,7 @@ export default function CommercialSchedulePage() {
                                                             <p style={{ fontSize: '13px', fontWeight: 700, color: '#181c22' }}>
                                                                 {stop.road_name || stop.address || `Stop #${stop.stop_order}`}
                                                             </p>
-                                                            <span className="chip" style={{ background: s.bg, color: s.text, borderColor: s.border }}>
-                                                                {wl(stop.waste_type)}
-                                                            </span>
+                                                            <span className="chip" style={{ background: s.bg, color: s.text, borderColor: s.border }}>{wl(stop.waste_type)}</span>
                                                         </div>
                                                         <p style={{ fontSize: '11px', color: '#94a3b8' }}>
                                                             {stop.bin_quantity ? `${stop.bin_quantity}× ` : ''}{stop.bin_size || ''}{stop.frequency ? ` · ${stop.frequency.replace(/_/g, ' ')}` : ''}
