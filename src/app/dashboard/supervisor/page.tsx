@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
@@ -64,6 +64,7 @@ export default function SupervisorDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [activeTab, setActiveTab] = useState<'overview' | 'monitor'>('overview')
   const [refreshing, setRefreshing] = useState(false)
+  const channelRef = useRef<any>(null)
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000)
@@ -72,6 +73,10 @@ export default function SupervisorDashboard() {
 
   useEffect(() => {
     init()
+    return () => {
+      const supabase = createClient()
+      if (channelRef.current) supabase.removeChannel(channelRef.current)
+    }
   }, [router])
 
   async function init() {
@@ -87,10 +92,26 @@ export default function SupervisorDashboard() {
     setProfile(prof)
     await loadData(user.id, prof)
     setLoading(false)
+
+    // Realtime subscription — new alerts appear instantly
+    if (channelRef.current) supabase.removeChannel(channelRef.current)
+    channelRef.current = supabase
+      .channel('supervisor-dashboard-alerts')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'exception_alerts',
+      }, (payload) => {
+        const newAlert = payload.new as AlertItem
+        setAlerts(prev => [newAlert, ...prev.slice(0, 7)])
+        setStats(prev => ({ ...prev, unresolvedAlerts: prev.unresolvedAlerts + 1 }))
+      })
+      .subscribe()
   }
 
   async function loadData(userId: string, prof: any) {
     const supabase = createClient()
+    const wards: string[] = prof?.assigned_wards || []
 
     const { data: alertData } = await supabase
       .from('exception_alerts').select('*')
@@ -99,16 +120,20 @@ export default function SupervisorDashboard() {
     const { count: unresolvedCount } = await supabase
       .from('exception_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false)
 
-    // R15 — fetch routes with stop counts and driver info
-    const { data: routeData } = await supabase
+    let routeQuery = supabase
       .from('routes')
       .select(`
-        id, route_name, district, status, driver_id,
+        id, route_name, district, status, driver_id, ward,
         profiles:driver_id(full_name),
         collection_stops(id, status)
       `)
+      .eq('district', prof?.district || '')
       .order('created_at', { ascending: false })
       .limit(12)
+    if (wards.length > 0) {
+      routeQuery = routeQuery.in('ward', wards)
+    }
+    const { data: routeData } = await routeQuery
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -116,13 +141,17 @@ export default function SupervisorDashboard() {
       .from('collection_events').select('*', { count: 'exact', head: true })
       .eq('status', 'completed').gte('collected_at', today.toISOString())
 
-    const { data: scheduleData } = await supabase
+    let scheduleQuery = supabase
       .from('schedules').select('*')
-      .eq('supervisor_id', userId)
       .eq('published', true)
+      .eq('district', prof?.district || '')
       .gte('scheduled_date', new Date().toISOString().split('T')[0])
       .order('scheduled_date', { ascending: true })
       .limit(5)
+    if (wards.length > 0) {
+      scheduleQuery = scheduleQuery.overlaps('wards', wards)
+    }
+    const { data: scheduleData } = await scheduleQuery
 
     setAlerts(alertData || [])
     setSchedules(scheduleData || [])
@@ -313,7 +342,7 @@ export default function SupervisorDashboard() {
               <button onClick={() => setActiveTab('monitor')} className={`tab-btn ${activeTab === 'monitor' ? 'tab-active' : 'tab-inactive'}`} style={{ position: 'relative' }}>
                 Live Monitor
                 {stats.activeRoutes > 0 && (
-                  <span style={{ marginLeft: '6px', background: activeTab === 'monitor' ? 'rgba(255,255,255,0.3)' : '#00450d', color: activeTab === 'monitor' ? 'white' : 'white', borderRadius: '99px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
+                  <span style={{ marginLeft: '6px', background: activeTab === 'monitor' ? 'rgba(255,255,255,0.3)' : '#00450d', color: 'white', borderRadius: '99px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
                     {stats.activeRoutes}
                   </span>
                 )}
@@ -321,7 +350,9 @@ export default function SupervisorDashboard() {
             </div>
           </div>
         </div>
+
         <AnnouncementsWidget role="supervisor" district={profile?.district} compact />
+
         {/* Stat Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
           {[
@@ -344,7 +375,6 @@ export default function SupervisorDashboard() {
         {/* OVERVIEW TAB */}
         {activeTab === 'overview' && (
           <>
-            {/* Assigned Wards + Schedules */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
               <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
@@ -479,6 +509,8 @@ export default function SupervisorDashboard() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
                       { icon: 'notifications_active', label: 'Manage Alerts', sub: 'Review & resolve exceptions', href: '/dashboard/supervisor/alerts', color: '#ef4444', bg: 'rgba(239,68,68,0.06)' },
+                      { icon: 'route', label: 'View Routes', sub: 'Monitor collection routes', href: '/dashboard/supervisor/routes', color: '#1d4ed8', bg: 'rgba(29,78,216,0.06)' },
+                      { icon: 'feedback', label: 'Complaints', sub: 'Resident complaints in district', href: '/dashboard/supervisor/complaints', color: '#d97706', bg: 'rgba(217,119,6,0.06)' },
                       { icon: 'content_paste', label: 'Waste Reports', sub: 'Review crowdsourced reports', href: '/dashboard/supervisor/waste-reports', color: '#7c3aed', bg: 'rgba(124,58,237,0.06)' },
                     ].map(action => (
                       <Link key={action.label} href={action.href} style={{ textDecoration: 'none' }}>
@@ -520,10 +552,9 @@ export default function SupervisorDashboard() {
           </>
         )}
 
-        {/* LIVE MONITOR TAB — R15 */}
+        {/* LIVE MONITOR TAB */}
         {activeTab === 'monitor' && (
           <div>
-            {/* Monitor header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div className="live-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 0 3px rgba(34,197,94,0.2)' }} />
@@ -532,16 +563,11 @@ export default function SupervisorDashboard() {
                 </h2>
               </div>
               <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#717a6d' }}>
-                <span style={{ padding: '4px 10px', borderRadius: '99px', background: 'rgba(0,69,13,0.08)', color: '#00450d', fontWeight: 700 }}>
-                  {activeRoutes.length} active
-                </span>
-                <span style={{ padding: '4px 10px', borderRadius: '99px', background: 'rgba(239,68,68,0.08)', color: '#dc2626', fontWeight: 700 }}>
-                  {alerts.length} alerts
-                </span>
+                <span style={{ padding: '4px 10px', borderRadius: '99px', background: 'rgba(0,69,13,0.08)', color: '#00450d', fontWeight: 700 }}>{activeRoutes.length} active</span>
+                <span style={{ padding: '4px 10px', borderRadius: '99px', background: 'rgba(239,68,68,0.08)', color: '#dc2626', fontWeight: 700 }}>{alerts.length} alerts</span>
               </div>
             </div>
 
-            {/* Priority alerts banner */}
             {alerts.filter(a => a.severity === 'critical' || a.severity === 'high').length > 0 && (
               <div style={{ background: '#fef2f2', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '14px', padding: '16px 20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <span className="material-symbols-outlined" style={{ color: '#dc2626', fontSize: '22px', flexShrink: 0 }}>emergency</span>
@@ -573,18 +599,12 @@ export default function SupervisorDashboard() {
                   const routeAlerts = alerts.filter(a => a.route_id === route.id)
                   const hasAlerts = routeAlerts.length > 0
                   const isActive = route.status === 'active'
-
                   return (
-                    <div key={route.id}
-                      className={`route-monitor-card ${isActive ? 'active-route' : ''} ${hasAlerts ? 'alert-route' : ''}`}>
-
-                      {/* Route header */}
+                    <div key={route.id} className={`route-monitor-card ${isActive ? 'active-route' : ''} ${hasAlerts ? 'alert-route' : ''}`}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                            <p style={{ fontSize: '14px', fontWeight: 700, color: '#181c22', margin: 0, fontFamily: 'Manrope, sans-serif' }}>
-                              {route.route_name}
-                            </p>
+                            <p style={{ fontSize: '14px', fontWeight: 700, color: '#181c22', margin: 0, fontFamily: 'Manrope, sans-serif' }}>{route.route_name}</p>
                             <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: sc.bg, color: sc.text, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                               <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.dot, display: 'inline-block' }} />
                               {route.status}
@@ -599,16 +619,12 @@ export default function SupervisorDashboard() {
                           <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>{route.district}</p>
                         </div>
                       </div>
-
-                      {/* Driver info */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 12px', borderRadius: '10px', background: route.driver_id ? 'rgba(0,69,13,0.05)' : '#f8fafc' }}>
                         <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: route.driver_id ? '#00450d' : '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <span className="material-symbols-outlined" style={{ fontSize: '16px', color: route.driver_id ? 'white' : '#9ca3af' }}>person</span>
                         </div>
                         <div>
-                          <p style={{ fontSize: '13px', fontWeight: 600, color: route.driver_id ? '#181c22' : '#9ca3af', margin: 0 }}>
-                            {route.driver_name || 'No driver assigned'}
-                          </p>
+                          <p style={{ fontSize: '13px', fontWeight: 600, color: route.driver_id ? '#181c22' : '#9ca3af', margin: 0 }}>{route.driver_name || 'No driver assigned'}</p>
                           {route.driver_id && isActive && (
                             <p style={{ fontSize: '11px', color: '#00450d', margin: 0, display: 'flex', alignItems: 'center', gap: '3px' }}>
                               <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
@@ -617,21 +633,14 @@ export default function SupervisorDashboard() {
                           )}
                         </div>
                       </div>
-
-                      {/* Collection progress */}
                       {route.total_stops > 0 && (
                         <div style={{ marginBottom: '14px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                             <span style={{ fontSize: '12px', color: '#717a6d' }}>Collection Progress</span>
-                            <span style={{ fontSize: '12px', fontWeight: 700, color: completionPct >= 80 ? '#00450d' : completionPct >= 50 ? '#d97706' : '#64748b' }}>
-                              {completionPct}%
-                            </span>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: completionPct >= 80 ? '#00450d' : completionPct >= 50 ? '#d97706' : '#64748b' }}>{completionPct}%</span>
                           </div>
                           <div className="progress-track">
-                            <div className="progress-fill" style={{
-                              width: `${completionPct}%`,
-                              background: completionPct >= 80 ? '#00450d' : completionPct >= 50 ? '#d97706' : '#94a3b8',
-                            }} />
+                            <div className="progress-fill" style={{ width: `${completionPct}%`, background: completionPct >= 80 ? '#00450d' : completionPct >= 50 ? '#d97706' : '#94a3b8' }} />
                           </div>
                           <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '11px', color: '#94a3b8' }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#00450d', fontWeight: 600 }}>
@@ -651,8 +660,6 @@ export default function SupervisorDashboard() {
                           </div>
                         </div>
                       )}
-
-                      {/* Active route alerts inline */}
                       {hasAlerts && (
                         <div style={{ borderTop: '1px solid rgba(239,68,68,0.1)', paddingTop: '12px' }}>
                           {routeAlerts.slice(0, 2).map(a => (

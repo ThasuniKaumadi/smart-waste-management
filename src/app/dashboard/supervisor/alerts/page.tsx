@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
@@ -52,8 +52,48 @@ export default function SupervisorAlertsPage() {
     const [resolutionNotes, setResolutionNotes] = useState<Record<string, string>>({})
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [toast, setToast] = useState('')
+    const [realtimeConnected, setRealtimeConnected] = useState(false)
+    const channelRef = useRef<any>(null)
 
-    useEffect(() => { loadData() }, [])
+    useEffect(() => {
+        loadData()
+
+        const supabase = createClient()
+        channelRef.current = supabase
+            .channel('supervisor-alerts-page')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'exception_alerts',
+            }, async (payload) => {
+                // Fetch full alert with joins
+                const { data } = await supabase
+                    .from('exception_alerts')
+                    .select('*, driver:driver_id(full_name), route:route_id(route_name)')
+                    .eq('id', payload.new.id)
+                    .single()
+                if (data) {
+                    setAlerts(prev => [data as Alert, ...prev])
+                    showToast('New alert received')
+                }
+            })
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'exception_alerts',
+            }, (payload) => {
+                setAlerts(prev => prev.map(a =>
+                    a.id === payload.new.id ? { ...a, ...payload.new } : a
+                ))
+            })
+            .subscribe((status) => {
+                setRealtimeConnected(status === 'SUBSCRIBED')
+            })
+
+        return () => {
+            supabase.removeChannel(channelRef.current)
+        }
+    }, [])
 
     function showToast(msg: string) {
         setToast(msg)
@@ -72,10 +112,10 @@ export default function SupervisorAlertsPage() {
         const { data: alertsData, error } = await supabase
             .from('exception_alerts')
             .select(`
-        *,
-        driver:driver_id(full_name),
-        route:route_id(route_name)
-      `)
+                *,
+                driver:driver_id(full_name),
+                route:route_id(route_name)
+            `)
             .order('created_at', { ascending: false })
 
         if (error) console.error('Alerts fetch error:', error)
@@ -103,7 +143,6 @@ export default function SupervisorAlertsPage() {
             setExpandedId(null)
             await loadData()
         } else {
-            // fallback: update directly
             await supabase.from('exception_alerts').update({
                 is_resolved: true,
                 resolved_by: user?.id,
@@ -188,9 +227,13 @@ export default function SupervisorAlertsPage() {
           text-transform: uppercase;
         }
         @keyframes staggerIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideIn  { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse    { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
         .s1 { animation: staggerIn 0.4s ease 0.05s both; }
-        .s2 { animation: staggerIn 0.4s ease 0.1s both; }
+        .s2 { animation: staggerIn 0.4s ease 0.1s  both; }
         .s3 { animation: staggerIn 0.4s ease 0.15s both; }
+        .new-alert { animation: slideIn 0.3s ease both; }
+        .live-dot { animation: pulse 2s ease-in-out infinite; }
       `}</style>
 
             {/* Toast */}
@@ -213,12 +256,21 @@ export default function SupervisorAlertsPage() {
                     style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
                     Supervisor · Exception Management
                 </span>
-                <h1 className="font-headline font-extrabold tracking-tight"
-                    style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
-                    Exception <span style={{ color: '#1b5e20' }}>Alerts</span>
-                </h1>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                    <h1 className="font-headline font-extrabold tracking-tight"
+                        style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
+                        Exception <span style={{ color: '#1b5e20' }}>Alerts</span>
+                    </h1>
+                    {/* Realtime status indicator */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', borderRadius: '99px', background: realtimeConnected ? '#f0fdf4' : '#f8fafc', border: `1px solid ${realtimeConnected ? 'rgba(0,69,13,0.15)' : 'rgba(0,0,0,0.08)'}` }}>
+                        <div className="live-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: realtimeConnected ? '#16a34a' : '#94a3b8' }} />
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: realtimeConnected ? '#00450d' : '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
+                            {realtimeConnected ? 'Live' : 'Connecting...'}
+                        </span>
+                    </div>
+                </div>
                 <p className="text-sm mt-1" style={{ color: '#717a6d' }}>
-                    {profile?.ward || profile?.district || 'Your Area'} · Real-time exception monitoring
+                    {profile?.district || 'Your Area'} · Alerts update automatically in real-time
                 </p>
             </section>
 
@@ -230,9 +282,7 @@ export default function SupervisorAlertsPage() {
                         {unresolvedCount > 0 ? 'error' : 'check_circle'}
                     </span>
                     <p className="text-xs font-bold uppercase mb-1"
-                        style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
-                        Unresolved
-                    </p>
+                        style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>Unresolved</p>
                     <p className="font-headline font-extrabold text-3xl" style={{ color: unresolvedCount > 0 ? '#ba1a1a' : '#181c22' }}>
                         {unresolvedCount}
                     </p>
@@ -245,9 +295,7 @@ export default function SupervisorAlertsPage() {
                     <span className="material-symbols-outlined mb-2 block"
                         style={{ color: criticalCount > 0 ? '#d97706' : '#00450d', fontSize: '28px' }}>warning</span>
                     <p className="text-xs font-bold uppercase mb-1"
-                        style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
-                        High Priority
-                    </p>
+                        style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>High Priority</p>
                     <p className="font-headline font-extrabold text-3xl" style={{ color: criticalCount > 0 ? '#d97706' : '#181c22' }}>
                         {criticalCount}
                     </p>
@@ -258,9 +306,7 @@ export default function SupervisorAlertsPage() {
                     <span className="material-symbols-outlined mb-2 block"
                         style={{ color: '#00450d', fontSize: '28px' }}>task_alt</span>
                     <p className="text-xs font-bold uppercase mb-1"
-                        style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>
-                        Resolved
-                    </p>
+                        style={{ letterSpacing: '0.2em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif' }}>Resolved</p>
                     <p className="font-headline font-extrabold text-3xl" style={{ color: '#181c22' }}>
                         {alerts.filter(a => a.is_resolved).length}
                     </p>
@@ -270,10 +316,12 @@ export default function SupervisorAlertsPage() {
 
             {/* Filter + List */}
             <div className="bento-card s3">
-                {/* Filter bar */}
                 <div className="px-6 py-4 flex items-center justify-between"
                     style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
-                    <h3 className="font-headline font-bold text-lg" style={{ color: '#181c22' }}>Alert Feed</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <h3 className="font-headline font-bold text-lg" style={{ color: '#181c22' }}>Alert Feed</h3>
+                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>{filtered.length} alerts</span>
+                    </div>
                     <div className="flex gap-2">
                         {(['unresolved', 'all', 'resolved'] as const).map(f => (
                             <button key={f} className={`filter-btn ${filter === f ? 'active' : ''}`}
@@ -312,26 +360,25 @@ export default function SupervisorAlertsPage() {
                     </div>
                 ) : (
                     <div>
-                        {filtered.map(alert => {
+                        {filtered.map((alert, idx) => {
                             const sc = SEVERITY_CONFIG[alert.severity] || SEVERITY_CONFIG.medium
                             const icon = TYPE_ICON[alert.type] || 'warning'
                             const isExpanded = expandedId === alert.id
 
                             return (
-                                <div key={alert.id} className="alert-row"
+                                <div key={alert.id}
+                                    className={`alert-row ${idx === 0 ? 'new-alert' : ''}`}
                                     onClick={() => {
                                         setExpandedId(isExpanded ? null : alert.id)
                                         if (!alert.is_read) handleMarkRead(alert.id)
                                     }}>
                                     <div className="flex items-start gap-4">
-                                        {/* Icon */}
                                         <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                                             style={{ background: sc.bg }}>
                                             <span className="material-symbols-outlined"
                                                 style={{ color: sc.color, fontSize: '20px' }}>{icon}</span>
                                         </div>
 
-                                        {/* Content */}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap mb-1">
                                                 <p className="text-sm font-bold" style={{ color: '#181c22', fontFamily: 'Manrope, sans-serif' }}>
@@ -371,14 +418,12 @@ export default function SupervisorAlertsPage() {
                                             </div>
                                         </div>
 
-                                        {/* Chevron */}
                                         <span className="material-symbols-outlined flex-shrink-0"
                                             style={{ color: '#94a3b8', fontSize: '20px', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                                             expand_more
                                         </span>
                                     </div>
 
-                                    {/* Expanded resolve panel */}
                                     {isExpanded && !alert.is_resolved && (
                                         <div className="mt-4 ml-14" onClick={e => e.stopPropagation()}>
                                             <div className="p-4 rounded-xl" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
@@ -416,16 +461,13 @@ export default function SupervisorAlertsPage() {
                                         </div>
                                     )}
 
-                                    {/* Resolved info */}
                                     {isExpanded && alert.is_resolved && (
                                         <div className="mt-4 ml-14">
                                             <div className="p-4 rounded-xl flex items-center gap-3"
                                                 style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
                                                 <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '18px' }}>task_alt</span>
                                                 <div>
-                                                    <p className="text-xs font-bold" style={{ color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>
-                                                        Resolved
-                                                    </p>
+                                                    <p className="text-xs font-bold" style={{ color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>Resolved</p>
                                                     {alert.resolved_at && (
                                                         <p className="text-xs" style={{ color: '#16a34a' }}>
                                                             {new Date(alert.resolved_at).toLocaleString('en-GB', {

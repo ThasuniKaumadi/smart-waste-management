@@ -102,6 +102,9 @@ export default function DERoutesPage() {
     const [routeStops, setRouteStops] = useState<Record<string, RouteStop[]>>({})
     const [loadingStops, setLoadingStops] = useState<string | null>(null)
     const [wards, setWards] = useState<string[]>([])
+    // AI Optimization state
+    const [optimizing, setOptimizing] = useState<string | null>(null)
+    const [optimizeResult, setOptimizeResult] = useState<Record<string, string>>({})
     const [stops, setStops] = useState<Stop[]>([{
         road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day',
         bin_size: '240L', waste_type: 'general', bin_quantity: 1,
@@ -138,29 +141,21 @@ export default function DERoutesPage() {
         setRoutes(routesData || [])
 
         const { data: contractorData } = await supabase
-            .from('profiles')
-            .select('id, full_name, organisation_name')
-            .eq('role', 'contractor')
+            .from('profiles').select('id, full_name, organisation_name').eq('role', 'contractor')
         setContractors(contractorData || [])
 
         const { data: driverData } = await supabase
-            .from('profiles')
-            .select('id, full_name, contractor_id')
-            .eq('role', 'driver')
+            .from('profiles').select('id, full_name, contractor_id').eq('role', 'driver')
         setDrivers(driverData || [])
 
         const { data: commercialData } = await supabase
-            .from('profiles')
-            .select('id, full_name, organisation_name, address')
-            .eq('role', 'commercial_establishment')
-            .eq('district', p?.district || '')
+            .from('profiles').select('id, full_name, organisation_name, address')
+            .eq('role', 'commercial_establishment').eq('district', p?.district || '')
         setCommercials(commercialData || [])
 
         const { data: schedulesData } = await supabase
-            .from('schedules')
-            .select('*')
-            .eq('district', p?.district || '')
-            .eq('published', true)
+            .from('schedules').select('*')
+            .eq('district', p?.district || '').eq('published', true)
             .order('scheduled_date', { ascending: true })
         setSchedules(schedulesData || [])
 
@@ -246,8 +241,7 @@ export default function DERoutesPage() {
                 created_by: user?.id,
                 status: 'pending',
             })
-            .select()
-            .single()
+            .select().single()
 
         if (routeError) { setMessage('Error: ' + routeError.message); setSaving(false); return }
 
@@ -305,6 +299,73 @@ export default function DERoutesPage() {
         const supabase = createClient()
         await supabase.from('routes').update({ status }).eq('id', routeId)
         loadData()
+    }
+
+    async function optimizeRoute(routeId: string, routeStopList: RouteStop[]) {
+        const pendingStops = routeStopList.filter(s => s.status === 'pending')
+        if (pendingStops.length < 3) {
+            setOptimizeResult(prev => ({ ...prev, [routeId]: 'Need at least 3 pending stops to optimize.' }))
+            return
+        }
+        setOptimizing(routeId)
+        setOptimizeResult(prev => ({ ...prev, [routeId]: '' }))
+
+        try {
+            // Get the route's district/ward for context
+            const route = routes.find(r => r.id === routeId)
+            const locationContext = route?.ward ? `${route.ward}, Colombo, Sri Lanka` : 'Colombo, Sri Lanka'
+
+            const origin = `${pendingStops[0].road_name || pendingStops[0].address}, ${locationContext}`
+            const destination = `${pendingStops[pendingStops.length - 1].road_name || pendingStops[pendingStops.length - 1].address}, ${locationContext}`
+            const waypoints = pendingStops.slice(1, -1)
+                .map(s => encodeURIComponent(`${s.road_name || s.address}, ${locationContext}`))
+                .join('|')
+
+            const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=optimize:true|${waypoints}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&region=lk`
+
+            const res = await fetch(`/api/optimize-route?${new URLSearchParams({ url })}`)
+            const data = await res.json()
+
+            if (data.status !== 'OK') {
+                setOptimizeResult(prev => ({ ...prev, [routeId]: `Maps API error: ${data.status}. Check Directions API is enabled.` }))
+                setOptimizing(null)
+                return
+            }
+
+            // Rebuild optimized order — Google returns indices into the middle waypoints
+            const order: number[] = data.routes[0].waypoint_order
+            const middleStops = pendingStops.slice(1, -1)
+            const reordered = [
+                pendingStops[0],
+                ...order.map(i => middleStops[i]),
+                pendingStops[pendingStops.length - 1],
+            ]
+
+            // Update stop_order for pending stops only, keep completed/skipped stops at their positions
+            const supabase = createClient()
+            // Find the highest order among non-pending stops to avoid conflicts
+            const nonPending = routeStopList.filter(s => s.status !== 'pending')
+            const baseOrder = nonPending.length > 0 ? Math.max(...nonPending.map(s => s.stop_order)) : 0
+
+            await Promise.all(reordered.map((stop, index) =>
+                supabase.from('collection_stops')
+                    .update({ stop_order: baseOrder + index + 1 })
+                    .eq('id', stop.id)
+            ))
+
+            // Reload stops with new order
+            const { data: updated } = await supabase
+                .from('collection_stops').select('*')
+                .eq('route_id', routeId).order('stop_order', { ascending: true })
+            setRouteStops(prev => ({ ...prev, [routeId]: updated || [] }))
+
+            // Calculate total distance saved
+            const totalKm = (data.routes[0].legs.reduce((s: number, l: any) => s + l.distance.value, 0) / 1000).toFixed(1)
+            setOptimizeResult(prev => ({ ...prev, [routeId]: `✓ Optimized — ${totalKm} km total · ${pendingStops.length} stops reordered` }))
+        } catch (err) {
+            setOptimizeResult(prev => ({ ...prev, [routeId]: 'Optimization failed. Check API key and Directions API.' }))
+        }
+        setOptimizing(null)
     }
 
     const filtered = routes.filter(r => {
@@ -385,12 +446,10 @@ export default function DERoutesPage() {
           cursor: pointer; transition: all 0.2s ease;
           display: flex; align-items: center; justify-content: center; gap: 6px;
         }
-        .shift-btn.active-day { border-color: #d97706; background: #fefce8; color: #92400e; }
+        .shift-btn.active-day   { border-color: #d97706; background: #fefce8; color: #92400e; }
         .shift-btn.active-night { border-color: #1d4ed8; background: #eff6ff; color: #1e3a8a; }
         .shift-btn:not(.active-day):not(.active-night) { background: white; color: #64748b; }
-        .stop-card {
-          background: #f9f9ff; border: 1.5px solid #e5e7eb; border-radius: 12px; padding: 16px;
-        }
+        .stop-card { background: #f9f9ff; border: 1.5px solid #e5e7eb; border-radius: 12px; padding: 16px; }
         .filter-btn {
           padding: 6px 14px; border-radius: 99px; font-size: 12px; font-weight: 700;
           font-family: 'Manrope', sans-serif; border: none; cursor: pointer; transition: all 0.2s ease;
@@ -412,8 +471,7 @@ export default function DERoutesPage() {
         }
         .stop-row {
           display: flex; align-items: center; gap: 12px;
-          padding: 10px 16px; border-bottom: 1px solid rgba(0,69,13,0.04);
-          font-size: 13px;
+          padding: 10px 16px; border-bottom: 1px solid rgba(0,69,13,0.04); font-size: 13px;
         }
         .stop-row:last-child { border-bottom: none; }
         .ward-card {
@@ -431,14 +489,23 @@ export default function DERoutesPage() {
           text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px;
           font-family: 'Manrope', sans-serif;
         }
+        .optimize-btn {
+          display: flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 99px;
+          font-size: 12px; font-weight: 700; font-family: 'Manrope', sans-serif;
+          border: none; cursor: pointer; transition: all 0.2s ease;
+          background: linear-gradient(135deg, #00450d, #1b5e20); color: white;
+        }
+        .optimize-btn:hover { box-shadow: 0 4px 12px rgba(0,69,13,0.3); transform: translateY(-1px); }
+        .optimize-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
         @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         .s1 { animation: staggerIn 0.5s ease 0.05s both; }
-        .s2 { animation: staggerIn 0.5s ease 0.1s both; }
+        .s2 { animation: staggerIn 0.5s ease 0.1s  both; }
         .s3 { animation: staggerIn 0.5s ease 0.15s both; }
-        .s4 { animation: staggerIn 0.5s ease 0.2s both; }
+        .s4 { animation: staggerIn 0.5s ease 0.2s  both; }
         .s5 { animation: staggerIn 0.5s ease 0.25s both; }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         .slide-down { animation: slideDown 0.3s ease both; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
             {/* Hero */}
@@ -523,22 +590,18 @@ export default function DERoutesPage() {
                             <div>
                                 <label className="field-label">Shift *</label>
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button type="button"
-                                        onClick={() => setFormData(prev => ({ ...prev, shift: 'day' }))}
+                                    <button type="button" onClick={() => setFormData(prev => ({ ...prev, shift: 'day' }))}
                                         className={`shift-btn ${formData.shift === 'day' ? 'active-day' : ''}`}>
-                                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>wb_sunny</span>
-                                        Day
+                                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>wb_sunny</span>Day
                                     </button>
-                                    <button type="button"
-                                        onClick={() => setFormData(prev => ({ ...prev, shift: 'night' }))}
+                                    <button type="button" onClick={() => setFormData(prev => ({ ...prev, shift: 'night' }))}
                                         className={`shift-btn ${formData.shift === 'night' ? 'active-night' : ''}`}>
-                                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>nights_stay</span>
-                                        Night
+                                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>nights_stay</span>Night
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Link to schedule */}
+                            {/* Schedule */}
                             <div style={{ gridColumn: '1 / -1' }}>
                                 <label className="field-label">
                                     Link to Published Schedule
@@ -548,7 +611,7 @@ export default function DERoutesPage() {
                                 </label>
                                 {wardSchedules.length === 0 ? (
                                     <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#fefce8', border: '1px solid rgba(217,119,6,0.2)', fontSize: '13px', color: '#92400e' }}>
-                                        ⚠ No published schedules for {formData.ward || 'this ward'} yet. Publish a schedule first.
+                                        ⚠ No published schedules for {formData.ward || 'this ward'} yet.
                                     </div>
                                 ) : (
                                     <select className="select-field" value={formData.schedule_id}
@@ -577,9 +640,7 @@ export default function DERoutesPage() {
                             <div>
                                 <label className="field-label">
                                     Contractor
-                                    <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>
-                                        (Leave blank for CMC Direct)
-                                    </span>
+                                    <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>(Leave blank for CMC Direct)</span>
                                 </label>
                                 <select className="select-field" value={formData.contractor_id}
                                     onChange={e => setFormData({ ...formData, contractor_id: e.target.value, driver_id: '' })}>
@@ -628,9 +689,7 @@ export default function DERoutesPage() {
                             <div style={{ gridColumn: '1 / -1' }}>
                                 <label className="field-label">
                                     Route Name
-                                    <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>
-                                        (Auto-generated if empty)
-                                    </span>
+                                    <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>(Auto-generated if empty)</span>
                                 </label>
                                 <input type="text" className="form-field"
                                     placeholder={`e.g. ${formData.ward || 'Mattakkuliya'} Morning Route`}
@@ -684,11 +743,8 @@ export default function DERoutesPage() {
                                             </div>
                                         </div>
 
-                                        {/* Commercial expanded section */}
                                         {stop.is_commercial && (
                                             <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-
-                                                {/* Establishment picker */}
                                                 <div>
                                                     <label className="sub-label">Commercial Establishment</label>
                                                     <select className="select-field" value={stop.commercial_id}
@@ -704,8 +760,6 @@ export default function DERoutesPage() {
                                                         ? <p style={{ fontSize: '11px', color: '#00450d', marginTop: '4px' }}>✓ Billing auto-generated on collection</p>
                                                         : <p style={{ fontSize: '11px', color: '#d97706', marginTop: '4px' }}>⚠ Select an establishment to enable billing</p>}
                                                 </div>
-
-                                                {/* Bin details */}
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                                                     <div>
                                                         <label className="sub-label">Bin Size</label>
@@ -734,8 +788,6 @@ export default function DERoutesPage() {
                                                             onChange={e => updateStop(index, 'bin_quantity', Number(e.target.value))} />
                                                     </div>
                                                 </div>
-
-                                                {/* Charge summary */}
                                                 <div style={{ padding: '8px 12px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)' }}>
                                                     <p style={{ fontSize: '11px', color: '#00450d', margin: 0 }}>
                                                         💰 Charge basis: <strong>{stop.bin_quantity} × {stop.bin_size}</strong> bin{stop.bin_quantity !== 1 ? 's' : ''} of <strong>{stop.waste_type}</strong> waste
@@ -752,9 +804,9 @@ export default function DERoutesPage() {
                             <button type="submit" disabled={saving} className="submit-btn">
                                 {saving ? (
                                     <>
-                                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        <svg style={{ width: '16px', height: '16px', animation: 'spin 0.8s linear infinite' }} fill="none" viewBox="0 0 24 24">
+                                            <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                         </svg>
                                         Creating Route...
                                     </>
@@ -843,7 +895,7 @@ export default function DERoutesPage() {
                             const ss = STATUS_STYLE[route.status] || STATUS_STYLE.pending
                             const ws = route.waste_type ? (WASTE_STYLE[route.waste_type] || { color: '#64748b', bg: '#f8fafc' }) : null
                             const isExpanded = expandedRoute === route.id
-                            const stops = routeStops[route.id] || []
+                            const currentStops = routeStops[route.id] || []
 
                             return (
                                 <div key={route.id}>
@@ -885,7 +937,6 @@ export default function DERoutesPage() {
                                                 </div>
                                             </div>
 
-                                            {/* Status actions */}
                                             <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                                 {route.status === 'pending' && (
                                                     <button onClick={() => updateRouteStatus(route.id, 'active')}
@@ -917,21 +968,46 @@ export default function DERoutesPage() {
                                                     <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto"
                                                         style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
                                                 </div>
-                                            ) : stops.length === 0 ? (
+                                            ) : currentStops.length === 0 ? (
                                                 <div style={{ padding: '16px 24px', fontSize: '13px', color: '#94a3b8' }}>No stops added yet</div>
                                             ) : (
                                                 <div>
-                                                    <div style={{ padding: '10px 24px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    {/* Stops header with Optimize button */}
+                                                    <div style={{ padding: '12px 24px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                                                         <p style={{ fontSize: '11px', fontWeight: 700, color: '#717a6d', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'Manrope, sans-serif' }}>
-                                                            {stops.length} roads/stops
+                                                            {currentStops.length} roads/stops
                                                         </p>
-                                                        <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#94a3b8' }}>
-                                                            <span style={{ color: '#00450d' }}>✓ {stops.filter(s => s.status === 'completed').length} done</span>
-                                                            <span style={{ color: '#dc2626' }}>✗ {stops.filter(s => s.status === 'skipped').length} skipped</span>
-                                                            <span style={{ color: '#d97706' }}>○ {stops.filter(s => s.status === 'pending').length} pending</span>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                                            <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#94a3b8' }}>
+                                                                <span style={{ color: '#00450d' }}>✓ {currentStops.filter(s => s.status === 'completed').length} done</span>
+                                                                <span style={{ color: '#dc2626' }}>✗ {currentStops.filter(s => s.status === 'skipped').length} skipped</span>
+                                                                <span style={{ color: '#d97706' }}>○ {currentStops.filter(s => s.status === 'pending').length} pending</span>
+                                                            </div>
+                                                            {/* Optimize button — show when 3+ pending stops */}
+                                                            {currentStops.filter(s => s.status === 'pending').length >= 3 && (
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                    {optimizeResult[route.id] && (
+                                                                        <span style={{ fontSize: '11px', fontWeight: 600, color: optimizeResult[route.id].startsWith('✓') ? '#00450d' : '#dc2626', fontFamily: 'Manrope, sans-serif' }}>
+                                                                            {optimizeResult[route.id]}
+                                                                        </span>
+                                                                    )}
+                                                                    <button
+                                                                        className="optimize-btn"
+                                                                        disabled={optimizing === route.id}
+                                                                        onClick={e => { e.stopPropagation(); optimizeRoute(route.id, currentStops) }}>
+                                                                        {optimizing === route.id ? (
+                                                                            <><div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />Optimizing...</>
+                                                                        ) : (
+                                                                            <><span className="material-symbols-outlined" style={{ fontSize: 14 }}>auto_fix_high</span>AI Optimize Order</>
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
-                                                    {stops.map(stop => {
+
+                                                    {/* Stop rows */}
+                                                    {currentStops.map(stop => {
                                                         const fs = getStopFrequencyStyle(stop.frequency)
                                                         return (
                                                             <div key={stop.id} className="stop-row">
@@ -951,6 +1027,7 @@ export default function DERoutesPage() {
                                                                     )}
                                                                 </div>
                                                                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                                    <span style={{ fontSize: '10px', color: '#94a3b8', fontFamily: 'Manrope, sans-serif', fontWeight: 700 }}>#{stop.stop_order}</span>
                                                                     {stop.frequency && (
                                                                         <span className="badge" style={{ background: fs.bg, color: fs.color }}>
                                                                             {stop.frequency.replace(/_/g, ' ')}
