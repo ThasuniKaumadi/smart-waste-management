@@ -5,15 +5,17 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const SUPERVISOR_NAV = [
-    { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard' },
-    { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route' },
-    { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people' },
-    { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed' },
-    { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications' },
-    { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback' },
-    { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report' },
-    { label: 'Schedule Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'calendar_month' },
-    { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf' },
+    { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard', section: 'Main' },
+    { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route', section: 'Operations' },
+    { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people', section: 'Operations' },
+    { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed', section: 'Operations' },
+    { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications_active', section: 'Operations' },
+    { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback', section: 'Operations' },
+    { label: 'Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'fact_check', section: 'Reports' },
+    { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report', section: 'Reports' },
+    { label: 'Ward Heatmap', href: '/dashboard/supervisor/heatmap', icon: 'map', section: 'Reports' },
+    { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf', section: 'Reports' },
+    { label: 'Announcements', href: '/dashboard/supervisor/announcements', icon: 'campaign', section: 'Communications' },
 ]
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
