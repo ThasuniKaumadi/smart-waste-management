@@ -163,7 +163,7 @@ export default function ContractorCompliancePage() {
                 grade,
                 trend: score >= 70 ? 'up' : score >= 50 ? 'stable' : 'down',
             }
-        }).filter(c => c.totalRoutes > 0)
+        }).filter(c => c.totalRoutes > 0) as ContractorCompliance[]
 
         const sorted = stats.sort((a, b) => b.score - a.score)
         setContractors(sorted)
