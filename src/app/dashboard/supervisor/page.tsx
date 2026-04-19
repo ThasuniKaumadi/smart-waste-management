@@ -38,6 +38,7 @@ interface RouteItem {
   skipped_stops: number
   driver_name?: string
   alert_count?: number
+  shift?: string
 }
 
 interface ScheduleItem {
@@ -93,7 +94,6 @@ export default function SupervisorDashboard() {
     await loadData(user.id, prof)
     setLoading(false)
 
-    // Realtime subscription — new alerts appear instantly
     if (channelRef.current) supabase.removeChannel(channelRef.current)
     channelRef.current = supabase
       .channel('supervisor-dashboard-alerts')
@@ -123,7 +123,7 @@ export default function SupervisorDashboard() {
     let routeQuery = supabase
       .from('routes')
       .select(`
-        id, route_name, district, status, driver_id, ward,
+        id, route_name, district, status, driver_id, ward, shift,
         profiles:driver_id(full_name),
         collection_stops(id, status)
       `)
@@ -173,6 +173,7 @@ export default function SupervisorDashboard() {
         completed_stops: completedStops,
         skipped_stops: skippedStops,
         alert_count: routeAlerts,
+        shift: r.shift || null,
       }
     })
 
@@ -229,6 +230,27 @@ export default function SupervisorDashboard() {
   const assignedWards = profile?.assigned_wards || []
   const activeRoutes = routes.filter(r => r.status === 'active')
   const allRoutes = routes
+
+  const dayRoutes = routes.filter(r => r.shift === 'day' || !r.shift)
+  const nightRoutes = routes.filter(r => r.shift === 'night')
+  const shiftSummary = [
+    {
+      label: 'Morning Shift', icon: 'wb_sunny', color: '#d97706', bg: '#fefce8',
+      routes: dayRoutes.length,
+      active: dayRoutes.filter(r => r.status === 'active').length,
+      completed: dayRoutes.filter(r => r.status === 'completed').length,
+      alerts: dayRoutes.reduce((s, r) => s + (r.alert_count || 0), 0),
+      stops: dayRoutes.reduce((s, r) => s + r.completed_stops, 0),
+    },
+    {
+      label: 'Evening Shift', icon: 'nights_stay', color: '#4338ca', bg: '#eef2ff',
+      routes: nightRoutes.length,
+      active: nightRoutes.filter(r => r.status === 'active').length,
+      completed: nightRoutes.filter(r => r.status === 'completed').length,
+      alerts: nightRoutes.reduce((s, r) => s + (r.alert_count || 0), 0),
+      stops: nightRoutes.reduce((s, r) => s + r.completed_stops, 0),
+    },
+  ]
 
   if (loading) {
     return (
@@ -371,6 +393,58 @@ export default function SupervisorDashboard() {
             </div>
           ))}
         </div>
+
+        {/* Shift Summary */}
+        {activeTab === 'overview' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+            {shiftSummary.map(shift => (
+              <div key={shift.label} style={{ background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: shift.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '20px', color: shift.color }}>{shift.icon}</span>
+                    </div>
+                    <div>
+                      <p style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', color: '#181c22', margin: 0 }}>{shift.label}</p>
+                      <p style={{ fontSize: '11px', color: '#717a6d', margin: 0 }}>{shift.routes} route{shift.routes !== 1 ? 's' : ''} today</p>
+                    </div>
+                  </div>
+                  {shift.alerts > 0 && (
+                    <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 10px', borderRadius: '99px', background: '#fef2f2', color: '#dc2626', fontFamily: 'Manrope, sans-serif' }}>
+                      {shift.alerts} alert{shift.alerts !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                  {[
+                    { label: 'Active', value: shift.active, color: '#1d4ed8' },
+                    { label: 'Completed', value: shift.completed, color: '#00450d' },
+                    { label: 'Stops done', value: shift.stops, color: '#7c3aed' },
+                    { label: 'Alerts', value: shift.alerts, color: shift.alerts > 0 ? '#dc2626' : '#94a3b8' },
+                  ].map(m => (
+                    <div key={m.label} style={{ background: '#f8fafc', borderRadius: '10px', padding: '10px 12px', textAlign: 'center' }}>
+                      <p style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: '20px', color: m.color, margin: '0 0 2px', lineHeight: 1 }}>{m.value}</p>
+                      <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.label}</p>
+                    </div>
+                  ))}
+                </div>
+                {shift.routes > 0 && (
+                  <div style={{ marginTop: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '11px', color: '#717a6d' }}>Completion rate</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#00450d' }}>
+                        {Math.round((shift.completed / shift.routes) * 100)}%
+                      </span>
+                    </div>
+                    <div style={{ height: '5px', background: '#f0fdf4', borderRadius: '99px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: '99px', background: shift.color, width: `${Math.round((shift.completed / shift.routes) * 100)}%`, transition: 'width 0.8s ease' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* OVERVIEW TAB */}
         {activeTab === 'overview' && (
