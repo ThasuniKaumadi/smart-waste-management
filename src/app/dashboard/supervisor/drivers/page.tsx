@@ -12,6 +12,8 @@ const SUPERVISOR_NAV = [
     { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications' },
     { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback' },
     { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report' },
+    { label: 'Schedule Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'calendar_month' },
+    { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf' },
 ]
 
 interface DriverStat {

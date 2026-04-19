@@ -6,9 +6,14 @@ import DashboardLayout from '@/components/DashboardLayout'
 
 const SUPERVISOR_NAV = [
     { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard' },
-    { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications_active' },
     { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route' },
+    { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people' },
+    { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed' },
+    { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications' },
     { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback' },
+    { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report' },
+    { label: 'Schedule Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'calendar_month' },
+    { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf' },
 ]
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string }> = {

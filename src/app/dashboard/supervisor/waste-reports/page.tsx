@@ -5,6 +5,18 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 
+const SUPERVISOR_NAV = [
+    { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard' },
+    { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route' },
+    { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people' },
+    { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed' },
+    { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications' },
+    { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback' },
+    { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report' },
+    { label: 'Schedule Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'calendar_month' },
+    { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf' },
+]
+
 const REPORT_TYPES = [
     { value: 'illegal_dumping', label: 'Illegal Dumping', icon: 'delete_forever', color: '#ef4444', description: 'Someone dumping waste illegally' },
     { value: 'missed_collection', label: 'Missed Collection', icon: 'delete', color: '#f97316', description: 'Scheduled collection did not happen' },

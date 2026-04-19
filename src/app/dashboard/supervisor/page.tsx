@@ -7,6 +7,18 @@ import { createClient } from '@/lib/supabase'
 import { ROLE_DASHBOARDS } from '@/lib/types'
 import AnnouncementsWidget from '@/components/AnnouncementsWidget'
 
+const SUPERVISOR_NAV = [
+  { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard' },
+  { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route' },
+  { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people' },
+  { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed' },
+  { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications' },
+  { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback' },
+  { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report' },
+  { label: 'Schedule Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'calendar_month' },
+  { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf' },
+]
+
 interface Profile {
   id: string
   full_name: string
@@ -66,6 +78,7 @@ export default function SupervisorDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'monitor'>('overview')
   const [refreshing, setRefreshing] = useState(false)
   const channelRef = useRef<any>(null)
+  const [vehicleLocations, setVehicleLocations] = useState<Record<string, any>>({})
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000)
@@ -79,6 +92,25 @@ export default function SupervisorDashboard() {
       if (channelRef.current) supabase.removeChannel(channelRef.current)
     }
   }, [router])
+
+  useEffect(() => {
+    if (activeTab === 'monitor') loadVehicleLocations()
+  }, [activeTab, routes])
+
+  async function loadVehicleLocations() {
+    const supabase = createClient()
+    const activeIds = routes.filter(r => r.status === 'active').map(r => r.id)
+    if (activeIds.length === 0) return
+    const { data } = await supabase
+      .from('vehicle_locations')
+      .select('route_id, latitude, longitude, speed_kmh, updated_at')
+      .in('route_id', activeIds)
+      .order('updated_at', { ascending: false })
+    if (!data) return
+    const map: Record<string, any> = {}
+    data.forEach((loc: any) => { if (!map[loc.route_id]) map[loc.route_id] = loc })
+    setVehicleLocations(map)
+  }
 
   async function init() {
     const supabase = createClient()
@@ -293,8 +325,6 @@ export default function SupervisorDashboard() {
         .progress-fill { height:100%; border-radius:99px; transition:width 0.8s ease; }
         .schedule-row { padding:12px 16px; border-bottom:1px solid rgba(0,0,0,0.04); transition:background 0.15s; }
         .schedule-row:last-child { border-bottom:none; }
-        .logout-btn:hover { background:rgba(239,68,68,0.08); color:#dc2626; }
-        .logout-btn { transition:background 0.2s,color 0.2s; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
         .live-dot { animation: pulse 2s ease-in-out infinite; }
@@ -707,6 +737,27 @@ export default function SupervisorDashboard() {
                           )}
                         </div>
                       </div>
+                      {isActive && vehicleLocations[route.id] && (
+                        <div style={{ marginBottom: '14px', padding: '8px 12px', borderRadius: '10px', background: 'rgba(0,69,13,0.04)', border: '1px solid rgba(0,69,13,0.08)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="live-dot" style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                          <div style={{ flex: 1 }}>
+                            <p style={{ fontSize: '11px', fontWeight: 600, color: '#00450d', margin: '0 0 1px' }}>
+                              {vehicleLocations[route.id].latitude.toFixed(4)}, {vehicleLocations[route.id].longitude.toFixed(4)}
+                              {vehicleLocations[route.id].speed_kmh > 0 && ` · ${vehicleLocations[route.id].speed_kmh} km/h`}
+                            </p>
+                            <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0 }}>
+                              Updated {new Date(vehicleLocations[route.id].updated_at).toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px', color: '#00450d' }}>gps_fixed</span>
+                        </div>
+                      )}
+                      {isActive && !vehicleLocations[route.id] && (
+                        <div style={{ marginBottom: '14px', padding: '8px 12px', borderRadius: '10px', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px', color: '#94a3b8' }}>gps_off</span>
+                          <p style={{ fontSize: '11px', color: '#94a3b8', margin: 0 }}>No GPS signal yet</p>
+                        </div>
+                      )}
                       {route.total_stops > 0 && (
                         <div style={{ marginBottom: '14px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
