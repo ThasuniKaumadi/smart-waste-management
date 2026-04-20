@@ -7,23 +7,31 @@ import { ROLE_LABELS } from '@/lib/types'
 import { CMC_DISTRICTS, getWardsForDistrict } from '@/lib/districts'
 
 const ADMIN_NAV = [
-  { label: 'Overview',      href: '/dashboard/admin',               icon: 'dashboard'       },
-  { label: 'Users',         href: '/dashboard/admin/users',         icon: 'manage_accounts' },
-  { label: 'Billing',       href: '/dashboard/admin/billing',       icon: 'payments'        },
-  { label: 'Billing Rates', href: '/dashboard/admin/billing-rates', icon: 'tune'            },
-  { label: 'Blockchain',    href: '/dashboard/admin/blockchain',    icon: 'link'            },
-  { label: 'Performance',   href: '/dashboard/admin/performance',   icon: 'analytics'       },
-  { label: 'Reports',       href: '/dashboard/admin/reports',       icon: 'rate_review'     },
-  { label: 'Profile',       href: '/dashboard/admin/profile',       icon: 'person'          },
+  { label: 'Overview', href: '/dashboard/admin', icon: 'dashboard' },
+  { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts' },
+  { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
+  { label: 'Billing Rates', href: '/dashboard/admin/billing-rates', icon: 'tune' },
+  { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
+  { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
+  { label: 'Reports', href: '/dashboard/admin/reports', icon: 'rate_review' },
+  { label: 'Profile', href: '/dashboard/admin/profile', icon: 'person' },
 ]
 
 const STAFF_ROLES = [
-  { value: 'district_engineer', label: 'District Engineer', icon: 'person' },
+  { value: 'district_engineer', label: 'District Engineer', icon: 'engineering' },
   { value: 'engineer', label: 'Municipal Engineer', icon: 'person' },
   { value: 'contractor', label: 'Contractor', icon: 'local_shipping' },
   { value: 'recycling_partner', label: 'Recycler / Facility', icon: 'recycling' },
   { value: 'supervisor', label: 'Supervisor', icon: 'supervisor_account' },
   { value: 'driver', label: 'Driver', icon: 'drive_eta' },
+]
+
+const WASTE_TYPES = [
+  { value: 'recyclable', label: 'Recyclable Waste' },
+  { value: 'non_recyclable', label: 'Non-Recyclable' },
+  { value: 'glass', label: 'Glass' },
+  { value: 'e_waste', label: 'E-Waste' },
+  { value: 'organic', label: 'Organic Waste' },
 ]
 
 const FACILITY_TYPES = [
@@ -72,26 +80,17 @@ function WardMultiSelect({ selected, onChange, district }: {
   const [open, setOpen] = useState(false)
   const wards = district ? getWardsForDistrict(district) : []
   const filtered = wards.filter(w => w.toLowerCase().includes(query.toLowerCase()))
-
   function toggle(ward: string) {
     onChange(selected.includes(ward) ? selected.filter(w => w !== ward) : [...selected, ward])
   }
-
   return (
     <div style={{ position: 'relative' }}>
-      <div onClick={() => setOpen(!open)} style={{
-        width: '100%', padding: '11px 14px', border: '1.5px solid #e5e7eb',
-        borderRadius: '10px', fontSize: '14px', color: '#181c22',
-        fontFamily: 'Inter, sans-serif', background: '#fafafa', cursor: 'pointer',
-        minHeight: '44px', display: 'flex', flexWrap: 'wrap', gap: '4px',
-        alignItems: 'center', boxSizing: 'border-box',
-      }}>
+      <div onClick={() => setOpen(!open)} style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #e5e7eb', borderRadius: '10px', fontSize: '14px', color: '#181c22', fontFamily: 'Inter, sans-serif', background: '#fafafa', cursor: 'pointer', minHeight: '44px', display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center', boxSizing: 'border-box' }}>
         {selected.length === 0
           ? <span style={{ color: '#9ca3af' }}>Select wards (optional)</span>
           : selected.map(w => (
             <span key={w} style={{ background: '#f0fdf4', color: '#00450d', padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {w}
-              <span onClick={e => { e.stopPropagation(); toggle(w) }} style={{ cursor: 'pointer', opacity: 0.6 }}>×</span>
+              {w}<span onClick={e => { e.stopPropagation(); toggle(w) }} style={{ cursor: 'pointer', opacity: 0.6 }}>×</span>
             </span>
           ))
         }
@@ -99,9 +98,7 @@ function WardMultiSelect({ selected, onChange, district }: {
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1px solid rgba(0,69,13,0.1)', borderRadius: '12px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.12)', zIndex: 100, maxHeight: '220px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '8px', borderBottom: '1px solid #f1f5f9' }}>
-            <input type="text" placeholder="Search wards..." value={query}
-              onChange={e => setQuery(e.target.value)} onClick={e => e.stopPropagation()}
-              style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', outline: 'none', boxSizing: 'border-box' }} />
+            <input type="text" placeholder="Search wards..." value={query} onChange={e => setQuery(e.target.value)} onClick={e => e.stopPropagation()} style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', fontFamily: 'Inter, sans-serif', outline: 'none', boxSizing: 'border-box' }} />
           </div>
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {!district ? (
@@ -109,18 +106,9 @@ function WardMultiSelect({ selected, onChange, district }: {
             ) : filtered.length === 0 ? (
               <div style={{ padding: '12px', textAlign: 'center', fontSize: '13px', color: '#94a3b8' }}>No wards found</div>
             ) : filtered.map(ward => (
-              <div key={ward} onClick={() => toggle(ward)} style={{
-                padding: '9px 14px', fontSize: '13px', fontFamily: 'Inter, sans-serif',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                background: selected.includes(ward) ? '#f0fdf4' : 'white',
-                color: selected.includes(ward) ? '#00450d' : '#181c22',
-              }}>
+              <div key={ward} onClick={() => toggle(ward)} style={{ padding: '9px 14px', fontSize: '13px', fontFamily: 'Inter, sans-serif', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', background: selected.includes(ward) ? '#f0fdf4' : 'white', color: selected.includes(ward) ? '#00450d' : '#181c22' }}>
                 <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: `2px solid ${selected.includes(ward) ? '#00450d' : '#e5e7eb'}`, background: selected.includes(ward) ? '#00450d' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {selected.includes(ward) && (
-                    <svg style={{ width: '9px', height: '9px' }} fill="none" stroke="white" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
+                  {selected.includes(ward) && <svg style={{ width: '9px', height: '9px' }} fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                 </div>
                 {ward}
               </div>
@@ -130,6 +118,24 @@ function WardMultiSelect({ selected, onChange, district }: {
       )}
     </div>
   )
+}
+
+const EMPTY_FORM = {
+  firstName: '', lastName: '', email: '', password: '', role: '',
+  district: '', phone: '',
+  // Contractor
+  contractor_name: '', contractor_email: '', contractor_phone: '',
+  contractor_address: '', contractor_district: '', business_registration_number: '',
+  // Contract details
+  contract_number: '', contract_start_date: '', contract_end_date: '',
+  contract_value: '', payment_terms: 'monthly',
+  kpi_collection_rate: '95', kpi_ontime_rate: '90', kpi_complaint_limit: '10',
+  terms_and_conditions: '',
+  // Recycler
+  facility_name: '', facility_type: '', facility_type_custom: '',
+  facility_address: '', facility_email: '', facility_phone: '',
+  // Driver
+  license_number: '', license_expiry: '', contractor_id: '', vehicle_registration: '',
 }
 
 export default function AdminUsersPage() {
@@ -143,21 +149,11 @@ export default function AdminUsersPage() {
   const [filterRole, setFilterRole] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [assignedWards, setAssignedWards] = useState<string[]>([])
+  const [wasteTypes, setWasteTypes] = useState<string[]>([])
 
-  // Edit state
   const [editingUser, setEditingUser] = useState<Profile | null>(null)
-  const [editData, setEditData] = useState({
-    full_name: '', district: '', phone: '', organisation_name: '', role: '',
-  })
-
-  const [formData, setFormData] = useState({
-    firstName: '', lastName: '', email: '', password: '', role: '',
-    district: '', phone: '',
-    contractor_name: '', contractor_address: '', contractor_email: '', contractor_phone: '',
-    facility_name: '', facility_type: '', facility_type_custom: '',
-    facility_address: '', facility_email: '', facility_phone: '',
-    license_number: '', license_expiry: '', contractor_id: '',
-  })
+  const [editData, setEditData] = useState({ full_name: '', district: '', phone: '', organisation_name: '', role: '' })
+  const [formData, setFormData] = useState(EMPTY_FORM)
 
   useEffect(() => { loadData() }, [])
 
@@ -175,25 +171,14 @@ export default function AdminUsersPage() {
   }
 
   function resetForm() {
-    setFormData({
-      firstName: '', lastName: '', email: '', password: '', role: '',
-      district: '', phone: '', contractor_name: '', contractor_address: '',
-      contractor_email: '', contractor_phone: '', facility_name: '', facility_type: '',
-      facility_type_custom: '', facility_address: '', facility_email: '', facility_phone: '',
-      license_number: '', license_expiry: '', contractor_id: '',
-    })
+    setFormData(EMPTY_FORM)
     setAssignedWards([])
+    setWasteTypes([])
   }
 
   function openEdit(user: Profile) {
     setEditingUser(user)
-    setEditData({
-      full_name: user.full_name || '',
-      district: user.district || '',
-      phone: (user as any).phone || '',
-      organisation_name: user.organisation_name || '',
-      role: user.role || '',
-    })
+    setEditData({ full_name: user.full_name || '', district: user.district || '', phone: (user as any).phone || '', organisation_name: user.organisation_name || '', role: user.role || '' })
   }
 
   async function handleEditUser(e: React.FormEvent) {
@@ -240,19 +225,59 @@ export default function AdminUsersPage() {
         : formData.role === 'contractor' ? formData.contractor_name : formData.facility_name
 
       const facilityTypeValue = formData.facility_type === 'custom' ? formData.facility_type_custom : formData.facility_type
-
       const profileInsert: any = { id: data.user.id, full_name: fullName, role: formData.role, is_approved: true }
 
       if (['district_engineer', 'supervisor'].includes(formData.role)) profileInsert.district = formData.district || null
       if (formData.role === 'supervisor') { profileInsert.assigned_wards = assignedWards.length > 0 ? assignedWards : null; profileInsert.phone = formData.phone || null }
       if (['district_engineer', 'engineer'].includes(formData.role)) profileInsert.phone = formData.phone || null
-      if (formData.role === 'contractor') { profileInsert.organisation_name = formData.contractor_name || null; profileInsert.address = formData.contractor_address || null; profileInsert.phone = formData.contractor_phone || null }
-      if (formData.role === 'recycling_partner') { profileInsert.organisation_name = formData.facility_name || null; profileInsert.facility_type = facilityTypeValue || null; profileInsert.address = formData.facility_address || null; profileInsert.phone = formData.facility_phone || null }
-      if (formData.role === 'driver') { profileInsert.phone = formData.phone || null; profileInsert.license_number = formData.license_number || null; profileInsert.license_expiry = formData.license_expiry || null; profileInsert.contractor_id = formData.contractor_id || null }
+      if (formData.role === 'contractor') {
+        profileInsert.organisation_name = formData.contractor_name || null
+        profileInsert.address = formData.contractor_address || null
+        profileInsert.phone = formData.contractor_phone || null
+        profileInsert.district = formData.contractor_district || null
+        profileInsert.business_registration_number = formData.business_registration_number || null
+      }
+      if (formData.role === 'recycling_partner') {
+        profileInsert.organisation_name = formData.facility_name || null
+        profileInsert.facility_type = facilityTypeValue || null
+        profileInsert.address = formData.facility_address || null
+        profileInsert.phone = formData.facility_phone || null
+        profileInsert.waste_types_accepted = wasteTypes.length > 0 ? wasteTypes : null
+      }
+      if (formData.role === 'driver') {
+        profileInsert.phone = formData.phone || null
+        profileInsert.license_number = formData.license_number || null
+        profileInsert.license_expiry = formData.license_expiry || null
+        profileInsert.contractor_id = formData.contractor_id || null
+        profileInsert.vehicle_registration = formData.vehicle_registration || null
+      }
 
       const { error: profileError } = await supabase.from('profiles').insert(profileInsert)
-      if (profileError) { setMessage('Error creating profile: ' + profileError.message) }
-      else { setMessage('Staff account created successfully!'); setShowForm(false); resetForm(); loadData() }
+      if (profileError) {
+        setMessage('Error creating profile: ' + profileError.message)
+      } else {
+        // Insert contract for contractor if contract dates provided
+        if (formData.role === 'contractor' && formData.contract_start_date && formData.contract_end_date) {
+          await supabase.from('contracts').insert({
+            contractor_id: data.user.id,
+            contract_number: formData.contract_number || `CMC-${Date.now()}`,
+            start_date: formData.contract_start_date,
+            end_date: formData.contract_end_date,
+            monthly_payment_amount: parseFloat(formData.contract_value) || 0,
+            payment_terms: formData.payment_terms || 'monthly',
+            kpi_collection_rate: parseFloat(formData.kpi_collection_rate) || 95,
+            kpi_ontime_rate: parseFloat(formData.kpi_ontime_rate) || 90,
+            kpi_complaint_limit: parseInt(formData.kpi_complaint_limit) || 10,
+            terms_and_conditions: formData.terms_and_conditions || null,
+            districts_covered: formData.contractor_district ? [formData.contractor_district] : [],
+            status: 'active',
+          })
+        }
+        setMessage('Staff account created successfully!')
+        setShowForm(false)
+        resetForm()
+        loadData()
+      }
     }
     setSaving(false)
   }
@@ -277,6 +302,10 @@ export default function AdminUsersPage() {
   const isRecycler = formData.role === 'recycling_partner'
   const isPersonRole = isDE || isEngineer || isSupervisor || isDriver
 
+  function toggleWasteType(val: string) {
+    setWasteTypes(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])
+  }
+
   return (
     <DashboardLayout
       role="Admin"
@@ -285,11 +314,7 @@ export default function AdminUsersPage() {
       primaryAction={{ label: 'Create Staff Account', href: '#', icon: 'person_add' }}
     >
       <style>{`
-        .material-symbols-outlined {
-          font-family: 'Material Symbols Outlined';
-          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-          display: inline-block; vertical-align: middle; line-height: 1;
-        }
+        .material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; display: inline-block; vertical-align: middle; line-height: 1; }
         .font-headline { font-family: 'Manrope', sans-serif; }
         .bento-card { background: white; border-radius: 16px; box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08); border: 1px solid rgba(0,69,13,0.04); overflow: hidden; }
         .form-field { width: 100%; padding: 11px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 14px; color: #181c22; font-family: 'Inter', sans-serif; background: #fafafa; transition: all 0.2s ease; outline: none; box-sizing: border-box; }
@@ -314,6 +339,10 @@ export default function AdminUsersPage() {
         .filter-btn:not(.active):hover { background: #e2e8f0; }
         .action-btn { padding: 6px 14px; border-radius: 99px; font-size: 11px; font-weight: 700; font-family: 'Manrope', sans-serif; cursor: pointer; transition: all 0.2s ease; border: 1.5px solid; white-space: nowrap; }
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .section-box { background: #f0fdf4; border-radius: 12px; padding: 18px 20px; border: 1px solid rgba(0,69,13,0.1); grid-column: 1 / -1; }
+        .section-box-label { font-size: 11px; font-weight: 700; color: #00450d; font-family: 'Manrope', sans-serif; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; display: flex; align-items: center; gap: 6px; }
+        .check-pill { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 99px; border: 1.5px solid #e5e7eb; font-size: 12px; font-weight: 600; font-family: 'Manrope', sans-serif; cursor: pointer; transition: all 0.15s; background: white; color: #64748b; }
+        .check-pill.selected { border-color: #00450d; background: #f0fdf4; color: #00450d; }
         .modal-overlay { animation: fadeIn 0.2s ease; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @media (max-width: 768px) { .form-grid { grid-template-columns: 1fr; } }
@@ -328,8 +357,7 @@ export default function AdminUsersPage() {
       {/* Hero */}
       <section className="mb-10 s1">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <h1 className="font-headline font-extrabold tracking-tight"
-            style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
+          <h1 className="font-headline font-extrabold tracking-tight" style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
             User <span style={{ color: '#1b5e20' }}>Management</span>
           </h1>
           <button onClick={() => { setShowForm(!showForm); if (showForm) resetForm() }}
@@ -375,12 +403,13 @@ export default function AdminUsersPage() {
             <p className="text-sm mt-1" style={{ color: '#717a6d' }}>Select a user type then fill in the details.</p>
           </div>
           <form onSubmit={handleCreateUser} className="p-8">
+
+            {/* Role selector */}
             <div style={{ marginBottom: '28px' }}>
               <label className="field-label">User Type *</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '2px' }}>
                 {STAFF_ROLES.map(role => (
-                  <div key={role.value}
-                    onClick={() => { setFormData({ ...formData, role: role.value, district: '' }); setAssignedWards([]) }}
+                  <div key={role.value} onClick={() => { setFormData({ ...EMPTY_FORM, role: role.value }); setAssignedWards([]); setWasteTypes([]) }}
                     className={`role-pill ${formData.role === role.value ? 'selected' : ''}`}>
                     <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>{role.icon}</span>
                     {role.label}
@@ -394,6 +423,7 @@ export default function AdminUsersPage() {
               </div>
             </div>
 
+            {/* Person roles: DE, Engineer, Supervisor, Driver */}
             {isPersonRole && (
               <div className="form-grid slide-down">
                 <div><label className="field-label">First Name *</label><input type="text" className="form-field" placeholder="e.g. Kasun" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} required /></div>
@@ -404,6 +434,7 @@ export default function AdminUsersPage() {
               </div>
             )}
 
+            {/* District Engineer: district required */}
             {isDE && (
               <div style={{ marginBottom: '20px' }} className="slide-down">
                 <label className="field-label">Assigned District *</label>
@@ -414,6 +445,7 @@ export default function AdminUsersPage() {
               </div>
             )}
 
+            {/* Supervisor: district + wards */}
             {isSupervisor && (
               <div className="form-grid slide-down">
                 <div>
@@ -430,11 +462,13 @@ export default function AdminUsersPage() {
               </div>
             )}
 
+            {/* Driver: licence + vehicle + contractor */}
             {isDriver && (
               <div className="form-grid slide-down">
-                <div><label className="field-label">Driving License Number *</label><input type="text" className="form-field" placeholder="e.g. B1234567" value={formData.license_number} onChange={e => setFormData({ ...formData, license_number: e.target.value })} /></div>
-                <div><label className="field-label">License Expiry Date</label><input type="date" className="form-field" value={formData.license_expiry} min={new Date().toISOString().split('T')[0]} onChange={e => setFormData({ ...formData, license_expiry: e.target.value })} /></div>
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div><label className="field-label">Driving Licence Number *</label><input type="text" className="form-field" placeholder="e.g. B1234567" value={formData.license_number} onChange={e => setFormData({ ...formData, license_number: e.target.value })} /></div>
+                <div><label className="field-label">Licence Expiry Date</label><input type="date" className="form-field" value={formData.license_expiry} min={new Date().toISOString().split('T')[0]} onChange={e => setFormData({ ...formData, license_expiry: e.target.value })} /></div>
+                <div><label className="field-label">Vehicle Registration</label><input type="text" className="form-field" placeholder="e.g. WP CAB-1234" value={formData.vehicle_registration} onChange={e => setFormData({ ...formData, vehicle_registration: e.target.value })} /></div>
+                <div>
                   <label className="field-label">Assigned Contractor</label>
                   {contractors.length === 0 ? (
                     <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#fefce8', border: '1px solid rgba(217,119,6,0.2)', fontSize: '13px', color: '#92400e' }}>⚠ No contractor accounts found.</div>
@@ -448,16 +482,56 @@ export default function AdminUsersPage() {
               </div>
             )}
 
+            {/* Contractor: company info + contract details */}
             {isContractor && (
               <div className="form-grid slide-down">
-                <div><label className="field-label">Contractor / Company Name *</label><input type="text" className="form-field" placeholder="e.g. Lanka Waste Services Ltd" value={formData.contractor_name} onChange={e => setFormData({ ...formData, contractor_name: e.target.value })} required /></div>
+                <div><label className="field-label">Company Name *</label><input type="text" className="form-field" placeholder="e.g. Lanka Waste Services Ltd" value={formData.contractor_name} onChange={e => setFormData({ ...formData, contractor_name: e.target.value })} required /></div>
                 <div><label className="field-label">Company Email *</label><input type="email" className="form-field" placeholder="company@example.com" value={formData.contractor_email} onChange={e => setFormData({ ...formData, contractor_email: e.target.value })} required /></div>
                 <div><label className="field-label">Phone</label><input type="text" className="form-field" placeholder="+94 11 000 0000" value={formData.contractor_phone} onChange={e => setFormData({ ...formData, contractor_phone: e.target.value })} /></div>
                 <div><label className="field-label">Password *</label><input type="password" className="form-field" placeholder="Min. 8 characters" value={formData.password} minLength={8} onChange={e => setFormData({ ...formData, password: e.target.value })} required /></div>
+                <div><label className="field-label">Business Registration No.</label><input type="text" className="form-field" placeholder="e.g. PV 12345" value={formData.business_registration_number} onChange={e => setFormData({ ...formData, business_registration_number: e.target.value })} /></div>
+                <div>
+                  <label className="field-label">Operating District</label>
+                  <select className="select-field" value={formData.contractor_district} onChange={e => setFormData({ ...formData, contractor_district: e.target.value })}>
+                    <option value="">Select district</option>
+                    {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
                 <div style={{ gridColumn: '1 / -1' }}><label className="field-label">Company Address</label><input type="text" className="form-field" placeholder="123 Main Street, Colombo 03" value={formData.contractor_address} onChange={e => setFormData({ ...formData, contractor_address: e.target.value })} /></div>
+
+                {/* Contract details box */}
+                <div className="section-box">
+                  <div className="section-box-label">
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>description</span>
+                    Contract Details
+                    <span style={{ fontWeight: 400, color: '#717a6d', textTransform: 'none', letterSpacing: 0, fontSize: '11px' }}>(optional — can be added later)</span>
+                  </div>
+                  <div className="form-grid" style={{ marginBottom: 0 }}>
+                    <div><label className="field-label">Contract Number</label><input type="text" className="form-field" placeholder="e.g. CMC-2024-001" value={formData.contract_number} onChange={e => setFormData({ ...formData, contract_number: e.target.value })} /></div>
+                    <div><label className="field-label">Monthly Value (LKR)</label><input type="number" className="form-field" placeholder="e.g. 500000" value={formData.contract_value} onChange={e => setFormData({ ...formData, contract_value: e.target.value })} /></div>
+                    <div><label className="field-label">Contract Start Date</label><input type="date" className="form-field" value={formData.contract_start_date} onChange={e => setFormData({ ...formData, contract_start_date: e.target.value })} /></div>
+                    <div><label className="field-label">Contract End Date</label><input type="date" className="form-field" value={formData.contract_end_date} onChange={e => setFormData({ ...formData, contract_end_date: e.target.value })} /></div>
+                    <div>
+                      <label className="field-label">Payment Terms</label>
+                      <select className="select-field" value={formData.payment_terms} onChange={e => setFormData({ ...formData, payment_terms: e.target.value })}>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="annually">Annually</option>
+                      </select>
+                    </div>
+                    <div><label className="field-label">KPI — Complaint Limit</label><input type="number" className="form-field" placeholder="10" value={formData.kpi_complaint_limit} onChange={e => setFormData({ ...formData, kpi_complaint_limit: e.target.value })} /></div>
+                    <div><label className="field-label">KPI — Collection Rate (%)</label><input type="number" className="form-field" placeholder="95" value={formData.kpi_collection_rate} onChange={e => setFormData({ ...formData, kpi_collection_rate: e.target.value })} /></div>
+                    <div><label className="field-label">KPI — On-time Rate (%)</label><input type="number" className="form-field" placeholder="90" value={formData.kpi_ontime_rate} onChange={e => setFormData({ ...formData, kpi_ontime_rate: e.target.value })} /></div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label className="field-label">Terms &amp; Conditions</label>
+                      <textarea className="form-field" placeholder="Enter contract terms and conditions..." value={formData.terms_and_conditions} onChange={e => setFormData({ ...formData, terms_and_conditions: e.target.value })} rows={3} style={{ resize: 'vertical' }} />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
+            {/* Recycler: facility info + waste types */}
             {isRecycler && (
               <div className="form-grid slide-down">
                 <div><label className="field-label">Facility / Organisation Name *</label><input type="text" className="form-field" placeholder="e.g. EcoRecycle Lanka Pvt Ltd" value={formData.facility_name} onChange={e => setFormData({ ...formData, facility_name: e.target.value })} required /></div>
@@ -477,6 +551,22 @@ export default function AdminUsersPage() {
                 {formData.facility_type === 'custom' && <div><label className="field-label">Phone</label><input type="text" className="form-field" placeholder="+94 11 000 0000" value={formData.facility_phone} onChange={e => setFormData({ ...formData, facility_phone: e.target.value })} /></div>}
                 <div><label className="field-label">Password *</label><input type="password" className="form-field" placeholder="Min. 8 characters" value={formData.password} minLength={8} onChange={e => setFormData({ ...formData, password: e.target.value })} required /></div>
                 <div style={{ gridColumn: '1 / -1' }}><label className="field-label">Facility Address</label><input type="text" className="form-field" placeholder="123 Industrial Zone, Colombo" value={formData.facility_address} onChange={e => setFormData({ ...formData, facility_address: e.target.value })} /></div>
+
+                {/* Waste types accepted */}
+                <div className="section-box">
+                  <div className="section-box-label">
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>recycling</span>
+                    Waste Types Accepted
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {WASTE_TYPES.map(t => (
+                      <div key={t.value} onClick={() => toggleWasteType(t.value)} className={`check-pill ${wasteTypes.includes(t.value) ? 'selected' : ''}`}>
+                        {wasteTypes.includes(t.value) && <svg style={{ width: '10px', height: '10px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                        {t.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -495,8 +585,7 @@ export default function AdminUsersPage() {
 
       {/* USER LIST */}
       <div className="bento-card s3">
-        <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-3"
-          style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
+        <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-3" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
           <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>All Users</h3>
           <div className="flex items-center gap-3 flex-wrap">
             <div style={{ position: 'relative' }}>
@@ -532,16 +621,12 @@ export default function AdminUsersPage() {
               return (
                 <div key={user.id} className="user-row">
                   <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: rs.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <span style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: '15px', color: rs.color }}>
-                      {user.full_name?.charAt(0)?.toUpperCase() || '?'}
-                    </span>
+                    <span style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: '15px', color: rs.color }}>{user.full_name?.charAt(0)?.toUpperCase() || '?'}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <p style={{ fontSize: '14px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope, sans-serif' }}>{user.full_name}</p>
-                      <span className="role-chip" style={{ background: rs.bg, color: rs.color }}>
-                        {ROLE_LABELS[user.role as keyof typeof ROLE_LABELS] || user.role}
-                      </span>
+                      <span className="role-chip" style={{ background: rs.bg, color: rs.color }}>{ROLE_LABELS[user.role as keyof typeof ROLE_LABELS] || user.role}</span>
                       {!user.is_approved && <span className="role-chip" style={{ background: '#fef2f2', color: '#ba1a1a' }}>Inactive</span>}
                     </div>
                     <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: '#94a3b8' }}>
@@ -550,12 +635,8 @@ export default function AdminUsersPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                    <button onClick={() => openEdit(user)} className="action-btn"
-                      style={{ borderColor: 'rgba(0,69,13,0.2)', color: '#00450d', background: 'white' }}>
-                      Edit
-                    </button>
-                    <button onClick={() => toggleApproval(user)} className="action-btn"
-                      style={{ borderColor: user.is_approved ? 'rgba(186,26,26,0.2)' : 'rgba(0,69,13,0.2)', color: user.is_approved ? '#ba1a1a' : '#00450d', background: 'white' }}>
+                    <button onClick={() => openEdit(user)} className="action-btn" style={{ borderColor: 'rgba(0,69,13,0.2)', color: '#00450d', background: 'white' }}>Edit</button>
+                    <button onClick={() => toggleApproval(user)} className="action-btn" style={{ borderColor: user.is_approved ? 'rgba(186,26,26,0.2)' : 'rgba(0,69,13,0.2)', color: user.is_approved ? '#ba1a1a' : '#00450d', background: 'white' }}>
                       {user.is_approved ? 'Deactivate' : 'Activate'}
                     </button>
                   </div>
@@ -564,14 +645,13 @@ export default function AdminUsersPage() {
             })}
           </div>
         )}
-
         <div className="px-8 py-4 flex items-center gap-3" style={{ borderTop: '1px solid rgba(0,69,13,0.06)', background: '#f9f9ff' }}>
           <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '16px' }}>info</span>
           <p className="text-xs" style={{ color: '#717a6d' }}>Showing {filteredUsers.length} of {users.length} users</p>
         </div>
       </div>
 
-      {/* EDIT PROFILE MODAL */}
+      {/* EDIT MODAL */}
       {editingUser && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
           <div style={{ background: 'white', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '500px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -584,18 +664,12 @@ export default function AdminUsersPage() {
                 <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#717a6d' }}>close</span>
               </button>
             </div>
-
             <form onSubmit={handleEditUser} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label className="field-label">Full Name</label>
-                <input className="form-field" value={editData.full_name} onChange={e => setEditData({ ...editData, full_name: e.target.value })} required />
-              </div>
+              <div><label className="field-label">Full Name</label><input className="form-field" value={editData.full_name} onChange={e => setEditData({ ...editData, full_name: e.target.value })} required /></div>
               <div>
                 <label className="field-label">Role</label>
                 <select className="select-field" value={editData.role} onChange={e => setEditData({ ...editData, role: e.target.value })}>
-                  {ALL_ROLES.map(r => (
-                    <option key={r} value={r}>{r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
-                  ))}
+                  {ALL_ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
                 </select>
               </div>
               <div>
@@ -605,23 +679,11 @@ export default function AdminUsersPage() {
                   {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="field-label">Phone</label>
-                <input className="form-field" placeholder="+94 77 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} />
-              </div>
-              <div>
-                <label className="field-label">Organisation Name</label>
-                <input className="form-field" placeholder="Company or org name" value={editData.organisation_name} onChange={e => setEditData({ ...editData, organisation_name: e.target.value })} />
-              </div>
-
+              <div><label className="field-label">Phone</label><input className="form-field" placeholder="+94 77 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} /></div>
+              <div><label className="field-label">Organisation Name</label><input className="form-field" placeholder="Company or org name" value={editData.organisation_name} onChange={e => setEditData({ ...editData, organisation_name: e.target.value })} /></div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-                <button type="submit" disabled={saving} className="submit-btn" style={{ flex: 1, justifyContent: 'center' }}>
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-                <button type="button" onClick={() => setEditingUser(null)}
-                  style={{ padding: '13px 20px', borderRadius: '10px', border: '1.5px solid #e5e7eb', background: 'white', fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: '#64748b' }}>
-                  Cancel
-                </button>
+                <button type="submit" disabled={saving} className="submit-btn" style={{ flex: 1, justifyContent: 'center' }}>{saving ? 'Saving...' : 'Save Changes'}</button>
+                <button type="button" onClick={() => setEditingUser(null)} style={{ padding: '13px 20px', borderRadius: '10px', border: '1.5px solid #e5e7eb', background: 'white', fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: '#64748b' }}>Cancel</button>
               </div>
             </form>
           </div>

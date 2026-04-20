@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/DashboardLayout'
 const DRIVER_NAV = [
   { label: 'Overview', href: '/dashboard/driver', icon: 'dashboard' },
   { label: 'My Route', href: '/dashboard/driver/routes', icon: 'route' },
+  { label: 'Collections', href: '/dashboard/driver/collections', icon: 'inventory_2' },
   { label: 'Location', href: '/dashboard/driver/location', icon: 'gps_fixed' },
   { label: 'Incidents', href: '/dashboard/driver/incidents', icon: 'warning' },
   { label: 'Breakdown', href: '/dashboard/driver/breakdown', icon: 'build' },
@@ -44,6 +45,7 @@ interface Stop {
   completed_at: string | null
   is_commercial: boolean
   notes: string | null
+  bin_count: number | null
 }
 
 interface Schedule {
@@ -67,6 +69,8 @@ export default function DriverRoutesPage() {
   const [skipModal, setSkipModal] = useState<Stop | null>(null)
   const [skipReason, setSkipReason] = useState('')
   const [skipNote, setSkipNote] = useState('')
+  const [binModal, setBinModal] = useState<Stop | null>(null)
+  const [binCount, setBinCount] = useState('')
   const [dispatching, setDispatching] = useState(false)
   const [handoffCode, setHandoffCode] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -87,7 +91,6 @@ export default function DriverRoutesPage() {
 
     const today = new Date().toISOString().split('T')[0]
 
-    // Find today's assigned route for this driver
     const { data: routeData } = await supabase
       .from('routes')
       .select('*')
@@ -100,7 +103,6 @@ export default function DriverRoutesPage() {
     if (!routeData) { setLoading(false); return }
     setRoute(routeData)
 
-    // Load stops for this route
     const { data: stopsData } = await supabase
       .from('collection_stops')
       .select('*')
@@ -108,7 +110,6 @@ export default function DriverRoutesPage() {
       .order('stop_order', { ascending: true })
     setStops(stopsData || [])
 
-    // Load linked schedule for ward + streets info
     if (routeData.schedule_id) {
       const { data: schedData } = await supabase
         .from('schedules')
@@ -122,14 +123,26 @@ export default function DriverRoutesPage() {
   }
 
   async function markCompleted(stop: Stop) {
-    setUpdatingStop(stop.id)
+    setBinModal(stop)
+    setBinCount('')
+  }
+
+  async function confirmCompleted() {
+    if (!binModal) return
+    setUpdatingStop(binModal.id)
     const supabase = createClient()
     await supabase.from('collection_stops').update({
       status: 'completed',
       completed_at: new Date().toISOString(),
-    }).eq('id', stop.id)
-    setStops(prev => prev.map(s => s.id === stop.id ? { ...s, status: 'completed', completed_at: new Date().toISOString() } : s))
+      bin_count: binCount ? parseInt(binCount) : null,
+    }).eq('id', binModal.id)
+    setStops(prev => prev.map(s => s.id === binModal.id
+      ? { ...s, status: 'completed', completed_at: new Date().toISOString(), bin_count: binCount ? parseInt(binCount) : null }
+      : s
+    ))
     showToast('Stop marked as collected')
+    setBinModal(null)
+    setBinCount('')
     setUpdatingStop(null)
   }
 
@@ -174,7 +187,6 @@ export default function DriverRoutesPage() {
   const pending = stops.filter(s => s.status === 'pending').length
   const progress = stops.length > 0 ? Math.round((completed / stops.length) * 100) : 0
 
-  // Streets from schedule for driver's ward
   const scheduleStreets: string[] = []
   if (schedule?.streets && route?.ward) {
     const wardStreets = schedule.streets[route.ward]
@@ -205,7 +217,6 @@ export default function DriverRoutesPage() {
         .badge { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; font-family:'Manrope',sans-serif; white-space:nowrap; }
         .progress-track { height:8px; background:#f0fdf4; border-radius:99px; overflow:hidden; }
         .progress-fill { height:100%; border-radius:99px; background:#00450d; transition:width 0.5s ease; }
-        .street-chip { display:inline-flex; align-items:center; padding:3px 10px; border-radius:6px; font-size:11px; font-weight:600; font-family:'Manrope',sans-serif; background:rgba(0,69,13,0.07); color:#00450d; }
         .dispatch-btn { width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border-radius:12px; background:#00450d; color:white; border:none; cursor:pointer; font-family:'Manrope',sans-serif; font-weight:700; font-size:15px; transition:all 0.2s; }
         .dispatch-btn:hover { background:#1b5e20; box-shadow:0 4px 16px rgba(0,69,13,0.25); }
         .dispatch-btn:disabled { opacity:0.6; cursor:not-allowed; }
@@ -214,12 +225,58 @@ export default function DriverRoutesPage() {
         @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         .a1{animation:fadeUp .4s ease .04s both} .a2{animation:fadeUp .4s ease .09s both} .a3{animation:fadeUp .4s ease .14s both}
         @keyframes spin { to{transform:rotate(360deg)} }
+        .modal-input { width:100%; padding:11px 14px; border:1.5px solid #e5e7eb; border-radius:10px; font-size:14px; font-family:'Inter',sans-serif; outline:none; box-sizing:border-box; color:#181c22; transition:border 0.2s; }
+        .modal-input:focus { border-color:#00450d; box-shadow:0 0 0 3px rgba(0,69,13,0.07); }
       `}</style>
 
       {toast && (
         <div className="toast-pill">
           <span className="msf-fill" style={{ fontSize: 15, color: '#4ade80' }}>check_circle</span>
           {toast}
+        </div>
+      )}
+
+      {/* Bin count modal */}
+      {binModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={() => setBinModal(null)}>
+          <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 380, overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.2)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9' }}>
+              <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 16, color: '#181c22', margin: '0 0 3px' }}>Mark as Collected</h3>
+              <p style={{ fontSize: 12, color: '#717a6d', margin: 0 }}>{binModal.road_name || binModal.address}</p>
+            </div>
+            <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6b7280', fontFamily: 'Manrope,sans-serif', marginBottom: 7 }}>
+                  Bins Collected <span style={{ color: '#d1d5db', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— optional</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 3"
+                  value={binCount}
+                  onChange={e => setBinCount(e.target.value)}
+                  className="modal-input"
+                  autoFocus
+                />
+                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Enter the number of bins collected at this stop.</p>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={confirmCompleted}
+                  disabled={!!updatingStop}
+                  style={{ flex: 2, padding: 12, borderRadius: 10, background: '#00450d', color: 'white', border: 'none', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: updatingStop ? 0.6 : 1 }}>
+                  Confirm Collection
+                </button>
+                <button
+                  onClick={() => setBinModal(null)}
+                  style={{ flex: 1, padding: 12, borderRadius: 10, border: '1.5px solid #e5e7eb', background: 'white', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, cursor: 'pointer', color: '#64748b' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -246,7 +303,9 @@ export default function DriverRoutesPage() {
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6b7280', fontFamily: 'Manrope,sans-serif', marginBottom: 7 }}>Note <span style={{ color: '#d1d5db', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— optional</span></label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6b7280', fontFamily: 'Manrope,sans-serif', marginBottom: 7 }}>
+                  Note <span style={{ color: '#d1d5db', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— optional</span>
+                </label>
                 <textarea value={skipNote} onChange={e => setSkipNote(e.target.value)} rows={2} placeholder="Any additional detail…"
                   style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontSize: 13, fontFamily: 'Inter,sans-serif', resize: 'none', outline: 'none', boxSizing: 'border-box', color: '#181c22', background: '#fafafa' }} />
               </div>
@@ -322,7 +381,6 @@ export default function DriverRoutesPage() {
                 )}
               </div>
 
-              {/* Streets from schedule */}
               {scheduleStreets.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(163,246,156,0.7)', fontFamily: 'Manrope,sans-serif', marginBottom: 6 }}>Streets to cover</p>
@@ -334,7 +392,6 @@ export default function DriverRoutesPage() {
                 </div>
               )}
 
-              {/* Progress */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                   <span style={{ fontSize: 12, color: 'rgba(163,246,156,0.8)', fontWeight: 600 }}>{completed} / {stops.length} stops completed</span>
@@ -385,7 +442,6 @@ export default function DriverRoutesPage() {
               const isSkipped = stop.status === 'skipped'
               return (
                 <div key={stop.id} className={`stop-row ${isDone ? 'completed' : ''} ${isSkipped ? 'skipped' : ''}`}>
-                  {/* Stop number */}
                   <div style={{ width: 28, height: 28, borderRadius: '50%', background: isDone ? '#f0fdf4' : isSkipped ? '#fef2f2' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {isDone
                       ? <span className="msf-fill" style={{ fontSize: 15, color: '#00450d' }}>check_circle</span>
@@ -408,6 +464,11 @@ export default function DriverRoutesPage() {
                           ✓ {new Date(stop.completed_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
+                      {isDone && stop.bin_count != null && (
+                        <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 99, background: '#f0fdf4', color: '#00450d', fontWeight: 700, fontFamily: 'Manrope,sans-serif' }}>
+                          {stop.bin_count} bins
+                        </span>
+                      )}
                       {isSkipped && stop.skip_reason && (
                         <span style={{ fontSize: 11, color: '#ba1a1a', fontStyle: 'italic' }}>
                           {SKIP_REASONS.find(r => r.value === stop.skip_reason)?.label || stop.skip_reason}
@@ -416,7 +477,6 @@ export default function DriverRoutesPage() {
                     </div>
                   </div>
 
-                  {/* Actions */}
                   {!isDone && !isSkipped && route.status !== 'completed' && (
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button onClick={() => markCompleted(stop)} disabled={updatingStop === stop.id} className="btn-done">
