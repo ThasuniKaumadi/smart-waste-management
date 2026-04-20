@@ -100,6 +100,34 @@ function daysUntil(dateStr: string) {
     return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 }
 
+function getOdometerFlag(vehicle: Vehicle, fuelLogs: FuelLog[]) {
+    const SERVICE_INTERVAL_KM = 5000
+    const vehicleLogs = fuelLogs
+        .filter(l => l.vehicle_number === vehicle.plate_number && l.odometer_reading)
+        .sort((a, b) => b.odometer_reading - a.odometer_reading)
+
+    if (vehicleLogs.length === 0) return { needsService: false, reason: null, kmSinceLast: null }
+
+    const latestOdometer = vehicleLogs[0].odometer_reading
+    let lastServiceOdometer: number | null = null
+    if (vehicle.last_service_date) {
+        const serviceDate = new Date(vehicle.last_service_date).getTime()
+        const logsBeforeService = vehicleLogs.filter(l => new Date(l.date).getTime() <= serviceDate + 86400000)
+        if (logsBeforeService.length > 0) lastServiceOdometer = logsBeforeService[0].odometer_reading
+    }
+
+    if (lastServiceOdometer === null) return { needsService: false, reason: null, kmSinceLast: null }
+
+    const kmSinceLast = latestOdometer - lastServiceOdometer
+    if (kmSinceLast >= SERVICE_INTERVAL_KM) {
+        return { needsService: true, reason: `${kmSinceLast.toLocaleString()} km since last service`, kmSinceLast }
+    }
+    if (kmSinceLast >= SERVICE_INTERVAL_KM * 0.8) {
+        return { needsService: false, reason: `${kmSinceLast.toLocaleString()} km — approaching service interval`, kmSinceLast }
+    }
+    return { needsService: false, reason: null, kmSinceLast }
+}
+
 const EMPTY_VEHICLE_FORM = {
     plate_number: '', type: 'truck', capacity_tons: '', make: '', model: '',
     year: new Date().getFullYear().toString(), status: 'active', assigned_driver_id: '',
@@ -281,9 +309,11 @@ export default function ContractorFleetPage() {
     const attentionVehicles = vehicles.filter(v => {
         const serviceDays = daysUntil(v.next_service_date)
         const insuranceDays = daysUntil(v.insurance_expiry)
+        const odomFlag = getOdometerFlag(v, fuelLogs)
         return (serviceDays !== null && serviceDays <= 30) ||
             (insuranceDays !== null && insuranceDays <= 30) ||
-            v.status === 'under_maintenance'
+            v.status === 'under_maintenance' ||
+            odomFlag.needsService
     })
 
     return (
