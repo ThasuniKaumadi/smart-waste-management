@@ -15,6 +15,7 @@ const DE_NAV = [
   { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'report_problem' },
   { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
   { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
+  { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
   { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
 

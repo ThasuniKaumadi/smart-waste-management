@@ -14,6 +14,7 @@ const DE_NAV = [
   { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'report_problem' },
   { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
   { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
+  { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
   { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
 
@@ -398,7 +399,7 @@ export default function DEOverviewPage() {
                 <span className="msym-fill" style={{ color: '#63b3ed', fontSize: 20 }}>verified</span>
               </div>
               <div>
-                <p style={{ fontSize: 12, fontWeight: 700, color: 'rgba(163,220,255,0.7)', fontFamily: 'Manrope,sans-serif', margin: '0 0 1px', textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 10 }}>Blockchain</p>
+                <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(163,220,255,0.7)', fontFamily: 'Manrope,sans-serif', margin: '0 0 1px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Blockchain</p>
                 <p style={{ fontSize: 12, fontWeight: 600, color: '#63b3ed', margin: 0 }}>Polygon Amoy Testnet</p>
               </div>
             </div>

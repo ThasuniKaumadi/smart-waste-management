@@ -13,7 +13,8 @@ const DE_NAV = [
     { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'report_problem' },
     { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
     { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
-    { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+    { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
+  { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
 
 const COMPLAINT_TYPES: Record<string, { label: string; icon: string; color: string; bg: string }> = {
