@@ -70,6 +70,8 @@ export default function CommercialBillingPage() {
     async function loadData() {
         try {
             const supabase = createClient()
+            // Force refresh session to ensure auth.uid() matches on RLS evaluation
+            await supabase.auth.refreshSession()
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) { setLoadError('Not signed in'); setLoading(false); return }
             const [pR, sR, iR] = await Promise.all([

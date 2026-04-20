@@ -8,7 +8,9 @@ import { logDeliveryOnChain } from '@/lib/blockchain'
 
 const INTAKE_NAV = [
     { label: 'Overview', href: '/dashboard/intake', icon: 'dashboard' },
+    { label: 'New Intake', href: '/dashboard/intake/log', icon: 'add_circle' },
     { label: 'History', href: '/dashboard/intake/history', icon: 'history' },
+    { label: 'Analytics', href: '/dashboard/intake/analytics', icon: 'bar_chart' },
 ]
 
 const REJECTION_REASONS = [

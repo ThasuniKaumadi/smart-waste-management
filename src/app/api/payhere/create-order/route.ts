@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
         // Fetch the billing record
         const { data: invoice, error: invoiceError } = await supabase
-            .from('billing_records')
+            .from('invoices')
             .select('*, profiles:commercial_id(*)')
             .eq('id', invoice_id)
             .single()

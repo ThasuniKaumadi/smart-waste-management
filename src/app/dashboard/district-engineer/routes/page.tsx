@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 import { getWardsForDistrict } from '@/lib/districts'
+import { sendNotification } from '@/lib/notify'
 
 const DE_NAV = [
     { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
@@ -16,6 +17,7 @@ const DE_NAV = [
     { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
     { label: 'Bin Requests', href: '/dashboard/district-engineer/bin-requests', icon: 'delete_outline' },
     { label: 'Compliance', href: '/dashboard/district-engineer/compliance', icon: 'verified' },
+    { label: 'Commercial', href: '/dashboard/district-engineer/commercial', icon: 'storefront' },
     { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
     { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
@@ -139,7 +141,6 @@ export default function DERoutesPage() {
             .order('date', { ascending: false })
         setRoutes(routesData || [])
 
-        // Only load contractors for this district
         const { data: contractorData } = await supabase
             .from('profiles')
             .select('id, full_name, organisation_name, district')
@@ -175,7 +176,6 @@ export default function DERoutesPage() {
                 date: schedule.scheduled_date || prev.date,
                 ward: prev.ward || schedule.ward || '',
             }))
-            // Auto-populate streets from schedule.streets for the selected ward
             if (schedule.streets) {
                 const ward = formData.ward || schedule.ward
                 const scheduleStreets: string[] = ward && schedule.streets[ward]
@@ -251,7 +251,6 @@ export default function DERoutesPage() {
                 schedule_id: formData.schedule_id || null,
                 created_by: user?.id,
                 status: 'pending',
-                // driver and vehicle left null — contractor assigns these
             })
             .select().single()
 
@@ -276,7 +275,19 @@ export default function DERoutesPage() {
         if (stopsError) {
             setMessage('Error creating stops: ' + stopsError.message)
         } else {
-            setMessage('Route created! The assigned contractor can now staff it with a driver and vehicle.')
+            // R19 — notify the assigned contractor of the new route
+            const contractorName = contractors.find(c => c.id === formData.contractor_id)?.organisation_name
+                || contractors.find(c => c.id === formData.contractor_id)?.full_name
+                || 'your company'
+            await sendNotification({
+                user_ids: [formData.contractor_id],
+                title: 'New Route Assigned',
+                body: `A new route "${routeName}" has been created for ${formData.ward} on ${new Date(formData.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} (${formData.shift} shift). Please assign a driver and vehicle.`,
+                type: 'route_assigned',
+                url: '/dashboard/contractor/routes',
+            })
+
+            setMessage('Route created! The assigned contractor has been notified and can now staff it.')
             setShowForm(false)
             setFormData({
                 route_name: '', ward: '', contractor_id: '',
@@ -309,6 +320,21 @@ export default function DERoutesPage() {
     async function updateRouteStatus(routeId: string, status: string) {
         const supabase = createClient()
         await supabase.from('routes').update({ status }).eq('id', routeId)
+
+        // R19 — notify driver when route is activated
+        if (status === 'active') {
+            const route = routes.find(r => r.id === routeId)
+            if (route?.driver_id) {
+                await sendNotification({
+                    user_ids: [route.driver_id],
+                    title: 'Route Activated',
+                    body: `Your route "${route.route_name}" is now active. Please begin collection.`,
+                    type: 'route_activated',
+                    url: '/dashboard/driver/routes',
+                })
+            }
+        }
+
         loadData()
     }
 
@@ -427,7 +453,6 @@ export default function DERoutesPage() {
         .optimize-btn { display: flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 99px; font-size: 12px; font-weight: 700; font-family: 'Manrope', sans-serif; border: none; cursor: pointer; transition: all 0.2s ease; background: linear-gradient(135deg, #00450d, #1b5e20); color: white; }
         .optimize-btn:hover { box-shadow: 0 4px 12px rgba(0,69,13,0.3); transform: translateY(-1px); }
         .optimize-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-        .staffing-row { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: rgba(0,69,13,0.03); border-top: 1px solid rgba(0,69,13,0.06); }
         @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         .s1 { animation: staggerIn 0.5s ease 0.05s both; }
         .s2 { animation: staggerIn 0.5s ease 0.1s both; }
@@ -502,7 +527,6 @@ export default function DERoutesPage() {
                     <form onSubmit={handleSubmit} className="p-8">
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
 
-                            {/* Ward */}
                             <div>
                                 <label className="field-label">Ward *</label>
                                 <select className="select-field" value={formData.ward}
@@ -512,7 +536,6 @@ export default function DERoutesPage() {
                                 </select>
                             </div>
 
-                            {/* Shift */}
                             <div>
                                 <label className="field-label">Shift *</label>
                                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -527,7 +550,6 @@ export default function DERoutesPage() {
                                 </div>
                             </div>
 
-                            {/* Schedule link */}
                             <div style={{ gridColumn: '1 / -1' }}>
                                 <label className="field-label">
                                     Link to Published Schedule
@@ -565,7 +587,6 @@ export default function DERoutesPage() {
                                 )}
                             </div>
 
-                            {/* Contractor — filtered to this district only */}
                             <div style={{ gridColumn: '1 / -1' }}>
                                 <label className="field-label">Assign to Contractor *</label>
                                 {contractors.length === 0 ? (
@@ -584,13 +605,12 @@ export default function DERoutesPage() {
                                 )}
                                 {formData.contractor_id && (
                                     <p style={{ fontSize: '11px', color: '#00450d', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>info</span>
-                                        The contractor will assign a driver and vehicle to this route from their fleet.
+                                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>notifications</span>
+                                        Contractor will be notified via push notification when this route is created.
                                     </p>
                                 )}
                             </div>
 
-                            {/* Date */}
                             <div>
                                 <label className="field-label">Date *</label>
                                 <input type="date" className="form-field"
@@ -598,7 +618,6 @@ export default function DERoutesPage() {
                                     onChange={e => setFormData({ ...formData, date: e.target.value })} required />
                             </div>
 
-                            {/* Route name */}
                             <div>
                                 <label className="field-label">
                                     Route Name
@@ -808,7 +827,6 @@ export default function DERoutesPage() {
                                                     <span className="badge" style={{ background: ss.bg, color: ss.color }}>{route.status}</span>
                                                     {ws && <span className="badge" style={{ background: ws.bg, color: ws.color }}>{route.waste_type?.replace('_', ' ')}</span>}
                                                     {route.shift === 'night' && <span className="badge" style={{ background: '#eff6ff', color: '#1e3a8a' }}>🌙 Night</span>}
-                                                    {/* Staffing status */}
                                                     <span className="badge" style={{ background: isStaffed ? '#f0fdf4' : '#fef2f2', color: isStaffed ? '#00450d' : '#ba1a1a' }}>
                                                         <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>{isStaffed ? 'check_circle' : 'warning'}</span>
                                                         {isStaffed ? 'Staffed' : 'Awaiting assignment'}
