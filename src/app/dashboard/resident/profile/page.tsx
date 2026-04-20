@@ -5,12 +5,12 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const RESIDENT_NAV = [
-    { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard' },
-    { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' },
-    { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on' },
-    { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem' },
-    { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star' },
-    { label: 'My Profile', desc: 'Update your details', icon: 'person', href: '/dashboard/resident/profile', color: '#7c3aed', bg: 'rgba(124,58,237,0.07)' },
+    { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard', section: 'Menu' },
+    { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today', section: 'Menu' },
+    { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on', section: 'Menu' },
+    { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem', section: 'Menu' },
+    { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star', section: 'Menu' },
+    { label: 'My Profile', href: '/dashboard/resident/profile', icon: 'person', section: 'Menu' },
 ]
 
 export default function ResidentProfilePage() {
@@ -87,8 +87,10 @@ export default function ResidentProfilePage() {
             )}
 
             <section className="s1" style={{ marginBottom: 32 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope,sans-serif', display: 'block', marginBottom: 8 }}>Resident Portal</span>
-                <h1 style={{ fontSize: 48, fontWeight: 900, fontFamily: 'Manrope,sans-serif', color: '#181c22', lineHeight: 1.1 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: '0 0 8px' }}>
+                    Resident Portal
+                </p>
+                <h1 style={{ fontFamily: 'Manrope,sans-serif', fontSize: '46px', fontWeight: 800, color: '#181c22', lineHeight: 1.05, margin: 0 }}>
                     My <span style={{ color: '#1b5e20' }}>Profile</span>
                 </h1>
             </section>

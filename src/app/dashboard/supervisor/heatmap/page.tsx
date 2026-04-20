@@ -5,30 +5,24 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const SUPERVISOR_NAV = [
-    { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard', section: 'Main' },
-    { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route', section: 'Operations' },
-    { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people', section: 'Operations' },
-    { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed', section: 'Operations' },
-    { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications_active', section: 'Operations' },
-    { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback', section: 'Operations' },
-    { label: 'Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'fact_check', section: 'Reports' },
-    { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report', section: 'Reports' },
-    { label: 'Ward Heatmap', href: '/dashboard/supervisor/heatmap', icon: 'map', section: 'Reports' },
-    { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf', section: 'Reports' },
-    { label: 'Announcements', href: '/dashboard/supervisor/announcements', icon: 'campaign', section: 'Communications' },
-    { label: 'Schedules', href: '/dashboard/supervisor/schedules', icon: 'calendar_month', section: 'Operations' },
+    { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard', section: 'Menu' },
+    { label: 'Schedules', href: '/dashboard/supervisor/schedules', icon: 'calendar_month', section: 'Menu' },
+    { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route', section: 'Menu' },
+    { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people', section: 'Menu' },
+    { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed', section: 'Menu' },
+    { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications_active', section: 'Menu' },
+    { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback', section: 'Menu' },
+    { label: 'Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'fact_check', section: 'Menu' },
+    { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report', section: 'Menu' },
+    { label: 'Ward Heatmap', href: '/dashboard/supervisor/heatmap', icon: 'map', section: 'Menu' },
+    { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf', section: 'Menu' },
+    { label: 'Announcements', href: '/dashboard/supervisor/announcements', icon: 'campaign', section: 'Menu' },
 ]
 
 interface WardStat {
-    ward: string
-    totalRoutes: number
-    completedRoutes: number
-    totalStops: number
-    completedStops: number
-    skippedStops: number
-    openAlerts: number
-    completionPct: number
-    collectionRate: number
+    ward: string; totalRoutes: number; completedRoutes: number
+    totalStops: number; completedStops: number; skippedStops: number
+    openAlerts: number; completionPct: number; collectionRate: number
 }
 
 const COLOMBO_WARDS: Record<string, { district: string; x: number; y: number; w: number; h: number }> = {
@@ -79,58 +73,30 @@ export default function WardHeatmapPage() {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
-
         const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         setProfile(p)
-
-        const since = new Date()
-        since.setDate(since.getDate() - days)
-
-        const { data: routes } = await supabase
-            .from('routes')
-            .select(`
-        id, ward, status,
-        collection_stops(id, status),
-        exception_alerts(id, is_resolved)
-      `)
+        const since = new Date(); since.setDate(since.getDate() - days)
+        const { data: routes } = await supabase.from('routes')
+            .select(`id, ward, status, collection_stops(id, status), exception_alerts(id, is_resolved)`)
             .eq('district', p?.district || '')
             .gte('date', since.toISOString().split('T')[0])
-
-        // Aggregate per ward
         const stats: Record<string, WardStat> = {}
-
         for (const route of routes || []) {
             const ward = route.ward || 'Unknown'
-            if (!stats[ward]) {
-                stats[ward] = {
-                    ward,
-                    totalRoutes: 0,
-                    completedRoutes: 0,
-                    totalStops: 0,
-                    completedStops: 0,
-                    skippedStops: 0,
-                    openAlerts: 0,
-                    completionPct: 0,
-                    collectionRate: 0,
-                }
-            }
+            if (!stats[ward]) stats[ward] = { ward, totalRoutes: 0, completedRoutes: 0, totalStops: 0, completedStops: 0, skippedStops: 0, openAlerts: 0, completionPct: 0, collectionRate: 0 }
             const s = stats[ward]
             s.totalRoutes++
             if (route.status === 'completed') s.completedRoutes++
             const stops = (route.collection_stops as any[]) || []
             s.totalStops += stops.length
-            s.completedStops += stops.filter(st => st.status === 'completed').length
-            s.skippedStops += stops.filter(st => st.status === 'skipped').length
-            const alerts = (route.exception_alerts as any[]) || []
-            s.openAlerts += alerts.filter(a => !a.is_resolved).length
+            s.completedStops += stops.filter((st: any) => st.status === 'completed').length
+            s.skippedStops += stops.filter((st: any) => st.status === 'skipped').length
+            s.openAlerts += ((route.exception_alerts as any[]) || []).filter((a: any) => !a.is_resolved).length
         }
-
-        // Compute rates
         Object.values(stats).forEach(s => {
             s.completionPct = s.totalStops > 0 ? Math.round((s.completedStops / s.totalStops) * 100) : 0
             s.collectionRate = s.totalRoutes > 0 ? Math.round((s.completedRoutes / s.totalRoutes) * 100) : 0
         })
-
         setWardStats(stats)
         setLoading(false)
     }
@@ -159,7 +125,6 @@ export default function WardHeatmapPage() {
     const assignedWards = profile?.assigned_wards || []
     const selectedStat = selectedWard ? wardStats[selectedWard] : null
 
-    // Legend
     const legendItems = metric === 'alerts'
         ? [
             { label: '0 alerts', fill: '#f0fdf4', text: '#00450d' },
@@ -180,34 +145,26 @@ export default function WardHeatmapPage() {
     return (
         <DashboardLayout role="Supervisor" userName={profile?.full_name || ''} navItems={SUPERVISOR_NAV}>
             <style>{`
-        .material-symbols-outlined {
-          font-family: 'Material Symbols Outlined';
-          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-          display: inline-block; vertical-align: middle; line-height: 1;
-        }
-        .bento-card { background: white; border-radius: 16px; box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08); border: 1px solid rgba(0,69,13,0.04); overflow: hidden; }
-        .filter-btn { padding: 6px 14px; border-radius: 99px; font-size: 12px; font-weight: 700; font-family: 'Manrope', sans-serif; border: none; cursor: pointer; transition: all 0.2s; }
-        .filter-btn.active { background: #00450d; color: white; }
-        .filter-btn:not(.active) { background: #f1f5f9; color: #64748b; }
-        .ward-cell { cursor: pointer; transition: all 0.15s; }
-        .ward-cell:hover { opacity: 0.85; filter: brightness(1.05); }
-        .ward-cell.assigned { stroke: #00450d; stroke-width: 2; }
-        .ward-cell.selected { stroke: #181c22; stroke-width: 2.5; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
-        @keyframes staggerIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-        .s1 { animation: staggerIn 0.4s ease 0.05s both; }
-        .s2 { animation: staggerIn 0.4s ease 0.10s both; }
-        .s3 { animation: staggerIn 0.4s ease 0.15s both; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        .detail-panel { animation: fadeIn 0.2s ease both; }
+        .material-symbols-outlined { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+        .bento-card { background:white; border-radius:16px; box-shadow:0 10px 40px -10px rgba(24,28,34,0.08); border:1px solid rgba(0,69,13,0.04); overflow:hidden; }
+        .filter-btn { padding:6px 14px; border-radius:99px; font-size:12px; font-weight:700; font-family:'Manrope',sans-serif; border:none; cursor:pointer; transition:all 0.2s; }
+        .filter-btn.active { background:#00450d; color:white; }
+        .filter-btn:not(.active) { background:#f1f5f9; color:#64748b; }
+        .ward-cell { cursor:pointer; transition:all 0.15s; }
+        .ward-cell:hover { opacity:0.85; filter:brightness(1.05); }
+        @keyframes staggerIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin { to{transform:rotate(360deg)} }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .s1{animation:staggerIn 0.4s ease 0.05s both} .s2{animation:staggerIn 0.4s ease 0.10s both} .s3{animation:staggerIn 0.4s ease 0.15s both}
+        .detail-panel { animation:fadeIn 0.2s ease both; }
       `}</style>
 
             {/* Header */}
-            <section className="s1" style={{ marginBottom: '32px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+            <section style={{ marginBottom: '32px' }} className="s1">
+                <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: '0 0 8px' }}>
                     Supervisor · Spatial Analytics
-                </span>
-                <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '46px', fontWeight: 800, color: '#181c22', lineHeight: 1.05, margin: '0 0 6px' }}>
+                </p>
+                <h1 style={{ fontFamily: 'Manrope,sans-serif', fontSize: '46px', fontWeight: 800, color: '#181c22', lineHeight: 1.05, margin: '0 0 6px' }}>
                     Ward <span style={{ color: '#1b5e20' }}>Heatmap</span>
                 </h1>
                 <p style={{ fontSize: '13px', color: '#717a6d', margin: 0 }}>
@@ -220,32 +177,28 @@ export default function WardHeatmapPage() {
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <span style={{ fontSize: '12px', color: '#717a6d', fontWeight: 500 }}>Period:</span>
                     {[7, 14, 30].map(d => (
-                        <button key={d} className={`filter-btn ${days === d ? 'active' : ''}`} onClick={() => setDays(d)}>
-                            {d} days
-                        </button>
+                        <button key={d} className={`filter-btn ${days === d ? 'active' : ''}`} onClick={() => setDays(d)}>{d} days</button>
                     ))}
                 </div>
                 <div style={{ width: '1px', height: '20px', background: 'rgba(0,69,13,0.1)' }} />
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <span style={{ fontSize: '12px', color: '#717a6d', fontWeight: 500 }}>Metric:</span>
                     {([
-                        { key: 'completion', label: 'Stop Completion' },
-                        { key: 'collection', label: 'Route Completion' },
-                        { key: 'alerts', label: 'Open Alerts' },
-                    ] as const).map(m => (
-                        <button key={m.key} className={`filter-btn ${metric === m.key ? 'active' : ''}`} onClick={() => setMetric(m.key)}>
-                            {m.label}
-                        </button>
+                        { key: 'completion' as const, label: 'Stop Completion' },
+                        { key: 'collection' as const, label: 'Route Completion' },
+                        { key: 'alerts' as const, label: 'Open Alerts' },
+                    ]).map(m => (
+                        <button key={m.key} className={`filter-btn ${metric === m.key ? 'active' : ''}`} onClick={() => setMetric(m.key)}>{m.label}</button>
                     ))}
                 </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '24px', alignItems: 'start' }} className="s3">
 
-                {/* Heatmap SVG */}
+                {/* Heatmap */}
                 <div className="bento-card" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                        <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>
+                        <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>
                             {profile?.district || 'District'} — Ward Grid
                         </h3>
                         {assignedWards.length > 0 && (
@@ -262,12 +215,8 @@ export default function WardHeatmapPage() {
                         </div>
                     ) : (
                         <>
-                            {/* SVG Grid */}
                             <svg viewBox="0 0 10 10" style={{ width: '100%', aspectRatio: '1', borderRadius: '12px', overflow: 'hidden' }}>
-                                {/* Background */}
                                 <rect x="0" y="0" width="10" height="10" fill="#f8fafc" rx="0.3" />
-
-                                {/* Ward cells */}
                                 {Object.entries(COLOMBO_WARDS).map(([ward, pos]) => {
                                     const colors = getMetricColor(ward)
                                     const isAssigned = assignedWards.includes(ward)
@@ -277,45 +226,34 @@ export default function WardHeatmapPage() {
                                     const displayVal = metric === 'alerts'
                                         ? (val ? val.openAlerts.toString() : '—')
                                         : (val && !noData ? `${getMetricValue(ward)}%` : '—')
-
                                     return (
-                                        <g key={ward} className={`ward-cell ${isAssigned ? 'assigned' : ''} ${isSelected ? 'selected' : ''}`}
-                                            onClick={() => setSelectedWard(selectedWard === ward ? null : ward)}>
+                                        <g key={ward} className="ward-cell" onClick={() => setSelectedWard(selectedWard === ward ? null : ward)}>
                                             <rect
                                                 x={pos.x + 0.08} y={pos.y + 0.08}
                                                 width={pos.w - 0.16} height={pos.h - 0.16}
-                                                fill={colors.fill}
-                                                rx="0.2"
+                                                fill={colors.fill} rx="0.2"
                                                 stroke={isSelected ? '#181c22' : isAssigned ? '#00450d' : 'rgba(0,0,0,0.06)'}
                                                 strokeWidth={isSelected ? 0.12 : isAssigned ? 0.1 : 0.04}
                                             />
-                                            <text
-                                                x={pos.x + pos.w / 2} y={pos.y + pos.h / 2 - 0.18}
+                                            <text x={pos.x + pos.w / 2} y={pos.y + pos.h / 2 - 0.18}
                                                 textAnchor="middle" dominantBaseline="middle"
-                                                fontSize="0.22" fontWeight="700" fill={colors.text}
-                                                fontFamily="Manrope, sans-serif"
-                                            >
+                                                fontSize="0.22" fontWeight="700" fill={colors.text} fontFamily="Manrope, sans-serif">
                                                 {ward}
                                             </text>
-                                            <text
-                                                x={pos.x + pos.w / 2} y={pos.y + pos.h / 2 + 0.22}
+                                            <text x={pos.x + pos.w / 2} y={pos.y + pos.h / 2 + 0.22}
                                                 textAnchor="middle" dominantBaseline="middle"
-                                                fontSize="0.28" fontWeight="800" fill={colors.text}
-                                                fontFamily="Manrope, sans-serif"
-                                            >
+                                                fontSize="0.28" fontWeight="800" fill={colors.text} fontFamily="Manrope, sans-serif">
                                                 {displayVal}
                                             </text>
                                         </g>
                                     )
                                 })}
                             </svg>
-
-                            {/* Legend */}
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px', justifyContent: 'center' }}>
                                 {legendItems.map(l => (
                                     <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <div style={{ width: '14px', height: '14px', borderRadius: '4px', background: l.fill, border: `1px solid rgba(0,0,0,0.08)` }} />
-                                        <span style={{ fontSize: '11px', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>{l.label}</span>
+                                        <div style={{ width: '14px', height: '14px', borderRadius: '4px', background: l.fill, border: '1px solid rgba(0,0,0,0.08)' }} />
+                                        <span style={{ fontSize: '11px', color: '#717a6d', fontFamily: 'Manrope,sans-serif' }}>{l.label}</span>
                                     </div>
                                 ))}
                             </div>
@@ -325,14 +263,10 @@ export default function WardHeatmapPage() {
 
                 {/* Side panel */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-                    {/* Selected ward detail */}
                     {selectedWard && selectedStat ? (
                         <div className="bento-card detail-panel" style={{ padding: '20px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                                <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>
-                                    {selectedWard}
-                                </h3>
+                                <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>{selectedWard}</h3>
                                 <button onClick={() => setSelectedWard(null)} style={{ border: 'none', background: '#f1f5f9', borderRadius: '8px', padding: '4px 8px', cursor: 'pointer', fontSize: '12px', color: '#64748b' }}>✕</button>
                             </div>
                             {[
@@ -345,10 +279,9 @@ export default function WardHeatmapPage() {
                             ].map(m => (
                                 <div key={m.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(0,69,13,0.04)' }}>
                                     <span style={{ fontSize: '12px', color: '#717a6d' }}>{m.label}</span>
-                                    <span style={{ fontSize: '13px', fontWeight: 700, color: m.color, fontFamily: 'Manrope, sans-serif' }}>{m.value}</span>
+                                    <span style={{ fontSize: '13px', fontWeight: 700, color: m.color, fontFamily: 'Manrope,sans-serif' }}>{m.value}</span>
                                 </div>
                             ))}
-                            {/* Progress bar */}
                             <div style={{ marginTop: '12px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                     <span style={{ fontSize: '11px', color: '#717a6d' }}>Stop completion rate</span>
@@ -364,14 +297,14 @@ export default function WardHeatmapPage() {
                             <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                                 <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '24px' }}>touch_app</span>
                             </div>
-                            <p style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', color: '#181c22', margin: '0 0 4px' }}>Select a ward</p>
-                            <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Click any ward cell on the heatmap to see detailed stats.</p>
+                            <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: '14px', color: '#181c22', margin: '0 0 4px' }}>Select a ward</p>
+                            <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Click any ward cell to see detailed stats.</p>
                         </div>
                     )}
 
                     {/* District summary */}
                     <div className="bento-card" style={{ padding: '20px' }}>
-                        <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', color: '#181c22', margin: '0 0 14px' }}>
+                        <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: '14px', color: '#181c22', margin: '0 0 14px' }}>
                             District Summary · {days}d
                         </h3>
                         {loading ? (
@@ -384,19 +317,14 @@ export default function WardHeatmapPage() {
                                     .sort((a, b) => b.completionPct - a.completionPct)
                                     .slice(0, 8)
                                     .map(s => (
-                                        <div key={s.ward} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
-                                            onClick={() => setSelectedWard(s.ward)}>
-                                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#41493e', minWidth: '54px', fontFamily: 'Manrope, sans-serif' }}>{s.ward}</span>
+                                        <div key={s.ward} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setSelectedWard(s.ward)}>
+                                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#41493e', minWidth: '54px', fontFamily: 'Manrope,sans-serif' }}>{s.ward}</span>
                                             <div style={{ flex: 1, height: '6px', background: '#f0fdf4', borderRadius: '99px', overflow: 'hidden' }}>
                                                 <div style={{ height: '100%', borderRadius: '99px', width: `${s.completionPct}%`, background: s.completionPct >= 80 ? '#00450d' : s.completionPct >= 60 ? '#d97706' : '#dc2626', transition: 'width 0.6s ease' }} />
                                             </div>
-                                            <span style={{ fontSize: '11px', fontWeight: 700, color: s.completionPct >= 80 ? '#00450d' : s.completionPct >= 60 ? '#d97706' : '#dc2626', minWidth: '34px', textAlign: 'right', fontFamily: 'Manrope, sans-serif' }}>
-                                                {s.completionPct}%
-                                            </span>
+                                            <span style={{ fontSize: '11px', fontWeight: 700, color: s.completionPct >= 80 ? '#00450d' : s.completionPct >= 60 ? '#d97706' : '#dc2626', minWidth: '34px', textAlign: 'right', fontFamily: 'Manrope,sans-serif' }}>{s.completionPct}%</span>
                                             {s.openAlerts > 0 && (
-                                                <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '99px', background: '#fef2f2', color: '#dc2626', fontFamily: 'Manrope, sans-serif' }}>
-                                                    {s.openAlerts}⚠
-                                                </span>
+                                                <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '99px', background: '#fef2f2', color: '#dc2626', fontFamily: 'Manrope,sans-serif' }}>{s.openAlerts}⚠</span>
                                             )}
                                         </div>
                                     ))}
@@ -404,20 +332,19 @@ export default function WardHeatmapPage() {
                         )}
                     </div>
 
-                    {/* Top/bottom performers */}
+                    {/* Attention needed */}
                     {!loading && Object.keys(wardStats).length > 0 && (
                         <div className="bento-card" style={{ padding: '20px' }}>
-                            <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', color: '#181c22', margin: '0 0 12px' }}>Attention Needed</h3>
+                            <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: '14px', color: '#181c22', margin: '0 0 12px' }}>Attention Needed</h3>
                             {Object.values(wardStats)
                                 .filter(s => s.completionPct < 70 && s.totalRoutes > 0)
                                 .sort((a, b) => a.completionPct - b.completionPct)
                                 .slice(0, 3)
                                 .map(s => (
-                                    <div key={s.ward} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', borderRadius: '10px', background: '#fef2f2', marginBottom: '6px', cursor: 'pointer' }}
-                                        onClick={() => setSelectedWard(s.ward)}>
+                                    <div key={s.ward} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', borderRadius: '10px', background: '#fef2f2', marginBottom: '6px', cursor: 'pointer' }} onClick={() => setSelectedWard(s.ward)}>
                                         <span className="material-symbols-outlined" style={{ color: '#dc2626', fontSize: '16px' }}>warning</span>
                                         <div style={{ flex: 1 }}>
-                                            <p style={{ fontSize: '12px', fontWeight: 700, color: '#181c22', margin: 0, fontFamily: 'Manrope, sans-serif' }}>{s.ward}</p>
+                                            <p style={{ fontSize: '12px', fontWeight: 700, color: '#181c22', margin: 0, fontFamily: 'Manrope,sans-serif' }}>{s.ward}</p>
                                             <p style={{ fontSize: '10px', color: '#dc2626', margin: 0 }}>{s.completionPct}% completion · {s.openAlerts} alerts</p>
                                         </div>
                                     </div>

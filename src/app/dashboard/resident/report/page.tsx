@@ -6,12 +6,12 @@ import DashboardLayout from '@/components/DashboardLayout'
 import { logComplaintOnChain } from '@/lib/blockchain'
 
 const RESIDENT_NAV = [
-    { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard' },
-    { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' },
-    { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on' },
-    { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem' },
-    { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star' },
-    { label: 'My Profile', href: '/dashboard/resident/profile', icon: 'person' },
+    { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard', section: 'Menu' },
+    { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today', section: 'Menu' },
+    { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on', section: 'Menu' },
+    { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem', section: 'Menu' },
+    { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star', section: 'Menu' },
+    { label: 'My Profile', href: '/dashboard/resident/profile', icon: 'person', section: 'Menu' },
 ]
 
 // Categories — service issues write to complaints, environmental to waste_reports
@@ -268,11 +268,11 @@ export default function ResidentReportPage() {
 
             {/* Header */}
             <div className="a1" style={{ marginBottom: 24 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: 6 }}>
-                    Resident Portal · ClearPath
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: '0 0 8px' }}>
+                    Resident Portal
                 </p>
                 <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                    <h1 style={{ fontSize: 42, fontWeight: 900, color: '#181c22', lineHeight: 1.1, fontFamily: 'Manrope,sans-serif' }}>
+                    <h1 style={{ fontFamily: 'Manrope,sans-serif', fontSize: '46px', fontWeight: 800, color: '#181c22', lineHeight: 1.05, margin: 0 }}>
                         Report <span style={{ color: '#00450d' }}>Issue</span>
                     </h1>
                     {profile?.district && (

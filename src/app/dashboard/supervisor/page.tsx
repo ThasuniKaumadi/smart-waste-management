@@ -297,8 +297,8 @@ export default function SupervisorDashboard() {
         .hero-section {
           background: linear-gradient(135deg, #00450d 0%, #1b5e20 60%, #2e7d32 100%);
           border-radius: 20px;
-          padding: 36px 40px;
-          margin-bottom: 28px;
+          padding: 22px 28px;
+          margin-bottom: 24px;
           position: relative;
           overflow: hidden;
         }
@@ -403,44 +403,30 @@ export default function SupervisorDashboard() {
         .fu4 { animation-delay: 0.26s; }
       `}</style>
 
-      {/* ── HERO GREETING ── */}
+      {/* ── GREETING ── */}
+      <div className="fade-up fu1" style={{ marginBottom: '20px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif', textTransform: 'uppercase', margin: '0 0 6px' }}>
+          {getGreetingEmoji()} {timeGreeting()}
+        </p>
+        <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '46px', fontWeight: 800, color: '#181c22', lineHeight: 1.05, margin: '0 0 4px' }}>
+          Welcome, <span style={{ color: '#00450d' }}>{profile?.full_name?.split(' ')[0] || 'Supervisor'}</span>
+        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <p style={{ fontSize: '13px', color: '#717a6d', margin: 0 }}>
+            {currentTime.toLocaleDateString('en-LK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            {profile?.district && ` · ${profile.district}`}
+            {assignedWards.length > 0 && ` · ${assignedWards.join(', ')}`}
+          </p>
+          <button onClick={refresh} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(0,69,13,0.2)', background: 'white', color: '#00450d', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', cursor: 'pointer' }}>
+            <span className="ms2" style={{ fontSize: '16px', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>refresh</span>
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── STATS HERO ── */}
       <div className="hero-section fade-up fu1">
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-            <div>
-              <p className="hero-greeting">{getGreetingEmoji()} {timeGreeting()}</p>
-              <h1 className="hero-name">{profile?.full_name || 'Supervisor'}</h1>
-              <p className="hero-meta">
-                <span>{currentTime.toLocaleDateString('en-LK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                <span className="hero-dot" />
-                <span>{currentTime.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</span>
-                {profile?.district && (
-                  <>
-                    <span className="hero-dot" />
-                    <span>{profile.district}</span>
-                  </>
-                )}
-              </p>
-              {assignedWards.length > 0 && (
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
-                  {assignedWards.map((ward: string) => (
-                    <span key={ward} className="hero-badge">
-                      <span className="ms2" style={{ fontSize: '13px' }}>location_on</span>
-                      {ward}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <button onClick={refresh} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-                <span className="ms2" style={{ fontSize: '16px', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>refresh</span>
-                {refreshing ? 'Refreshing...' : 'Refresh'}
-              </button>
-            </div>
-          </div>
-
-          {/* Hero quick stats */}
           <div className="hero-stats">
             {[
               { value: stats.activeRoutes, label: 'Active Routes' },

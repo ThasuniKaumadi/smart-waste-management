@@ -6,12 +6,12 @@ import Link from 'next/link'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const RESIDENT_NAV = [
-  { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard' },
-  { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' },
-  { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on' },
-  { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem' },
-  { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star' },
-  { label: 'My Profile', href: '/dashboard/resident/profile', icon: 'person' },
+  { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard', section: 'Menu' },
+  { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today', section: 'Menu' },
+  { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on', section: 'Menu' },
+  { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem', section: 'Menu' },
+  { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star', section: 'Menu' },
+  { label: 'My Profile', href: '/dashboard/resident/profile', icon: 'person', section: 'Menu' },
 ]
 
 const WASTE_COLORS: Record<string, { label: string; color: string; bg: string; border: string; icon: string; dot: string; gradient: string }> = {
@@ -21,24 +21,21 @@ const WASTE_COLORS: Record<string, { label: string; color: string; bg: string; b
   e_waste: { label: 'E-Waste', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff', icon: 'computer', dot: '#a855f7', gradient: 'linear-gradient(135deg,#7c3aed,#c084fc)' },
   bulk: { label: 'Bulk Waste', color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: 'inventory_2', dot: '#f59e0b', gradient: 'linear-gradient(135deg,#d97706,#fbbf24)' },
 }
-
 const FREQUENCIES: Record<string, string> = {
-  daily: 'Daily', twice_weekly: '2× week', weekly: 'Weekly',
+  daily: 'Daily', twice_weekly: '2× week', weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly',
 }
-
 const ACTIONS = [
   { label: 'Collection Schedule', desc: 'View upcoming collections', icon: 'calendar_month', href: '/dashboard/resident/schedules', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
   { label: 'Track Vehicle', desc: 'Live GPS truck location', icon: 'near_me', href: '/dashboard/resident/tracking', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
   { label: 'Report Issue', desc: 'Illegal dumping & missed collections', icon: 'report_problem', href: '/dashboard/resident/report', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
-  { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem' },
   { label: 'Rate Service', desc: 'Help CMC improve', icon: 'star', href: '/dashboard/resident/feedback', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
   { label: 'My Profile', desc: 'Update your details', icon: 'person', href: '/dashboard/resident/profile', color: '#0e7490', bg: '#ecfeff', border: '#a5f3fc' },
 ]
 
 interface Schedule {
   id: string; waste_type: string; collection_day: string
-  collection_time: string; frequency: string; notes: string; scheduled_date: string
-  wards: string[]; ward: string
+  collection_time: string; frequency: string; notes: string
+  scheduled_date: string; wards: string[]; ward: string
 }
 
 export default function ResidentDashboardPage() {
@@ -52,10 +49,7 @@ export default function ResidentDashboardPage() {
   const [toast, setToast] = useState('')
 
   useEffect(() => { loadData() }, [])
-
-  function showToast(msg: string) {
-    setToast(msg); setTimeout(() => setToast(''), 3000)
-  }
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   async function loadData() {
     const supabase = createClient()
@@ -63,7 +57,6 @@ export default function ResidentDashboardPage() {
     if (!user) return
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
-
     if (p?.district) {
       const today = new Date().toISOString().split('T')[0]
       const { data: raw } = await supabase.from('schedules').select('*')
@@ -71,27 +64,22 @@ export default function ResidentDashboardPage() {
         .gte('scheduled_date', today).order('scheduled_date', { ascending: true })
       let filtered = raw || []
       if (p?.ward && filtered.length > 0) {
-        const wardSpecific = filtered.filter((s: Schedule) => (s.wards && s.wards.includes(p.ward)) || (s.ward && s.ward === p.ward))
-        const districtWide = filtered.filter((s: Schedule) => !s.wards?.length && !s.ward)
-        filtered = wardSpecific.length > 0 ? [...wardSpecific, ...districtWide] : districtWide.length > 0 ? districtWide : filtered
+        const ws = filtered.filter((s: Schedule) => (s.wards && s.wards.includes(p.ward)) || (s.ward && s.ward === p.ward))
+        const dw = filtered.filter((s: Schedule) => !s.wards?.length && !s.ward)
+        filtered = ws.length > 0 ? [...ws, ...dw] : dw.length > 0 ? dw : filtered
       }
       setSchedules(filtered)
       if (filtered.length > 0) {
-        const { data: confirmations } = await supabase.from('waste_confirmations').select('schedule_id, status').eq('user_id', user.id)
-        const statusMap: Record<string, 'confirmed' | 'unable'> = {}
-          ; (confirmations || []).forEach((c: any) => { statusMap[c.schedule_id] = c.status })
-        setConfirmStatuses(statusMap)
+        const { data: confs } = await supabase.from('waste_confirmations').select('schedule_id,status').eq('user_id', user.id)
+        const map: Record<string, 'confirmed' | 'unable'> = {}
+          ; (confs || []).forEach((c: any) => { map[c.schedule_id] = c.status })
+        setConfirmStatuses(map)
       }
     }
-
-    const { data: comp } = await supabase.from('complaints').select('*')
-      .eq('submitted_by', user.id).order('created_at', { ascending: false }).limit(3)
+    const { data: comp } = await supabase.from('complaints').select('*').eq('submitted_by', user.id).order('created_at', { ascending: false }).limit(3)
     setComplaints(comp || [])
-
-    const { data: rep } = await supabase.from('waste_reports').select('*')
-      .eq('submitted_by', user.id).order('created_at', { ascending: false }).limit(3)
+    const { data: rep } = await supabase.from('waste_reports').select('*').eq('submitted_by', user.id).order('created_at', { ascending: false }).limit(3)
     setReports(rep || [])
-
     setLoading(false)
   }
 
@@ -100,25 +88,29 @@ export default function ResidentDashboardPage() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setConfirmingId(null); return }
-    if (confirmStatuses[schedule.id]) {
-      await supabase.from('waste_confirmations').delete().eq('schedule_id', schedule.id).eq('user_id', user.id)
-    }
-    const { error } = await supabase.from('waste_confirmations').insert({
-      schedule_id: schedule.id, user_id: user.id, role: 'resident',
-      district: profile?.district, ward: profile?.ward || null, status,
-    })
-    if (!error) {
-      setConfirmStatuses(prev => ({ ...prev, [schedule.id]: status }))
-      showToast(status === 'confirmed' ? '✓ Confirmed! District engineer notified.' : 'Noted — marked as unable.')
-    }
+    if (confirmStatuses[schedule.id]) await supabase.from('waste_confirmations').delete().eq('schedule_id', schedule.id).eq('user_id', user.id)
+    const { error } = await supabase.from('waste_confirmations').insert({ schedule_id: schedule.id, user_id: user.id, role: 'resident', district: profile?.district, ward: profile?.ward || null, status })
+    if (!error) { setConfirmStatuses(prev => ({ ...prev, [schedule.id]: status })); showToast(status === 'confirmed' ? '✓ Confirmed! District engineer notified.' : 'Noted — marked as unable.') }
     setConfirmingId(null)
   }
 
   function statusStyle(s: string) {
     if (s === 'resolved') return { bg: '#f0fdf4', color: '#00450d', border: '#bbf7d0' }
-    if (s === 'in_progress') return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
-    if (s === 'assigned') return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
+    if (s === 'in_progress' || s === 'assigned') return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
     return { bg: '#fefce8', color: '#92400e', border: '#fde68a' }
+  }
+
+  function timeGreeting() {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+  function greetingEmoji() {
+    const h = new Date().getHours()
+    if (h < 12) return '🌤️'
+    if (h < 17) return '☀️'
+    return '🌙'
   }
 
   const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
@@ -133,38 +125,44 @@ export default function ResidentDashboardPage() {
       <style>{`
         .msf{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;vertical-align:middle;line-height:1}
         .card{background:white;border-radius:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);border:1px solid rgba(0,69,13,0.05);overflow:hidden}
-        .action-card{border-radius:16px;padding:18px;text-decoration:none;display:flex;align-items:flex-start;gap:12px;transition:all 0.2s;border:1.5px solid transparent}
+        .action-card{border-radius:16px;padding:16px;text-decoration:none;display:flex;align-items:flex-start;gap:12px;transition:all 0.2s;border:1.5px solid transparent}
         .action-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.08)}
         .confirm-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;font-family:'Manrope',sans-serif;cursor:pointer;border:none;transition:all 0.2s}
         .confirm-btn:disabled{opacity:0.6;cursor:not-allowed}
         .activity-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f3f4f6}
         .activity-row:last-child{border-bottom:none}
         .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:99px;font-size:9px;font-weight:700;font-family:'Manrope',sans-serif;letter-spacing:0.06em;text-transform:uppercase;border:1px solid transparent}
+        .hero{background:linear-gradient(135deg,#00450d 0%,#1b5e20 60%,#2e7d32 100%);border-radius:20px;padding:22px 28px;margin-bottom:24px;position:relative;overflow:hidden}
+        .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 80% 50%,rgba(255,255,255,0.07) 0%,transparent 60%);pointer-events:none}
+        .hero::after{content:'';position:absolute;right:-40px;top:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,0.04);pointer-events:none}
         .toast-msg{animation:slideUp .3s ease}
         @keyframes slideUp{from{transform:translateY(12px) translateX(-50%);opacity:0}to{transform:translateY(0) translateX(-50%);opacity:1}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes spin{to{transform:rotate(360deg)}}
         .a1{animation:fadeUp .4s ease .04s both}.a2{animation:fadeUp .4s ease .09s both}
-        .a3{animation:fadeUp .4s ease .14s both}.a4{animation:fadeUp .4s ease .19s both}
-        .a5{animation:fadeUp .4s ease .24s both}
+        .a3{animation:fadeUp .4s ease .14s both}.a4{animation:fadeUp .4s ease .19s both}.a5{animation:fadeUp .4s ease .24s both}
       `}</style>
 
       {toast && (
-        <div className="toast-msg" style={{ position: 'fixed', bottom: 24, left: '50%', background: '#181c22', color: 'white', padding: '10px 20px', borderRadius: 9999, fontSize: 13, fontWeight: 500, zIndex: 1000, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>
-          {toast}
-        </div>
+        <div className="toast-msg" style={{ position: 'fixed', bottom: 24, left: '50%', background: '#181c22', color: 'white', padding: '10px 20px', borderRadius: 9999, fontSize: 13, fontWeight: 500, zIndex: 1000, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>{toast}</div>
       )}
 
-      {/* Header */}
-      <div className="a1" style={{ marginBottom: 24 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: 6 }}>Resident Portal</p>
-        <h1 style={{ fontSize: 42, fontWeight: 900, color: '#181c22', lineHeight: 1.1, fontFamily: 'Manrope,sans-serif', marginBottom: 4 }}>
+      {/* Greeting */}
+      <div className="a1" style={{ marginBottom: 20 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: '0 0 6px' }}>
+          {greetingEmoji()} {timeGreeting()}
+        </p>
+        <h1 style={{ fontFamily: 'Manrope,sans-serif', fontSize: '46px', fontWeight: 800, color: '#181c22', lineHeight: 1.05, margin: '0 0 4px' }}>
           Welcome, <span style={{ color: '#00450d' }}>{firstName}</span>
         </h1>
-        <p style={{ fontSize: 13, color: '#717a6d' }}>
-          {profile?.district || 'CMC District'}{profile?.ward ? ` · Ward ${profile.ward}` : ''}
+        <p style={{ fontSize: 13, color: '#717a6d', margin: 0 }}>
+          {new Date().toLocaleDateString('en-LK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          {profile?.district && ` · ${profile.district}`}
+          {profile?.ward && ` · Ward ${profile.ward}`}
         </p>
       </div>
+
+
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
@@ -173,11 +171,10 @@ export default function ResidentDashboardPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
 
-          {/* LEFT COLUMN */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* Hero — Next collection */}
-            <div className="a1">
+            {/* Next collection */}
+            <div className="a2">
               {nextSched ? (() => {
                 const wc = WASTE_COLORS[nextSched.waste_type] || { label: nextSched.waste_type, color: '#00450d', bg: '#f0fdf4', border: '#bbf7d0', icon: 'delete_sweep', dot: '#22c55e', gradient: 'linear-gradient(135deg,#00450d,#1b5e20)' }
                 const cs = confirmStatuses[nextSched.id]
@@ -186,7 +183,6 @@ export default function ResidentDashboardPage() {
                 const isTmrw = date.toDateString() === new Date(Date.now() + 86400000).toDateString()
                 return (
                   <div className="card" style={{ overflow: 'hidden' }}>
-                    {/* Color bar */}
                     <div style={{ height: 5, background: wc.gradient }} />
                     <div style={{ padding: '24px 28px' }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
@@ -196,14 +192,14 @@ export default function ResidentDashboardPage() {
                               <span className="msf" style={{ fontSize: 24, color: wc.color }}>{wc.icon}</span>
                             </div>
                             <div>
-                              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif' }}>Next Collection</p>
+                              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', margin: 0 }}>Next Collection</p>
                               <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
                                 {isToday && <span style={{ fontSize: 10, fontWeight: 800, background: '#00450d', color: 'white', padding: '1px 8px', borderRadius: 99, fontFamily: 'Manrope,sans-serif' }}>TODAY</span>}
                                 {isTmrw && <span style={{ fontSize: 10, fontWeight: 800, background: '#1d4ed8', color: 'white', padding: '1px 8px', borderRadius: 99, fontFamily: 'Manrope,sans-serif' }}>TOMORROW</span>}
                               </div>
                             </div>
                           </div>
-                          <h2 style={{ fontSize: 32, fontWeight: 900, fontFamily: 'Manrope,sans-serif', color: '#181c22', lineHeight: 1.1, marginBottom: 10 }}>
+                          <h2 style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Manrope,sans-serif', color: '#181c22', lineHeight: 1.1, marginBottom: 10 }}>
                             {date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
                           </h2>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
@@ -211,28 +207,21 @@ export default function ResidentDashboardPage() {
                             <span style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 99, background: '#f4f6f3', color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span className="msf" style={{ fontSize: 13 }}>schedule</span>{nextSched.collection_time}
                             </span>
-                            <span style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 99, background: '#f4f6f3', color: '#374151' }}>{FREQUENCIES[nextSched.frequency] || nextSched.frequency}</span>
+                            {nextSched.frequency && <span style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 99, background: '#f4f6f3', color: '#374151' }}>{FREQUENCIES[nextSched.frequency] || nextSched.frequency}</span>}
                           </div>
                           {nextSched.notes && <p style={{ fontSize: 12, color: '#717a6d', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 5 }}><span className="msf" style={{ fontSize: 14 }}>info</span>{nextSched.notes}</p>}
-
-                          {/* Confirm buttons */}
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                             <button className="confirm-btn" onClick={() => confirmHandover(nextSched, 'confirmed')} disabled={confirmingId === nextSched.id}
                               style={{ background: cs === 'confirmed' ? '#00450d' : 'white', color: cs === 'confirmed' ? 'white' : '#00450d', border: `1.5px solid ${cs === 'confirmed' ? '#00450d' : 'rgba(0,69,13,0.25)'}` }}>
-                              <span className="msf" style={{ fontSize: 15, fontVariationSettings: cs === 'confirmed' ? "'FILL' 1" : "'FILL' 0" }}>thumb_up</span>
-                              I'll have my waste ready
+                              <span className="msf" style={{ fontSize: 15, fontVariationSettings: cs === 'confirmed' ? "'FILL' 1" : "'FILL' 0" }}>thumb_up</span>I'll have my waste ready
                             </button>
                             <button className="confirm-btn" onClick={() => confirmHandover(nextSched, 'unable')} disabled={confirmingId === nextSched.id}
                               style={{ background: cs === 'unable' ? '#dc2626' : 'white', color: cs === 'unable' ? 'white' : '#dc2626', border: `1.5px solid ${cs === 'unable' ? '#dc2626' : 'rgba(220,38,38,0.2)'}` }}>
-                              <span className="msf" style={{ fontSize: 15 }}>cancel</span>
-                              Unable to hand over
+                              <span className="msf" style={{ fontSize: 15 }}>cancel</span>Unable to hand over
                             </button>
                           </div>
                         </div>
-
-                        {/* Full schedule CTA */}
-                        <Link href="/dashboard/resident/schedules"
-                          style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '20px 22px', borderRadius: 16, background: wc.bg, border: `1.5px solid ${wc.border}`, textDecoration: 'none', transition: 'all 0.2s' }}>
+                        <Link href="/dashboard/resident/schedules" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '20px 22px', borderRadius: 16, background: wc.bg, border: `1.5px solid ${wc.border}`, textDecoration: 'none', transition: 'all 0.2s' }}>
                           <span className="msf" style={{ fontSize: 30, color: wc.color }}>calendar_month</span>
                           <span style={{ fontSize: 11, fontWeight: 700, color: wc.color, fontFamily: 'Manrope,sans-serif', whiteSpace: 'nowrap' }}>Full Schedule</span>
                         </Link>
@@ -258,20 +247,17 @@ export default function ResidentDashboardPage() {
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(163,246,156,0.75)', marginBottom: 3, fontFamily: 'Manrope,sans-serif' }}>Collection Today — Have your waste ready</p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {todayScheds.map(s => {
-                      const wc = WASTE_COLORS[s.waste_type]
-                      return <span key={s.id} style={{ background: 'rgba(255,255,255,0.13)', color: 'white', padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif' }}>{wc?.label || s.waste_type} · {s.collection_time}</span>
-                    })}
+                    {todayScheds.map(s => { const wc = WASTE_COLORS[s.waste_type]; return <span key={s.id} style={{ background: 'rgba(255,255,255,0.13)', color: 'white', padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif' }}>{wc?.label || s.waste_type} · {s.collection_time}</span> })}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Upcoming mini strip */}
+            {/* Upcoming strip */}
             {upcoming.length > 0 && (
               <div className="a2">
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', marginBottom: 10 }}>Coming Up</p>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${upcoming.length}, 1fr)`, gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${upcoming.length},1fr)`, gap: 10 }}>
                   {upcoming.map(s => {
                     const wc = WASTE_COLORS[s.waste_type] || { label: s.waste_type, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0', icon: 'delete_sweep', dot: '#94a3b8', gradient: '' }
                     const date = new Date(s.scheduled_date)
@@ -284,13 +270,8 @@ export default function ResidentDashboardPage() {
                           </div>
                           <span style={{ fontSize: 12, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif' }}>{wc.label}</span>
                         </div>
-                        <p style={{ fontSize: 14, fontWeight: 800, color: '#181c22', fontFamily: 'Manrope,sans-serif', marginBottom: 2 }}>
-                          {isTmrw ? 'Tomorrow' : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                        </p>
-                        <p style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <span className="msf" style={{ fontSize: 11 }}>schedule</span>
-                          {s.collection_time} · {FREQUENCIES[s.frequency] || s.frequency}
-                        </p>
+                        <p style={{ fontSize: 14, fontWeight: 800, color: '#181c22', fontFamily: 'Manrope,sans-serif', marginBottom: 2 }}>{isTmrw ? 'Tomorrow' : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
+                        <p style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}><span className="msf" style={{ fontSize: 11 }}>schedule</span>{s.collection_time} · {FREQUENCIES[s.frequency] || s.frequency}</p>
                       </div>
                     )
                   })}
@@ -298,13 +279,12 @@ export default function ResidentDashboardPage() {
               </div>
             )}
 
-            {/* Actions grid */}
+            {/* Quick actions */}
             <div className="a3">
               <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', marginBottom: 10 }}>Quick Actions</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
                 {ACTIONS.map(a => (
-                  <Link key={a.href} href={a.href} className="action-card"
-                    style={{ background: a.bg, borderColor: a.border }}>
+                  <Link key={a.href} href={a.href} className="action-card" style={{ background: a.bg, borderColor: a.border }}>
                     <div style={{ width: 36, height: 36, borderRadius: 10, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
                       <span className="msf" style={{ fontSize: 20, color: a.color }}>{a.icon}</span>
                     </div>
@@ -319,79 +299,44 @@ export default function ResidentDashboardPage() {
 
             {/* Complaints + Reports */}
             <div className="a4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              {/* Complaints */}
-              <div className="card">
-                <div style={{ padding: '14px 18px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22' }}>Complaints</p>
-                  <Link href="/dashboard/resident/report" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Manrope,sans-serif' }}>
-                    All <span className="msf" style={{ fontSize: 13 }}>chevron_right</span>
-                  </Link>
-                </div>
-                <div style={{ padding: '10px 18px' }}>
-                  {complaints.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
-                        <span className="msf" style={{ fontSize: 18, color: '#00450d' }}>check_circle</span>
-                      </div>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: '#181c22', marginBottom: 2 }}>All clear</p>
-                      <p style={{ fontSize: 11, color: '#94a3b8' }}>No complaints filed</p>
-                    </div>
-                  ) : complaints.map(c => {
-                    const ss = statusStyle(c.status)
-                    return (
-                      <div key={c.id} className="activity-row">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 28, height: 28, background: '#fef2f2', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <span className="msf" style={{ color: '#dc2626', fontSize: 14 }}>warning</span>
-                          </div>
-                          <div>
-                            <p style={{ fontSize: 11, fontWeight: 600, color: '#181c22' }}>{c.complaint_type?.replace(/_/g, ' ')}</p>
-                            <p style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
-                          </div>
+              {[
+                { title: 'Complaints', items: complaints, emptyIcon: 'check_circle', emptyMsg: 'All clear', emptySub: 'No complaints filed', itemIcon: 'warning', itemBg: '#fef2f2', itemColor: '#dc2626', keyFn: (c: any) => c.complaint_type?.replace(/_/g, ' ') },
+                { title: 'My Reports', items: reports, emptyIcon: 'photo_camera', emptyMsg: 'No reports yet', emptySub: 'Report issues in your area', itemIcon: 'report_problem', itemBg: '#faf5ff', itemColor: '#7c3aed', keyFn: (r: any) => r.report_type?.replace(/_/g, ' ') },
+              ].map(col => (
+                <div key={col.title} className="card">
+                  <div style={{ padding: '14px 18px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22', margin: 0 }}>{col.title}</p>
+                    <Link href="/dashboard/resident/report" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Manrope,sans-serif' }}>All <span className="msf" style={{ fontSize: 13 }}>chevron_right</span></Link>
+                  </div>
+                  <div style={{ padding: '10px 18px' }}>
+                    {col.items.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
+                          <span className="msf" style={{ fontSize: 18, color: '#00450d' }}>{col.emptyIcon}</span>
                         </div>
-                        <span className="badge" style={{ background: ss.bg, color: ss.color, borderColor: ss.border }}>{c.status?.replace('_', ' ')}</span>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: '#181c22', marginBottom: 2 }}>{col.emptyMsg}</p>
+                        <p style={{ fontSize: 11, color: '#94a3b8' }}>{col.emptySub}</p>
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Reports */}
-              <div className="card">
-                <div style={{ padding: '14px 18px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22' }}>My Reports</p>
-                  <Link href="/dashboard/resident/report" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Manrope,sans-serif' }}>
-                    All <span className="msf" style={{ fontSize: 13 }}>chevron_right</span>
-                  </Link>
-                </div>
-                <div style={{ padding: '10px 18px' }}>
-                  {reports.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
-                        <span className="msf" style={{ fontSize: 18, color: '#00450d' }}>photo_camera</span>
-                      </div>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: '#181c22', marginBottom: 2 }}>No reports yet</p>
-                      <p style={{ fontSize: 11, color: '#94a3b8' }}>Report issues in your area</p>
-                    </div>
-                  ) : reports.map(r => {
-                    const ss = statusStyle(r.status)
-                    return (
-                      <div key={r.id} className="activity-row">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 28, height: 28, background: '#faf5ff', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <span className="msf" style={{ color: '#7c3aed', fontSize: 14 }}>report_problem</span>
+                    ) : col.items.map((item: any) => {
+                      const ss = statusStyle(item.status)
+                      return (
+                        <div key={item.id} className="activity-row">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 28, height: 28, background: col.itemBg, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <span className="msf" style={{ color: col.itemColor, fontSize: 14 }}>{col.itemIcon}</span>
+                            </div>
+                            <div>
+                              <p style={{ fontSize: 11, fontWeight: 600, color: '#181c22', margin: 0 }}>{col.keyFn(item)}</p>
+                              <p style={{ fontSize: 10, color: '#94a3b8', margin: 0 }}>{new Date(item.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p style={{ fontSize: 11, fontWeight: 600, color: '#181c22' }}>{r.report_type?.replace(/_/g, ' ')}</p>
-                            <p style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(r.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{r.latitude ? ' · GPS' : ''}</p>
-                          </div>
+                          <span className="badge" style={{ background: ss.bg, color: ss.color, borderColor: ss.border }}>{item.status?.replace('_', ' ')}</span>
                         </div>
-                        <span className="badge" style={{ background: ss.bg, color: ss.color, borderColor: ss.border }}>{r.status}</span>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
 
             {/* Blockchain bar */}
@@ -399,18 +344,42 @@ export default function ResidentDashboardPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span className="msf" style={{ color: '#00450d', fontSize: 20 }}>verified</span>
                 <div>
-                  <p style={{ fontWeight: 700, fontSize: 13, color: '#00450d', fontFamily: 'Manrope,sans-serif' }}>Blockchain-verified collections</p>
-                  <p style={{ fontSize: 11, color: '#717a6d' }}>Every stop logged on Polygon Amoy</p>
+                  <p style={{ fontWeight: 700, fontSize: 13, color: '#00450d', fontFamily: 'Manrope,sans-serif', margin: 0 }}>Blockchain-verified collections</p>
+                  <p style={{ fontSize: 11, color: '#717a6d', margin: 0 }}>Every stop logged on Polygon Amoy</p>
                 </div>
               </div>
-              <Link href="/dashboard/resident/tracking" style={{ background: '#00450d', color: 'white', padding: '7px 16px', borderRadius: 99, fontWeight: 700, fontSize: 12, textDecoration: 'none', fontFamily: 'Manrope,sans-serif', whiteSpace: 'nowrap' }}>
-                Track Now
-              </Link>
+              <Link href="/dashboard/resident/tracking" style={{ background: '#00450d', color: 'white', padding: '7px 16px', borderRadius: 99, fontWeight: 700, fontSize: 12, textDecoration: 'none', fontFamily: 'Manrope,sans-serif', whiteSpace: 'nowrap' }}>Track Now</Link>
             </div>
           </div>
 
-          {/* RIGHT COLUMN — sticky schedule sidebar */}
-          <div style={{ position: 'sticky', top: 24 }}>
+          {/* RIGHT sidebar */}
+          <div style={{ position: 'sticky', top: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Stats hero */}
+            <div className="hero a1">
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {[
+                    { value: schedules.length, label: 'Upcoming Collections', icon: 'calendar_month' },
+                    { value: complaints.length + reports.length, label: 'My Reports', icon: 'report_problem' },
+                    { value: [...complaints, ...reports].filter((r: any) => r.status === 'resolved').length, label: 'Resolved', icon: 'task_alt' },
+                  ].map((s, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      {i > 0 && <div style={{ position: 'absolute', left: 0, right: 0, height: '1px', background: 'rgba(255,255,255,0.08)', marginTop: -7 }} />}
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span className="msf" style={{ fontSize: 18, color: 'rgba(255,255,255,0.8)' }}>{s.icon}</span>
+                      </div>
+                      <div>
+                        <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800, fontSize: 22, color: 'white', lineHeight: 1, margin: '0 0 2px' }}>{s.value}</p>
+                        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{s.label}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Schedule list */}
             <div className="card a1">
               <div style={{ padding: '16px 18px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -418,15 +387,12 @@ export default function ResidentDashboardPage() {
                     <span className="msf" style={{ color: '#00450d', fontSize: 16 }}>calendar_month</span>
                   </div>
                   <div>
-                    <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22', lineHeight: 1.2 }}>Upcoming Collections</p>
-                    <p style={{ fontSize: 10, color: '#94a3b8' }}>{profile?.district}{profile?.ward ? ` · ${profile.ward}` : ''}</p>
+                    <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22', lineHeight: 1.2, margin: 0 }}>Upcoming Collections</p>
+                    <p style={{ fontSize: 10, color: '#94a3b8', margin: 0 }}>{profile?.district}{profile?.ward ? ` · ${profile.ward}` : ''}</p>
                   </div>
                 </div>
-                <Link href="/dashboard/resident/schedules" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 1 }}>
-                  All <span className="msf" style={{ fontSize: 13 }}>open_in_new</span>
-                </Link>
+                <Link href="/dashboard/resident/schedules" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 1 }}>All <span className="msf" style={{ fontSize: 13 }}>open_in_new</span></Link>
               </div>
-
               {schedules.length === 0 ? (
                 <div style={{ padding: '28px 18px', textAlign: 'center' }}>
                   <span className="msf" style={{ fontSize: 30, color: '#d1d5db', display: 'block', marginBottom: 8 }}>event_busy</span>
@@ -445,14 +411,14 @@ export default function ResidentDashboardPage() {
                         <div style={{ flexShrink: 0, width: 42, textAlign: 'center' }}>
                           {isToday || isTmrw ? (
                             <>
-                              <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: isToday ? '#00450d' : '#1d4ed8', fontFamily: 'Manrope,sans-serif' }}>{isToday ? 'Today' : 'Tmrw'}</p>
+                              <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: isToday ? '#00450d' : '#1d4ed8', fontFamily: 'Manrope,sans-serif', margin: 0 }}>{isToday ? 'Today' : 'Tmrw'}</p>
                               {isToday && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00450d', margin: '3px auto 0' }} />}
                             </>
                           ) : (
                             <>
-                              <p style={{ fontSize: 9, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', fontFamily: 'Manrope,sans-serif' }}>{date.toLocaleDateString('en-GB', { weekday: 'short' })}</p>
-                              <p style={{ fontSize: 20, fontWeight: 800, color: '#181c22', fontFamily: 'Manrope,sans-serif', lineHeight: 1.1 }}>{date.getDate()}</p>
-                              <p style={{ fontSize: 9, color: '#94a3b8' }}>{date.toLocaleDateString('en-GB', { month: 'short' })}</p>
+                              <p style={{ fontSize: 9, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', fontFamily: 'Manrope,sans-serif', margin: 0 }}>{date.toLocaleDateString('en-GB', { weekday: 'short' })}</p>
+                              <p style={{ fontSize: 20, fontWeight: 800, color: '#181c22', fontFamily: 'Manrope,sans-serif', lineHeight: 1.1, margin: 0 }}>{date.getDate()}</p>
+                              <p style={{ fontSize: 9, color: '#94a3b8', margin: 0 }}>{date.toLocaleDateString('en-GB', { month: 'short' })}</p>
                             </>
                           )}
                         </div>
@@ -460,29 +426,22 @@ export default function ResidentDashboardPage() {
                           <span className="msf" style={{ fontSize: 13, color: wc.color }}>{wc.icon}</span>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 12, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wc.label}</p>
-                          <p style={{ fontSize: 10, color: '#94a3b8' }}>{s.collection_time} · {FREQUENCIES[s.frequency] || s.frequency}</p>
-                          {cs && (
-                            <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, display: 'inline-flex', alignItems: 'center', gap: 2, marginTop: 2, fontFamily: 'Manrope,sans-serif', background: cs === 'confirmed' ? 'rgba(0,69,13,0.08)' : 'rgba(220,38,38,0.08)', color: cs === 'confirmed' ? '#00450d' : '#dc2626' }}>
-                              {cs === 'confirmed' ? '✓ Ready' : '✗ Unable'}
-                            </span>
-                          )}
+                          <p style={{ fontSize: 12, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{wc.label}</p>
+                          <p style={{ fontSize: 10, color: '#94a3b8', margin: 0 }}>{s.collection_time} · {FREQUENCIES[s.frequency] || s.frequency}</p>
+                          {cs && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, display: 'inline-flex', alignItems: 'center', gap: 2, marginTop: 2, fontFamily: 'Manrope,sans-serif', background: cs === 'confirmed' ? 'rgba(0,69,13,0.08)' : 'rgba(220,38,38,0.08)', color: cs === 'confirmed' ? '#00450d' : '#dc2626' }}>{cs === 'confirmed' ? '✓ Ready' : '✗ Unable'}</span>}
                         </div>
                       </div>
                     )
                   })}
                 </div>
               )}
-
               <div style={{ padding: '11px 18px', borderTop: '1px solid #f0f0f0', background: '#fafafa' }}>
                 <Link href="/dashboard/resident/schedules" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#00450d', textDecoration: 'none', fontFamily: 'Manrope,sans-serif' }}>
-                  <span className="msf" style={{ fontSize: 14 }}>calendar_month</span>
-                  View full schedule
+                  <span className="msf" style={{ fontSize: 14 }}>calendar_month</span>View full schedule
                 </Link>
               </div>
             </div>
           </div>
-
         </div>
       )}
     </DashboardLayout>
