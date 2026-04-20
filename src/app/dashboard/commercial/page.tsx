@@ -12,7 +12,6 @@ const COMMERCIAL_NAV = [
   { label: 'Bins', href: '/dashboard/commercial/bins', icon: 'delete' },
   { label: 'Collection History', href: '/dashboard/commercial/collection-history', icon: 'history' },
   { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
-  { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
   { label: 'Rate Service', href: '/dashboard/commercial/feedback', icon: 'star' },
   { label: 'Profile', href: '/dashboard/commercial/profile', icon: 'manage_accounts' },
 ]
@@ -305,7 +304,7 @@ export default function CommercialDashboardPage() {
             {[
               { icon: 'delete', label: 'Registered Bins', value: stats.totalBins, href: '/dashboard/commercial/bins', color: '#00450d', bg: '#f0fdf4' },
               { icon: 'history', label: 'Collections', value: billingSummary?.total_stops_completed ?? '—', href: '/dashboard/commercial/collection-history', color: '#1d4ed8', bg: '#eff6ff' },
-              { icon: 'feedback', label: 'Complaints', value: stats.totalComplaints, href: '/dashboard/commercial/complaints', color: '#92400e', bg: '#fefce8' },
+              { icon: 'feedback', label: 'Complaints', value: stats.totalComplaints, href: '/dashboard/commercial/report', color: '#92400e', bg: '#fefce8' },
               { icon: 'verified', label: 'Compliance', value: `${stats.complianceRate}%`, href: '/dashboard/commercial/collection-history', color: '#0e7490', bg: '#ecfeff' },
             ].map(stat => (
               <Link key={stat.label} href={stat.href} style={{ textDecoration: 'none' }}>
@@ -389,7 +388,7 @@ export default function CommercialDashboardPage() {
               <div className="card" style={{ flex: 1 }}>
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope, sans-serif' }}>Recent Complaints</h3>
-                  <Link href="/dashboard/commercial/complaints"
+                  <Link href="/dashboard/commercial/report"
                     style={{ fontSize: '11px', fontWeight: 700, color: '#00450d', textDecoration: 'none', fontFamily: 'Manrope, sans-serif', display: 'flex', alignItems: 'center', gap: '3px' }}>
                     View all <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>chevron_right</span>
                   </Link>
@@ -432,7 +431,7 @@ export default function CommercialDashboardPage() {
                   { label: 'Schedule', icon: 'calendar_month', href: '/dashboard/commercial/schedule', desc: 'View pickups' },
                   { label: 'Track', icon: 'location_on', href: '/dashboard/commercial/track', desc: 'Live vehicle' },
                   { label: 'Billing', icon: 'payments', href: '/dashboard/commercial/billing', desc: 'Pay invoices' },
-                  { label: 'Complaint', icon: 'feedback', href: '/dashboard/commercial/complaints', desc: 'File issue' },
+                  { label: 'Complaint', icon: 'feedback', href: '/dashboard/commercial/report', desc: 'File issue' },
                 ].map(action => (
                   <Link key={action.label} href={action.href} className="action-tile">
                     <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#00450d', display: 'block', marginBottom: '6px' }}>{action.icon}</span>

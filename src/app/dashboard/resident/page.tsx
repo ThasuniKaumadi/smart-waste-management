@@ -9,8 +9,7 @@ const RESIDENT_NAV = [
   { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard' },
   { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' },
   { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on' },
-  { label: 'Report Issue', href: '/dashboard/resident/report-dumping', icon: 'report_problem' },
-  { label: 'Complaints', href: '/dashboard/resident/complaints', icon: 'feedback' },
+  { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem' },
   { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star' },
   { label: 'My Profile', href: '/dashboard/resident/profile', icon: 'person' },
 ]
@@ -30,8 +29,8 @@ const FREQUENCIES: Record<string, string> = {
 const ACTIONS = [
   { label: 'Collection Schedule', desc: 'View upcoming collections', icon: 'calendar_month', href: '/dashboard/resident/schedules', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
   { label: 'Track Vehicle', desc: 'Live GPS truck location', icon: 'near_me', href: '/dashboard/resident/tracking', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
-  { label: 'Report Issue', desc: 'Illegal dumping & missed collections', icon: 'report_problem', href: '/dashboard/resident/report-dumping', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
-  { label: 'File Complaint', desc: 'Submit a formal grievance', icon: 'feedback', href: '/dashboard/resident/complaints', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+  { label: 'Report Issue', desc: 'Illegal dumping & missed collections', icon: 'report_problem', href: '/dashboard/resident/report', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+  { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem' },
   { label: 'Rate Service', desc: 'Help CMC improve', icon: 'star', href: '/dashboard/resident/feedback', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
   { label: 'My Profile', desc: 'Update your details', icon: 'person', href: '/dashboard/resident/profile', color: '#0e7490', bg: '#ecfeff', border: '#a5f3fc' },
 ]
@@ -324,7 +323,7 @@ export default function ResidentDashboardPage() {
               <div className="card">
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22' }}>Complaints</p>
-                  <Link href="/dashboard/resident/complaints" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Manrope,sans-serif' }}>
+                  <Link href="/dashboard/resident/report" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Manrope,sans-serif' }}>
                     All <span className="msf" style={{ fontSize: 13 }}>chevron_right</span>
                   </Link>
                 </div>
@@ -361,7 +360,7 @@ export default function ResidentDashboardPage() {
               <div className="card">
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22' }}>My Reports</p>
-                  <Link href="/dashboard/resident/report-dumping" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Manrope,sans-serif' }}>
+                  <Link href="/dashboard/resident/report" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Manrope,sans-serif' }}>
                     All <span className="msf" style={{ fontSize: 13 }}>chevron_right</span>
                   </Link>
                 </div>

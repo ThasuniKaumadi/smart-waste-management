@@ -7,18 +7,21 @@ import DashboardLayout from '@/components/DashboardLayout'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const ADMIN_NAV = [
-  { label: 'Overview', href: '/dashboard/admin', icon: 'dashboard' },
-  { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts' },
-  { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
-  { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
-  { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
-  { label: 'Contracts', href: '/dashboard/admin/contracts', icon: 'description' },
-  { label: 'Contractor Billing', href: '/dashboard/admin/billing-contractor', icon: 'receipt_long' },
-  { label: 'Incidents', href: '/dashboard/admin/incidents', icon: 'warning' },
-  { label: 'Communications', href: '/dashboard/admin/communications', icon: 'chat' },
-  { label: 'Zones', href: '/dashboard/admin/zones', icon: 'map' },
-  { label: 'Supervisors', href: '/dashboard/admin/supervisors', icon: 'supervisor_account' },
-  { label: 'Disposal', href: '/dashboard/admin/disposal', icon: 'delete_sweep' },
+  { label: 'Overview', href: '/dashboard/admin', icon: 'dashboard', section: 'Main' },
+  { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts', section: 'Management' },
+  { label: 'Supervisors', href: '/dashboard/admin/supervisors', icon: 'supervisor_account', section: 'Management' },
+  { label: 'Zones', href: '/dashboard/admin/zones', icon: 'map', section: 'Management' },
+  { label: 'Contracts', href: '/dashboard/admin/contracts', icon: 'description', section: 'Management' },
+  { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments', section: 'Finance' },
+  { label: 'Contractor Billing', href: '/dashboard/admin/billing-contractor', icon: 'receipt_long', section: 'Finance' },
+  { label: 'Commercial Analytics', href: '/dashboard/admin/commercial-analytics', icon: 'store', section: 'Finance' },
+  { label: 'Recycler Analytics', href: '/dashboard/admin/recycler-analytics', icon: 'recycling', section: 'Finance' },
+  { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link', section: 'Analytics' },
+  { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics', section: 'Analytics' },
+  { label: 'Incidents', href: '/dashboard/admin/incidents', icon: 'warning', section: 'Analytics' },
+  { label: 'Disposal', href: '/dashboard/admin/disposal', icon: 'delete_sweep', section: 'Analytics' },
+  { label: 'Announcements', href: '/dashboard/admin/announcements', icon: 'campaign', section: 'Communications' },
+  { label: 'Communications', href: '/dashboard/admin/communications', icon: 'chat', section: 'Communications' },
 ]
 
 export default function AdminDashboardPage() {
@@ -27,6 +30,7 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState({
     totalUsers: 0, totalRoutes: 0, totalComplaints: 0, resolvedComplaints: 0,
     totalCollections: 0, blockchainRecords: 0, totalReports: 0, activeRoutes: 0,
+    totalContracts: 0, unresolvedAlerts: 0,
   })
   const [roleData, setRoleData] = useState<any[]>([])
   const [complaintData, setComplaintData] = useState<any[]>([])
@@ -49,6 +53,8 @@ export default function AdminDashboardPage() {
       { count: blockchainRecords },
       { count: totalReports },
       { count: activeRoutes },
+      { count: totalContracts },
+      { count: unresolvedAlerts },
     ] = await Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('routes').select('*', { count: 'exact', head: true }),
@@ -58,6 +64,8 @@ export default function AdminDashboardPage() {
       supabase.from('collection_events').select('*', { count: 'exact', head: true }).not('blockchain_tx', 'is', null),
       supabase.from('waste_reports').select('*', { count: 'exact', head: true }),
       supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+      supabase.from('contracts').select('*', { count: 'exact', head: true }),
+      supabase.from('exception_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
     ])
 
     setStats({
@@ -65,6 +73,7 @@ export default function AdminDashboardPage() {
       totalComplaints: totalComplaints || 0, resolvedComplaints: resolvedComplaints || 0,
       totalCollections: totalCollections || 0, blockchainRecords: blockchainRecords || 0,
       totalReports: totalReports || 0, activeRoutes: activeRoutes || 0,
+      totalContracts: totalContracts || 0, unresolvedAlerts: unresolvedAlerts || 0,
     })
 
     const { data: rolesData } = await supabase.from('profiles').select('role')
@@ -84,16 +93,10 @@ export default function AdminDashboardPage() {
     setLoading(false)
   }
 
-  const resolutionRate = stats.totalComplaints > 0
-    ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100) : 0
-  const blockchainRate = stats.totalCollections > 0
-    ? Math.round((stats.blockchainRecords / stats.totalCollections) * 100) : 0
-
-  const QUICK_LINKS = [
-    { label: 'User Management', desc: 'Create and manage staff accounts', icon: 'manage_accounts', href: '/dashboard/admin/users', color: '#00450d' },
-    { label: 'Blockchain Logs', desc: 'View on-chain transaction records', icon: 'link', href: '/dashboard/admin/blockchain', color: '#1b5e20' },
-    { label: 'Performance', desc: 'System-wide analytics and charts', icon: 'analytics', href: '/dashboard/admin/performance', color: '#2e7d32' },
-  ]
+  const resolutionRate = stats.totalComplaints > 0 ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100) : 0
+  const blockchainRate = stats.totalCollections > 0 ? Math.round((stats.blockchainRecords / stats.totalCollections) * 100) : 0
+  const now = new Date()
+  const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
     <DashboardLayout
@@ -103,226 +106,264 @@ export default function AdminDashboardPage() {
       primaryAction={{ label: 'Add User', href: '/dashboard/admin/users', icon: 'person_add' }}
     >
       <style>{`
-        .material-symbols-outlined {
-          font-family: 'Material Symbols Outlined';
-          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-          display: inline-block; vertical-align: middle; line-height: 1;
-        }
-        .font-headline { font-family: 'Manrope', sans-serif; }
-        .font-label    { font-family: 'Manrope', sans-serif; }
-        .bento-card {
-          background: white; border-radius: 16px;
-          box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08);
-          border: 1px solid rgba(0,69,13,0.04);
-          transition: all 0.4s cubic-bezier(0.05,0.7,0.1,1.0); overflow: hidden;
-        }
-        .bento-card:hover { transform: translateY(-4px); box-shadow: 0 20px 50px -15px rgba(24,28,34,0.12); }
-        .bento-card-green {
-          background: #00450d; border-radius: 16px; color: white;
-          transition: all 0.4s cubic-bezier(0.05,0.7,0.1,1.0); overflow: hidden; position: relative;
-        }
-        .bento-card-green:hover { transform: translateY(-4px); }
-        .quick-link {
-          background: white; border-radius: 16px; padding: 24px;
-          border: 1px solid rgba(0,69,13,0.06);
-          transition: all 0.35s cubic-bezier(0.05,0.7,0.1,1.0); text-decoration: none; display: block;
-        }
-        .quick-link:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -15px rgba(0,69,13,0.12); border-color: rgba(0,69,13,0.15); }
-        .progress-bar { height: 6px; border-radius: 99px; background: #f0fdf4; overflow: hidden; }
-        .progress-fill { height: 100%; border-radius: 99px; background: #00450d; }
-        .log-item { display: flex; align-items: center; gap: 24px; padding: 16px; background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); transition: all 0.2s ease; }
-        .log-item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-        .s1 { animation: staggerIn 0.5s ease 0.05s both; }
-        .s2 { animation: staggerIn 0.5s ease 0.10s both; }
-        .s3 { animation: staggerIn 0.5s ease 0.15s both; }
-        .s4 { animation: staggerIn 0.5s ease 0.20s both; }
-        .s5 { animation: staggerIn 0.5s ease 0.25s both; }
+        .ms { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+        .bento { background:white; border-radius:16px; box-shadow:0 10px 40px -10px rgba(24,28,34,0.08); border:1px solid rgba(0,69,13,0.04); overflow:hidden; }
+        .stat-card { transition:transform 0.2s ease,box-shadow 0.2s ease; }
+        .stat-card:hover { transform:translateY(-3px); box-shadow:0 16px 40px -12px rgba(24,28,34,0.12); }
+        .quick-link { background:white; border-radius:14px; padding:18px; border:1.5px solid rgba(0,69,13,0.06); text-decoration:none; display:flex; align-items:center; gap:12px; transition:all 0.2s; }
+        .quick-link:hover { border-color:rgba(0,69,13,0.2); box-shadow:0 8px 24px rgba(0,0,0,0.07); transform:translateY(-2px); }
+        .metric-row { display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid rgba(0,69,13,0.04); }
+        .metric-row:last-child { border-bottom:none; }
+        .progress-bar { height:6px; border-radius:99px; background:#f0fdf4; overflow:hidden; }
+        .progress-fill { height:100%; border-radius:99px; }
+        .alert-pill { display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border-radius:99px; font-size:12px; font-weight:700; font-family:'Manrope',sans-serif; }
+        @keyframes staggerIn { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        .s1{animation:staggerIn 0.45s ease 0.05s both}
+        .s2{animation:staggerIn 0.45s ease 0.10s both}
+        .s3{animation:staggerIn 0.45s ease 0.15s both}
+        .s4{animation:staggerIn 0.45s ease 0.20s both}
+        .s5{animation:staggerIn 0.45s ease 0.25s both}
+        .live{animation:pulse 2s ease-in-out infinite}
       `}</style>
 
-      {/* Hero */}
-      <section className="mb-10 s1">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <h1 className="font-headline font-extrabold tracking-tight"
-            style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
-            Operations <span style={{ color: '#1b5e20' }}>Pulse</span>
-          </h1>
-          <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: '#f0fdf4' }}>
-            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#16a34a' }} />
-            <span className="text-sm font-medium" style={{ color: '#14532d', fontFamily: 'Inter, sans-serif' }}>
-              Live Network Feed
-            </span>
+      {/* ── Header ── */}
+      <div className="s1" style={{ marginBottom: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <p style={{ fontSize: '12px', color: '#717a6d', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 4px', fontFamily: 'Manrope, sans-serif' }}>
+              {greeting}, {profile?.full_name?.split(' ')[0] || 'Admin'}
+            </p>
+            <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '42px', fontWeight: 800, color: '#181c22', lineHeight: 1.05, margin: 0 }}>
+              Operations <span style={{ color: '#1b5e20' }}>Pulse</span>
+            </h1>
+            <p style={{ fontSize: '13px', color: '#717a6d', margin: '4px 0 0' }}>
+              {now.toLocaleDateString('en-LK', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              &nbsp;&middot;&nbsp;Colombo Municipal Council
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {stats.unresolvedAlerts > 0 && (
+              <Link href="/dashboard/admin/incidents" style={{ textDecoration: 'none' }}>
+                <span className="alert-pill" style={{ background: '#fef2f2', color: '#dc2626' }}>
+                  <span className="ms" style={{ fontSize: '14px' }}>warning</span>
+                  {stats.unresolvedAlerts} unresolved alert{stats.unresolvedAlerts !== 1 ? 's' : ''}
+                </span>
+              </Link>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 14px', borderRadius: '99px', background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.12)' }}>
+              <div className="live" style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#16a34a' }} />
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>Live Network Feed</span>
+            </div>
           </div>
         </div>
-      </section>
+      </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <div className="text-center">
-            <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
-              style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
-            <p className="text-sm" style={{ color: '#717a6d' }}>Loading system data...</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: '32px', height: '32px', border: '2.5px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 0.8s linear infinite' }} />
+            <p style={{ fontSize: '13px', color: '#717a6d' }}>Loading system data...</p>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         </div>
       ) : (
         <>
-          {/* Row 1 */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
-            <div className="bento-card md:col-span-8 p-8 s2">
-              <div className="flex items-start justify-between mb-8">
-                <div>
-                  <span className="font-label text-xs font-bold uppercase block mb-2"
-                    style={{ letterSpacing: '0.2em', color: '#717a6d' }}>Active Pickup Streams</span>
-                  <h2 className="font-headline font-bold text-2xl" style={{ color: '#181c22' }}>Real-time Logistics</h2>
-                </div>
-                <div className="p-3 rounded-full" style={{ background: '#f0fdf4' }}>
-                  <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '24px' }}>local_shipping</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4 mb-8">
-                {[
-                  { label: 'Total Collections', value: stats.totalCollections, color: '#181c22' },
-                  { label: 'On-Chain Verified', value: stats.blockchainRecords, color: '#00450d' },
-                  { label: 'Active Routes', value: stats.activeRoutes, color: '#1b5e20' },
-                ].map(m => (
-                  <div key={m.label} className="p-4 rounded-xl" style={{ background: '#f8fafc' }}>
-                    <p className="font-label text-xs font-bold uppercase mb-1" style={{ letterSpacing: '0.15em', color: '#94a3b8' }}>{m.label}</p>
-                    <p className="font-headline text-2xl font-bold" style={{ color: m.color }}>{m.value}</p>
-                  </div>
-                ))}
-              </div>
-              <div style={{ height: '120px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={roleData.slice(0, 6)}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'Inter' }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#00450d" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="bento-card md:col-span-4 p-8 flex flex-col justify-between s2">
-              <div>
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>System Health</h2>
-                  <span className="material-symbols-outlined" style={{ color: '#717a6d', fontSize: '20px' }}>monitor_heart</span>
-                </div>
-                <div className="space-y-5">
-                  {[
-                    { label: 'Blockchain Rate', value: blockchainRate, color: '#00450d' },
-                    { label: 'Resolution Rate', value: resolutionRate, color: '#1b5e20' },
-                    { label: 'System Uptime', value: 99, color: '#2e7d32' },
-                  ].map(m => (
-                    <div key={m.label}>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="font-medium" style={{ color: '#181c22' }}>{m.label}</span>
-                        <span className="font-bold" style={{ color: m.color }}>{m.value}%</span>
-                      </div>
-                      <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${m.value}%`, background: m.color }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="mt-8 pt-6" style={{ borderTop: '1px solid rgba(0,69,13,0.08)' }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0fdf4' }}>
-                    <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '20px' }}>check_circle</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold" style={{ color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>All systems operational</p>
-                    <p className="text-xs" style={{ color: '#717a6d' }}>Supabase · Netlify · Polygon</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Row 2 — 4 stat cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6 s3">
-            <div className="bento-card-green p-8">
-              <div className="absolute top-0 right-0 w-32 h-32 rounded-full -mr-12 -mt-12" style={{ background: 'rgba(163,246,156,0.08)' }} />
-              <span className="material-symbols-outlined mb-4 block" style={{ color: '#a3f69c', fontSize: '28px' }}>eco</span>
-              <p className="font-label text-xs font-bold uppercase mb-2" style={{ letterSpacing: '0.2em', color: 'rgba(163,246,156,0.6)' }}>Total Users</p>
-              <p className="font-headline font-extrabold tracking-tighter mb-1" style={{ fontSize: '40px' }}>{stats.totalUsers}</p>
-              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Registered accounts</p>
-            </div>
+          {/* ── Row 1: Primary KPI cards ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '20px' }} className="s2">
             {[
-              { label: 'Total Routes', value: stats.totalRoutes, icon: 'route', sub: `${stats.activeRoutes} active`, color: '#00450d' },
-              { label: 'Complaints', value: stats.totalComplaints, icon: 'report', sub: `${resolutionRate}% resolved`, color: '#ba1a1a' },
-              { label: 'Waste Reports', value: stats.totalReports, icon: 'photo_camera', sub: 'Geo-tagged', color: '#1b5e20' },
-            ].map(m => (
-              <div key={m.label} className="bento-card p-8">
-                <span className="material-symbols-outlined mb-4 block" style={{ color: m.color, fontSize: '24px' }}>{m.icon}</span>
-                <p className="font-label text-xs font-bold uppercase mb-2" style={{ letterSpacing: '0.15em', color: '#94a3b8' }}>{m.label}</p>
-                <p className="font-headline font-extrabold text-4xl tracking-tighter" style={{ color: '#181c22' }}>{m.value}</p>
-                <p className="text-xs mt-2 font-bold" style={{ color: m.color }}>{m.sub}</p>
+              { icon: 'group', label: 'Total Users', value: stats.totalUsers, color: '#00450d', bg: '#f0fdf4', sub: 'Registered accounts' },
+              { icon: 'route', label: 'Total Routes', value: stats.totalRoutes, color: '#1d4ed8', bg: '#eff6ff', sub: `${stats.activeRoutes} active now` },
+              { icon: 'feedback', label: 'Complaints', value: stats.totalComplaints, color: stats.totalComplaints > 0 ? '#d97706' : '#00450d', bg: stats.totalComplaints > 0 ? '#fefce8' : '#f0fdf4', sub: `${resolutionRate}% resolved` },
+              { icon: 'description', label: 'Contracts', value: stats.totalContracts, color: '#7c3aed', bg: '#f5f3ff', sub: 'Active agreements' },
+              { icon: 'link', label: 'On-Chain', value: stats.blockchainRecords, color: '#0891b2', bg: '#f0f9ff', sub: `${blockchainRate}% verified` },
+            ].map(card => (
+              <div key={card.label} className="bento stat-card" style={{ padding: '20px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
+                  <span className="ms" style={{ fontSize: '20px', color: card.color }}>{card.icon}</span>
+                </div>
+                <p style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: '30px', color: '#181c22', margin: '0 0 2px', lineHeight: 1 }}>{card.value}</p>
+                <p style={{ fontSize: '12px', fontWeight: 600, color: '#41493e', margin: '0 0 2px', fontFamily: 'Manrope, sans-serif' }}>{card.label}</p>
+                <p style={{ fontSize: '11px', color: card.color, margin: 0, fontWeight: 500 }}>{card.sub}</p>
               </div>
             ))}
           </div>
 
-          {/* Row 3 — chart + blockchain */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 s4">
-            <div className="bento-card lg:col-span-8 p-8">
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>Complaint Analytics</h3>
-              </div>
-              {complaintData.length === 0 ? (
-                <div className="h-48 flex items-center justify-center" style={{ color: '#94a3b8' }}>
-                  <p className="text-sm">No complaint data yet</p>
+          {/* ── Row 2: Charts + System Health ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 340px', gap: '20px', marginBottom: '20px' }} className="s3">
+
+            {/* Users by role bar chart */}
+            <div className="bento" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <div>
+                  <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif', margin: '0 0 2px' }}>System Overview</p>
+                  <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>Users by Role</h3>
                 </div>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="ms" style={{ color: '#00450d', fontSize: '18px' }}>group</span>
+                </div>
+              </div>
+              {roleData.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: '13px' }}>No user data yet</div>
               ) : (
-                <div style={{ height: '200px' }}>
+                <div style={{ height: '160px' }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={complaintData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'Inter' }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#1b5e20" radius={[6, 6, 0, 0]} />
+                    <BarChart data={roleData.slice(0, 6)} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 9, fontFamily: 'Inter' }} />
+                      <YAxis tick={{ fontSize: 9 }} />
+                      <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter', fontSize: '12px' }} />
+                      <Bar dataKey="value" fill="#00450d" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               )}
             </div>
 
-            <div className="lg:col-span-4 flex flex-col gap-6">
-              <div className="bento-card p-8 flex-1">
-                <span className="material-symbols-outlined mb-4 block" style={{ color: '#00450d', fontSize: '28px' }}>verified</span>
-                <h4 className="font-headline font-bold text-lg mb-2" style={{ color: '#181c22' }}>Blockchain Audit</h4>
-                <p className="text-sm mb-4" style={{ color: '#717a6d' }}>
-                  {stats.blockchainRecords} collections verified on Polygon Amoy testnet.
-                </p>
-                <p className="text-sm font-bold" style={{ color: '#00450d' }}>{blockchainRate}% verification rate</p>
+            {/* Complaint analytics */}
+            <div className="bento" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <div>
+                  <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif', margin: '0 0 2px' }}>Resident Feedback</p>
+                  <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>Complaint Types</h3>
+                </div>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#fefce8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="ms" style={{ color: '#d97706', fontSize: '18px' }}>feedback</span>
+                </div>
               </div>
-              <div className="p-8 rounded-2xl" style={{ background: '#00450d', color: 'white' }}>
-                <h4 className="font-headline font-bold text-lg mb-3">Smart Contract</h4>
-                <p className="text-sm mb-4" style={{ color: 'rgba(163,246,156,0.7)' }}>
-                  Polygon Amoy testnet · Active and monitoring all collections.
-                </p>
-                <Link href="/dashboard/admin/blockchain"
-                  style={{ display: 'block', background: 'rgba(255,255,255,0.1)', color: 'white', textDecoration: 'none', border: '1px solid rgba(255,255,255,0.15)', padding: '10px', borderRadius: '12px', textAlign: 'center', fontSize: '13px', fontWeight: 700, fontFamily: 'Manrope, sans-serif' }}>
-                  View Blockchain Logs
-                </Link>
+              {complaintData.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: '13px' }}>No complaint data yet</div>
+              ) : (
+                <div style={{ height: '160px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={complaintData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 9, fontFamily: 'Inter' }} />
+                      <YAxis tick={{ fontSize: 9 }} />
+                      <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter', fontSize: '12px' }} />
+                      <Bar dataKey="value" fill="#d97706" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            {/* System Health */}
+            <div className="bento" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="ms" style={{ color: '#00450d', fontSize: '18px' }}>monitor_heart</span>
+                </div>
+                <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>System Health</h3>
+              </div>
+              {[
+                { label: 'Blockchain Rate', value: blockchainRate, color: '#0891b2' },
+                { label: 'Resolution Rate', value: resolutionRate, color: '#00450d' },
+                { label: 'System Uptime', value: 99, color: '#1b5e20' },
+              ].map(m => (
+                <div key={m.label} style={{ marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '12px', color: '#41493e', fontWeight: 500 }}>{m.label}</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: m.color }}>{m.value}%</span>
+                  </div>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${m.value}%`, background: m.color }} />
+                  </div>
+                </div>
+              ))}
+              <div style={{ marginTop: '20px', padding: '12px 14px', borderRadius: '12px', background: '#f0fdf4', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span className="ms" style={{ color: '#00450d', fontSize: '18px' }}>check_circle</span>
+                <div>
+                  <p style={{ fontSize: '12px', fontWeight: 700, color: '#00450d', fontFamily: 'Manrope, sans-serif', margin: 0 }}>All systems operational</p>
+                  <p style={{ fontSize: '11px', color: '#717a6d', margin: 0 }}>Supabase &middot; Netlify &middot; Polygon</p>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Quick actions */}
-          <div className="s5">
-            <h3 className="font-headline font-bold text-base mb-4" style={{ color: '#181c22' }}>Quick Actions</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {QUICK_LINKS.map(link => (
-                <Link key={link.href} href={link.href} className="quick-link">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: `${link.color}12` }}>
-                    <span className="material-symbols-outlined" style={{ color: link.color, fontSize: '22px' }}>{link.icon}</span>
+          {/* ── Row 3: Activity metrics + Quick links ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }} className="s4">
+
+            {/* Activity metrics */}
+            <div className="bento" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="ms" style={{ color: '#1d4ed8', fontSize: '18px' }}>local_shipping</span>
+                </div>
+                <div>
+                  <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', fontFamily: 'Manrope, sans-serif', margin: 0 }}>Active Pickup Streams</p>
+                  <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#181c22', margin: 0 }}>Real-time Logistics</h3>
+                </div>
+              </div>
+              {[
+                { label: 'Total Collections', value: stats.totalCollections, icon: 'delete_sweep', color: '#00450d' },
+                { label: 'On-Chain Verified', value: stats.blockchainRecords, icon: 'verified', color: '#0891b2' },
+                { label: 'Active Routes', value: stats.activeRoutes, icon: 'directions_car', color: '#1d4ed8' },
+                { label: 'Waste Reports', value: stats.totalReports, icon: 'photo_camera', color: '#7c3aed' },
+              ].map(m => (
+                <div key={m.label} className="metric-row">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="ms" style={{ fontSize: '16px', color: m.color }}>{m.icon}</span>
+                    </div>
+                    <span style={{ fontSize: '13px', color: '#41493e', fontWeight: 500 }}>{m.label}</span>
                   </div>
-                  <p className="font-bold text-sm mb-1" style={{ color: '#181c22', fontFamily: 'Manrope, sans-serif' }}>{link.label}</p>
-                  <p className="text-xs" style={{ color: '#717a6d' }}>{link.desc}</p>
+                  <span style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: '20px', color: '#181c22' }}>{m.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Blockchain card */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="bento" style={{ padding: '24px', flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                  <span className="ms" style={{ color: '#00450d', fontSize: '24px' }}>verified</span>
+                  <h4 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '15px', color: '#181c22', margin: 0 }}>Blockchain Audit</h4>
+                </div>
+                <p style={{ fontSize: '13px', color: '#717a6d', marginBottom: '12px', lineHeight: 1.5 }}>
+                  {stats.blockchainRecords} collections verified on Polygon Amoy testnet.
+                </p>
+                <p style={{ fontSize: '14px', fontWeight: 700, color: '#00450d', fontFamily: 'Manrope, sans-serif', marginBottom: '16px' }}>{blockchainRate}% verification rate</p>
+                <Link href="/dashboard/admin/blockchain" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', borderRadius: '10px', background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.12)', color: '#00450d', textDecoration: 'none', fontSize: '13px', fontWeight: 700, fontFamily: 'Manrope, sans-serif' }}>
+                  <span className="ms" style={{ fontSize: '16px' }}>link</span>
+                  View Blockchain Logs
+                </Link>
+              </div>
+              <div style={{ padding: '20px', borderRadius: '16px', background: 'linear-gradient(135deg, #00450d, #1b5e20)', color: 'white' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <span className="ms" style={{ fontSize: '18px', color: 'rgba(255,255,255,0.7)' }}>hub</span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', fontFamily: 'Manrope, sans-serif' }}>Smart Contract</span>
+                </div>
+                <p style={{ fontSize: '12px', color: 'rgba(163,246,156,0.8)', margin: 0 }}>
+                  Polygon Amoy testnet &middot; Active and monitoring all collections.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Row 4: Quick links ── */}
+          <div className="s5">
+            <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '15px', color: '#181c22', margin: '0 0 14px' }}>Quick Actions</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+              {[
+                { label: 'User Management', desc: 'Create and manage staff accounts', icon: 'manage_accounts', href: '/dashboard/admin/users', color: '#00450d', bg: '#f0fdf4' },
+                { label: 'Blockchain Logs', desc: 'View on-chain transaction records', icon: 'link', href: '/dashboard/admin/blockchain', color: '#0891b2', bg: '#f0f9ff' },
+                { label: 'System Performance', desc: 'Analytics and system-wide charts', icon: 'analytics', href: '/dashboard/admin/performance', color: '#7c3aed', bg: '#f5f3ff' },
+                { label: 'Billing Management', desc: 'Commercial invoices and payments', icon: 'payments', href: '/dashboard/admin/billing', color: '#d97706', bg: '#fefce8' },
+                { label: 'Contracts', desc: 'Manage contractor agreements', icon: 'description', href: '/dashboard/admin/contracts', color: '#1d4ed8', bg: '#eff6ff' },
+                { label: 'Zone Assignments', desc: 'Assign wards to contractors', icon: 'map', href: '/dashboard/admin/zones', color: '#00450d', bg: '#f0fdf4' },
+                { label: 'Announcements', desc: 'Post notices to all staff', icon: 'campaign', href: '/dashboard/admin/announcements', color: '#dc2626', bg: '#fef2f2' },
+                { label: 'Incidents', desc: 'Review exception alerts', icon: 'warning', href: '/dashboard/admin/incidents', color: '#d97706', bg: '#fefce8' },
+              ].map(action => (
+                <Link key={action.label} href={action.href} className="quick-link">
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span className="ms" style={{ fontSize: '18px', color: action.color }}>{action.icon}</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: '0 0 1px', fontFamily: 'Manrope, sans-serif' }}>{action.label}</p>
+                    <p style={{ fontSize: '11px', color: '#94a3b8', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{action.desc}</p>
+                  </div>
+                  <span className="ms" style={{ fontSize: '16px', color: '#c4c9c0', flexShrink: 0 }}>chevron_right</span>
                 </Link>
               ))}
             </div>

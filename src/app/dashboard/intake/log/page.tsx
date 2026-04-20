@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/DashboardLayout'
@@ -50,7 +50,7 @@ interface FormData {
     rejection_notes: string
 }
 
-export default function IntakeLogPage() {
+function IntakeLogPageContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const handoffCodeFromUrl = searchParams.get('handoff')
@@ -708,4 +708,12 @@ export default function IntakeLogPage() {
             </div>
         </DashboardLayout>
     )
+}
+
+export default function IntakeLogPage() {
+  return (
+    <Suspense fallback={<div style={{display:'flex',justifyContent:'center',padding:'80px'}}><div style={{width:28,height:28,border:'2px solid #00450d',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .8s linear infinite'}} /></div>}>
+      <IntakeLogPageContent />
+    </Suspense>
+  )
 }

@@ -8,8 +8,7 @@ const RESIDENT_NAV = [
     { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard' },
     { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' },
     { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on' },
-    { label: 'Report Issue', href: '/dashboard/resident/report-dumping', icon: 'report_problem' },
-    { label: 'Complaints', href: '/dashboard/resident/complaints', icon: 'feedback' },
+    { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem' },
     { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star' },
     { label: 'My Profile', desc: 'Update your details', icon: 'person', href: '/dashboard/resident/profile', color: '#7c3aed', bg: 'rgba(124,58,237,0.07)' },
 ]

@@ -11,7 +11,6 @@ const COMMERCIAL_NAV = [
     { label: 'Bins', href: '/dashboard/commercial/bins', icon: 'delete' },
     { label: 'Collection History', href: '/dashboard/commercial/collection-history', icon: 'history' },
     { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
-    { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
     { label: 'Rate Service', href: '/dashboard/commercial/feedback', icon: 'star' },
     { label: 'Profile', href: '/dashboard/commercial/profile', icon: 'manage_accounts' },
 ]

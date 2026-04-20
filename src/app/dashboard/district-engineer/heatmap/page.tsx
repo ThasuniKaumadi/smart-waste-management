@@ -7,483 +7,488 @@ import DashboardLayout from '@/components/DashboardLayout'
 const DE_NAV = [
     { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
     { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
+    { label: 'History', href: '/dashboard/district-engineer/collection-history', icon: 'history' },
     { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
     { label: 'Heatmap', href: '/dashboard/district-engineer/heatmap', icon: 'thermostat' },
-    { label: 'Complaints', href: '/dashboard/district-engineer/complaints', icon: 'feedback' },
-    { label: 'Waste Reports', href: '/dashboard/district-engineer/waste-reports', icon: 'report' },
-    { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
-    { label: 'Zones', href: '/dashboard/district-engineer/zones', icon: 'map' },
-    { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+    { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'report_problem' },
     { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
+    { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
+    { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
 
-interface StopPoint {
-    lat: number
-    lng: number
-    status: string
-    skip_reason: string | null
-    road_name: string
-    route_name: string
-    weight: number
+// Colombo ward coordinates
+const WARD_COORDS: Record<string, { lat: number; lng: number }> = {
+    // District 1 - Colombo North
+    'Mattakkuliya': { lat: 6.9720, lng: 79.8755 },
+    'Modara': { lat: 6.9680, lng: 79.8720 },
+    'Kotahena': { lat: 6.9560, lng: 79.8640 },
+    'Grandpass': { lat: 6.9480, lng: 79.8680 },
+    'Maligawatta': { lat: 6.9440, lng: 79.8600 },
+    'Aluthkade': { lat: 6.9390, lng: 79.8580 },
+    // District 2 - Colombo Central
+    'Pettah': { lat: 6.9350, lng: 79.8516 },
+    'Fort': { lat: 6.9344, lng: 79.8428 },
+    'Slave Island': { lat: 6.9230, lng: 79.8480 },
+    'Kollupitiya': { lat: 6.9100, lng: 79.8490 },
+    // District 3 - Colombo South
+    'Bambalapitiya': { lat: 6.8980, lng: 79.8530 },
+    'Wellawatta': { lat: 6.8830, lng: 79.8610 },
+    'Dehiwala': { lat: 6.8670, lng: 79.8640 },
+    'Borella': { lat: 6.9200, lng: 79.8760 },
+    // District 4 - Colombo East  
+    'Cinnamon Gardens': { lat: 6.9060, lng: 79.8630 },
+    'Thurstan': { lat: 6.9150, lng: 79.8640 },
+    'Narahenpita': { lat: 6.9010, lng: 79.8760 },
+    'Kirulapone': { lat: 6.8890, lng: 79.8780 },
+    'Havelock Town': { lat: 6.8970, lng: 79.8650 },
+    // Fallback - Colombo city center
+    'Default': { lat: 6.9271, lng: 79.8612 },
 }
 
-interface RouteStats {
-    route_id: string
+function getWardCoords(ward: string): { lat: number; lng: number } {
+    if (WARD_COORDS[ward]) return WARD_COORDS[ward]
+    // Fuzzy match
+    const key = Object.keys(WARD_COORDS).find(k => ward.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(ward.toLowerCase()))
+    return key ? WARD_COORDS[key] : WARD_COORDS['Default']
+}
+
+interface RouteData {
+    id: string
     route_name: string
     ward: string
-    total: number
-    skipped: number
-    skip_rate: number
-    alerts: number
-    heat: 'critical' | 'high' | 'medium' | 'low'
-    skip_reasons: Record<string, number>
+    shift: string
+    status: string
+    date: string
+    driver_name: string | null
+    vehicle_number: string | null
+    contractor_name: string | null
+    total_stops: number
+    completed_stops: number
+    skipped_stops: number
+    schedule_waste_type: string | null
+    schedule_time: string | null
 }
 
-const HEAT_CONFIG = {
-    critical: { label: 'Critical', color: '#dc2626', bg: '#fef2f2', border: '#fecaca', dot: '#ef4444' },
-    high: { label: 'High', color: '#d97706', bg: '#fffbeb', border: '#fde68a', dot: '#f59e0b' },
-    medium: { label: 'Medium', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', dot: '#3b82f6' },
-    low: { label: 'Low', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', dot: '#22c55e' },
+declare global {
+    interface Window {
+        google: any
+        initMap: () => void
+    }
 }
 
-function getHeat(skipRate: number, alerts: number): 'critical' | 'high' | 'medium' | 'low' {
-    if (skipRate >= 60 || alerts >= 5) return 'critical'
-    if (skipRate >= 40 || alerts >= 3) return 'high'
-    if (skipRate >= 20 || alerts >= 1) return 'medium'
-    return 'low'
-}
-
-declare global { interface Window { google: any; initHeatmap: () => void } }
-
-export default function DEHeatmapPage() {
+export default function DECollectionMapPage() {
     const [profile, setProfile] = useState<any>(null)
+    const [routes, setRoutes] = useState<RouteData[]>([])
     const [loading, setLoading] = useState(true)
+    const [selectedRoute, setSelectedRoute] = useState<RouteData | null>(null)
     const [mapLoaded, setMapLoaded] = useState(false)
-    const [mapError, setMapError] = useState(false)
-    const [stopPoints, setStopPoints] = useState<StopPoint[]>([])
-    const [routeStats, setRouteStats] = useState<RouteStats[]>([])
-    const [selected, setSelected] = useState<RouteStats | null>(null)
-    const [dateRange, setDateRange] = useState<'7' | '30' | '90'>('30')
-    const [mapMode, setMapMode] = useState<'skipped' | 'all'>('skipped')
-    const [view, setView] = useState<'map' | 'list'>('map')
-
+    const [lastRefresh, setLastRefresh] = useState(new Date())
     const mapRef = useRef<HTMLDivElement>(null)
-    const mapInstance = useRef<any>(null)
-    const heatLayerRef = useRef<any>(null)
+    const mapInstanceRef = useRef<any>(null)
     const markersRef = useRef<any[]>([])
+    const infoWindowRef = useRef<any>(null)
 
-    const loadData = useCallback(async () => {
-        setLoading(true)
+    useEffect(() => { loadData() }, [])
+
+    // Auto-refresh every 60 seconds
+    useEffect(() => {
+        const interval = setInterval(() => { loadData(); setLastRefresh(new Date()) }, 60000)
+        return () => clearInterval(interval)
+    }, [])
+
+    async function loadData() {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
         const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         setProfile(p)
 
-        const since = new Date(Date.now() - parseInt(dateRange) * 24 * 60 * 60 * 1000).toISOString()
+        const today = new Date().toISOString().split('T')[0]
 
-        const { data: routes } = await supabase
-            .from('routes').select('id, route_name, district, ward')
+        // Get today's routes for this district
+        const { data: routesData } = await supabase
+            .from('routes')
+            .select(`
+        id, route_name, ward, shift, status, date, vehicle_number,
+        driver:profiles!driver_id(full_name),
+        contractor:profiles!contractor_id(full_name, organisation_name),
+        collection_stops(id, status),
+        schedule:schedules!schedule_id(waste_type, custom_waste_type, collection_time)
+      `)
             .eq('district', p?.district || '')
+            .gte('date', today)
+            .order('date', { ascending: true })
 
-        if (!routes || routes.length === 0) { setLoading(false); return }
-        const routeIds = routes.map((r: any) => r.id)
-
-        const { data: stops } = await supabase
-            .from('collection_stops')
-            .select('id, route_id, road_name, address, status, skip_reason, latitude, longitude, updated_at')
-            .in('route_id', routeIds)
-            .gte('updated_at', since)
-
-        const { data: alerts } = await supabase
-            .from('exception_alerts').select('id, route_id, severity, is_resolved')
-            .in('route_id', routeIds).gte('created_at', since)
-
-        // Build stop points for heatmap (only those with GPS)
-        const points: StopPoint[] = []
-            ; (stops || []).forEach((s: any) => {
-                if (s.latitude && s.longitude) {
-                    const route = routes.find((r: any) => r.id === s.route_id)
-                    points.push({
-                        lat: s.latitude, lng: s.longitude,
-                        status: s.status, skip_reason: s.skip_reason,
-                        road_name: s.road_name || s.address || '',
-                        route_name: route?.route_name || '',
-                        weight: s.status === 'skipped' ? 3 : 1,
-                    })
-                }
-            })
-        setStopPoints(points)
-
-        // Build route stats
-        const stats: RouteStats[] = routes.map((r: any) => {
-            const routeStops = (stops || []).filter((s: any) => s.route_id === r.id)
-            const skipped = routeStops.filter((s: any) => s.status === 'skipped')
-            const routeAlerts = (alerts || []).filter((a: any) => a.route_id === r.id)
-            const skipRate = routeStops.length > 0 ? Math.round((skipped.length / routeStops.length) * 100) : 0
-            const skipReasons: Record<string, number> = {}
-            skipped.forEach((s: any) => {
-                if (s.skip_reason) skipReasons[s.skip_reason] = (skipReasons[s.skip_reason] || 0) + 1
-            })
+        const mapped: RouteData[] = (routesData || []).map((r: any) => {
+            const stops = r.collection_stops || []
             return {
-                route_id: r.id, route_name: r.route_name, ward: r.ward || r.district,
-                total: routeStops.length, skipped: skipped.length, skip_rate: skipRate,
-                alerts: routeAlerts.length, skip_reasons: skipReasons,
-                heat: getHeat(skipRate, routeAlerts.length),
+                id: r.id,
+                route_name: r.route_name,
+                ward: r.ward || 'Unknown',
+                shift: r.shift,
+                status: r.status,
+                date: r.date,
+                driver_name: r.driver?.full_name || null,
+                vehicle_number: r.vehicle_number || null,
+                contractor_name: r.contractor?.organisation_name || r.contractor?.full_name || null,
+                total_stops: stops.length,
+                completed_stops: stops.filter((s: any) => s.status === 'completed').length,
+                skipped_stops: stops.filter((s: any) => s.status === 'skipped').length,
+                schedule_waste_type: r.schedule?.custom_waste_type || r.schedule?.waste_type || null,
+                schedule_time: r.schedule?.collection_time || null,
             }
-        }).sort((a: RouteStats, b: RouteStats) => b.skip_rate - a.skip_rate)
-
-        setRouteStats(stats)
+        })
+        setRoutes(mapped)
         setLoading(false)
-    }, [dateRange])
 
-    // Load Maps script
+        // Update map markers if map is loaded
+        if (mapInstanceRef.current) updateMarkers(mapped)
+    }
+
+    // Load Google Maps
     useEffect(() => {
-        let mounted = true
-        function load() {
-            if (window.google?.maps) { if (mounted) setMapLoaded(true); return }
-            const existing = document.getElementById('google-maps-heatmap-script')
-            if (existing) { existing.addEventListener('load', () => { if (mounted) setMapLoaded(true) }); return }
-            window.initHeatmap = () => { if (mounted) setMapLoaded(true) }
-            const script = document.createElement('script')
-            script.id = 'google-maps-heatmap-script'
-            // Include visualization library for heatmap
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=visualization&callback=initHeatmap&loading=async`
-            script.async = true; script.defer = true
-            script.onerror = () => { if (mounted) setMapError(true) }
-            document.head.appendChild(script)
-        }
-        const t = setTimeout(load, 100)
-        return () => {
-            mounted = false; clearTimeout(t)
-            window.initHeatmap = () => { }
-            mapInstance.current = null
-            heatLayerRef.current = null
-            markersRef.current.forEach(m => { try { m.setMap(null) } catch { } })
-            markersRef.current = []
-            const s = document.getElementById('google-maps-heatmap-script')
-            if (s) s.remove()
-            try { delete (window as any).google } catch { }
-        }
+        if (window.google?.maps) { setMapLoaded(true); return }
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        if (!apiKey) { console.warn('Google Maps API key not found'); return }
+
+        window.initMap = () => setMapLoaded(true)
+        const script = document.createElement('script')
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap&libraries=marker`
+        script.async = true
+        script.defer = true
+        document.head.appendChild(script)
+        return () => { document.head.removeChild(script); (window as any).initMap = undefined }
     }, [])
 
-    // Init map
+    // Init map once loaded
     useEffect(() => {
-        if (!mapLoaded || !mapRef.current || mapInstance.current) return
-        try {
-            mapInstance.current = new window.google.maps.Map(mapRef.current, {
-                center: { lat: 6.9271, lng: 79.8612 },
-                zoom: 13,
-                mapTypeId: 'roadmap',
-                styles: [
-                    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-                    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-                    { featureType: 'water', stylers: [{ color: '#d4eaf7' }] },
-                    { featureType: 'landscape', stylers: [{ color: '#f4f6f3' }] },
-                    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-                ],
-                mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
-            })
-        } catch { setMapError(true) }
-    }, [mapLoaded])
+        if (!mapLoaded || !mapRef.current || mapInstanceRef.current) return
+        const center = profile?.district?.includes('District 1') ? { lat: 6.9550, lng: 79.8700 }
+            : profile?.district?.includes('District 2') ? { lat: 6.9300, lng: 79.8500 }
+                : profile?.district?.includes('District 3') ? { lat: 6.8900, lng: 79.8580 }
+                    : { lat: 6.9271, lng: 79.8612 }
 
-    // Update heatmap layer when data or mode changes
-    useEffect(() => {
-        if (!mapInstance.current || !window.google?.maps?.visualization) return
+        mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
+            center, zoom: 13,
+            styles: [
+                { featureType: 'all', elementType: 'geometry', stylers: [{ saturation: -20 }] },
+                { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+                { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#e8f4f8' }] },
+                { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e8f5e9' }] },
+                { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+            ],
+            mapTypeControl: false, streetViewControl: false,
+            fullscreenControl: true, zoomControl: true,
+        })
+        infoWindowRef.current = new window.google.maps.InfoWindow()
+        if (routes.length > 0) updateMarkers(routes)
+    }, [mapLoaded, profile])
 
-        // Clear existing
-        if (heatLayerRef.current) heatLayerRef.current.setMap(null)
+    function getMarkerColor(route: RouteData): string {
+        if (route.status === 'completed') return '#00450d'
+        if (!route.driver_name || !route.vehicle_number) return '#ba1a1a'
+        const progress = route.total_stops > 0 ? route.completed_stops / route.total_stops : 0
+        if (progress > 0) return '#1d4ed8'
+        return '#d97706'
+    }
+
+    function getStatusLabel(route: RouteData): string {
+        if (route.status === 'completed') return 'Completed'
+        if (!route.driver_name) return 'Unassigned'
+        const progress = route.total_stops > 0 ? route.completed_stops / route.total_stops : 0
+        if (progress > 0) return 'In Progress'
+        return 'Pending'
+    }
+
+    function updateMarkers(routeList: RouteData[]) {
+        // Clear existing markers
         markersRef.current.forEach(m => m.setMap(null))
         markersRef.current = []
+        if (!mapInstanceRef.current || !window.google?.maps) return
 
-        const pts = mapMode === 'skipped'
-            ? stopPoints.filter(p => p.status === 'skipped')
-            : stopPoints
+        routeList.forEach(route => {
+            const coords = getWardCoords(route.ward)
+            const color = getMarkerColor(route)
+            const progress = route.total_stops > 0 ? Math.round((route.completed_stops / route.total_stops) * 100) : 0
 
-        if (pts.length === 0) return
+            // Custom SVG marker
+            const svgMarker = {
+                path: window.google.maps.SymbolPath.CIRCLE,
+                fillColor: color,
+                fillOpacity: 1,
+                strokeColor: 'white',
+                strokeWeight: 3,
+                scale: route.status === 'completed' ? 10 : 13,
+            }
 
-        // Build weighted heatmap data
-        const heatData = pts.map(p => ({
-            location: new window.google.maps.LatLng(p.lat, p.lng),
-            weight: p.weight,
-        }))
+            const marker = new window.google.maps.Marker({
+                position: coords,
+                map: mapInstanceRef.current,
+                icon: svgMarker,
+                title: route.route_name,
+                zIndex: route.status === 'completed' ? 1 : 10,
+            })
 
-        heatLayerRef.current = new window.google.maps.visualization.HeatmapLayer({
-            data: heatData,
-            map: mapInstance.current,
-            radius: 30,
-            opacity: 0.8,
-            gradient: [
-                'rgba(0, 255, 0, 0)',
-                'rgba(0, 255, 0, 0.4)',
-                'rgba(255, 255, 0, 0.6)',
-                'rgba(255, 165, 0, 0.8)',
-                'rgba(255, 0, 0, 1)',
-            ],
+            // Info window content
+            const wasteLabel = route.schedule_waste_type?.replace('_', ' ') || 'Mixed'
+            const infoContent = `
+        <div style="font-family:'Manrope',sans-serif;padding:4px;min-width:220px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></div>
+            <strong style="font-size:14px;color:#181c22">${route.route_name}</strong>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+            <div style="background:#f8fafc;border-radius:8px;padding:8px">
+              <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;margin:0 0 2px">Status</p>
+              <p style="font-size:12px;font-weight:700;color:${color};margin:0">${getStatusLabel(route)}</p>
+            </div>
+            <div style="background:#f8fafc;border-radius:8px;padding:8px">
+              <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;margin:0 0 2px">Progress</p>
+              <p style="font-size:12px;font-weight:700;color:#181c22;margin:0">${route.completed_stops}/${route.total_stops} stops</p>
+            </div>
+          </div>
+          ${route.driver_name ? `<p style="font-size:11px;color:#64748b;margin:0 0 3px">👤 ${route.driver_name}</p>` : '<p style="font-size:11px;color:#ba1a1a;margin:0 0 3px">⚠ No driver assigned</p>'}
+          ${route.vehicle_number ? `<p style="font-size:11px;color:#64748b;margin:0 0 3px">🚛 ${route.vehicle_number}</p>` : ''}
+          <p style="font-size:11px;color:#64748b;margin:0 0 3px">📍 ${route.ward}</p>
+          <p style="font-size:11px;color:#64748b;margin:0">♻ ${wasteLabel}${route.schedule_time ? ' · ' + route.schedule_time : ''}</p>
+          ${route.total_stops > 0 ? `
+            <div style="margin-top:10px">
+              <div style="height:5px;background:#f0f0f0;border-radius:99px;overflow:hidden">
+                <div style="height:100%;width:${progress}%;background:${color};border-radius:99px"></div>
+              </div>
+              <p style="font-size:10px;color:#94a3b8;margin:4px 0 0;text-align:right">${progress}% complete</p>
+            </div>` : ''}
+        </div>
+      `
+
+            marker.addListener('click', () => {
+                infoWindowRef.current.setContent(infoContent)
+                infoWindowRef.current.open(mapInstanceRef.current, marker)
+                setSelectedRoute(route)
+            })
+
+            markersRef.current.push(marker)
         })
+    }
 
-        // Fit map to points
-        const bounds = new window.google.maps.LatLngBounds()
-        pts.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }))
-        mapInstance.current.fitBounds(bounds, { padding: 60 })
+    // Update markers when routes change
+    useEffect(() => {
+        if (mapInstanceRef.current && routes.length > 0) updateMarkers(routes)
+    }, [routes])
 
-    }, [stopPoints, mapLoaded, mapMode])
-
-    useEffect(() => { loadData() }, [loadData])
-
-    const totalSkipped = routeStats.reduce((s, r) => s + r.skipped, 0)
-    const totalStops = routeStats.reduce((s, r) => s + r.total, 0)
-    const totalAlerts = routeStats.reduce((s, r) => s + r.alerts, 0)
-    const criticalRoutes = routeStats.filter(r => r.heat === 'critical').length
-    const overallRate = totalStops > 0 ? Math.round((totalSkipped / totalStops) * 100) : 0
-    const gpsPoints = stopPoints.length
-    const skippedPoints = stopPoints.filter(p => p.status === 'skipped').length
+    const activeRoutes = routes.filter(r => r.status !== 'completed')
+    const completedRoutes = routes.filter(r => r.status === 'completed')
+    const unassigned = routes.filter(r => !r.driver_name || !r.vehicle_number)
+    const inProgress = routes.filter(r => r.completed_stops > 0 && r.status !== 'completed')
 
     return (
-        <DashboardLayout role="District Engineer" userName={profile?.full_name || ''} navItems={DE_NAV}
-            primaryAction={{ label: 'View Routes', href: '/dashboard/district-engineer/routes', icon: 'route' }}>
+        <DashboardLayout role="District Engineer" userName={profile?.full_name || ''} navItems={DE_NAV}>
             <style>{`
-        .msf{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;vertical-align:middle;line-height:1}
-        .card{background:white;border-radius:20px;box-shadow:0 2px 12px rgba(0,0,0,0.06);border:1px solid rgba(0,69,13,0.05);overflow:hidden}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        .a1{animation:fadeUp .4s ease .04s both}.a2{animation:fadeUp .4s ease .09s both}.a3{animation:fadeUp .4s ease .14s both}
-        .filter-btn{padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;font-family:'Manrope',sans-serif;border:none;cursor:pointer;transition:all 0.2s}
-        .filter-btn.active{background:#00450d;color:white}
-        .filter-btn:not(.active){background:#f1f5f9;color:#64748b}
-        .route-row{padding:14px 20px;border-bottom:1px solid rgba(0,0,0,0.04);cursor:pointer;transition:background 0.1s;display:flex;align-items:center;gap:12px}
-        .route-row:hover{background:#fafaf9}
-        .route-row.selected{background:#f0fdf4;border-left:3px solid #00450d}
-        .route-row:last-child{border-bottom:none}
-        .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:99px;font-size:9px;font-weight:700;font-family:'Manrope',sans-serif;letter-spacing:0.06em;text-transform:uppercase;border:1px solid transparent}
+        .msym { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+        .msym-fill { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+        .card { background:white; border-radius:16px; border:1px solid rgba(0,69,13,0.07); box-shadow:0 1px 3px rgba(0,0,0,0.04),0 8px 24px rgba(0,0,0,0.04); overflow:hidden; }
+        .route-row { padding:12px 16px; border-bottom:1px solid rgba(0,69,13,0.05); cursor:pointer; transition:background 0.15s; display:flex; align-items:center; gap:10px; }
+        .route-row:hover { background:#f9fdf9; }
+        .route-row.selected { background:#f0fdf4; }
+        .route-row:last-child { border-bottom:none; }
+        .badge { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:99px; font-size:10px; font-weight:700; font-family:'Manrope',sans-serif; letter-spacing:0.04em; text-transform:uppercase; white-space:nowrap; }
+        .progress-track { height:4px; background:#f1f5f9; border-radius:99px; overflow:hidden; flex:1; }
+        .progress-fill { height:100%; border-radius:99px; transition:width 0.5s ease; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        .a1{animation:fadeUp .4s ease .04s both} .a2{animation:fadeUp .4s ease .1s both} .a3{animation:fadeUp .4s ease .16s both}
+        @keyframes spin { to{transform:rotate(360deg)} }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
       `}</style>
 
             {/* Header */}
-            <div className="a1" style={{ marginBottom: 24 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: 6 }}>District Engineer</p>
+            <div className="a1" style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: 6 }}>
+                    District Engineering
+                </p>
                 <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                    <div>
-                        <h1 style={{ fontSize: 42, fontWeight: 900, color: '#181c22', lineHeight: 1.1, fontFamily: 'Manrope,sans-serif', marginBottom: 4 }}>
-                            Problem Route <span style={{ color: '#dc2626' }}>Heatmap</span>
-                        </h1>
-                        <p style={{ fontSize: 13, color: '#717a6d' }}>{profile?.district || 'CMC District'} · GPS-tracked skip locations</p>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                        {(['7', '30', '90'] as const).map(d => (
-                            <button key={d} onClick={() => setDateRange(d)} className={`filter-btn ${dateRange === d ? 'active' : ''}`}>{d}d</button>
-                        ))}
+                    <h1 style={{ fontSize: 38, fontWeight: 900, color: '#181c22', lineHeight: 1.05, fontFamily: 'Manrope,sans-serif', margin: 0, letterSpacing: '-0.02em' }}>
+                        Collection <span style={{ color: '#1b5e20' }}>Tracking</span>
+                    </h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 99, background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.12)' }}>
+                            <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#00450d', animation: 'pulse 2s infinite' }} />
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#00450d', fontFamily: 'Manrope,sans-serif' }}>
+                                Live · {new Date(lastRefresh).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                        </div>
+                        <button onClick={() => { loadData(); setLastRefresh(new Date()) }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 99, background: 'white', border: '1.5px solid rgba(0,69,13,0.15)', color: '#00450d', fontSize: 12, fontWeight: 700, fontFamily: 'Manrope,sans-serif', cursor: 'pointer' }}>
+                            <span className="msym" style={{ fontSize: 15 }}>refresh</span>Refresh
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Stats strip */}
+            {/* Stats row */}
             <div className="a2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
                 {[
-                    { label: 'Overall Skip Rate', value: `${overallRate}%`, icon: 'remove_road', color: overallRate >= 40 ? '#dc2626' : overallRate >= 20 ? '#d97706' : '#15803d', bg: overallRate >= 40 ? '#fef2f2' : overallRate >= 20 ? '#fffbeb' : '#f0fdf4' },
-                    { label: 'Stops Skipped', value: totalSkipped, icon: 'cancel', color: '#dc2626', bg: '#fef2f2' },
-                    { label: 'Exception Alerts', value: totalAlerts, icon: 'warning', color: '#d97706', bg: '#fffbeb' },
-                    { label: 'GPS Points Tracked', value: gpsPoints, icon: 'my_location', color: '#1d4ed8', bg: '#eff6ff' },
-                ].map(s => (
-                    <div key={s.label} className="card" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 36, height: 36, borderRadius: 10, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <span className="msf" style={{ fontSize: 18, color: s.color }}>{s.icon}</span>
+                    { label: 'Total Routes', value: routes.length, color: '#00450d', bg: '#f0fdf4', icon: 'route' },
+                    { label: 'In Progress', value: inProgress.length, color: '#1d4ed8', bg: '#eff6ff', icon: 'directions_car' },
+                    { label: 'Unassigned', value: unassigned.length, color: '#d97706', bg: '#fefce8', icon: 'warning' },
+                    { label: 'Completed', value: completedRoutes.length, color: '#00450d', bg: '#f0fdf4', icon: 'check_circle' },
+                ].map(m => (
+                    <div key={m.label} className="card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span className="msym-fill" style={{ color: m.color, fontSize: 17 }}>{m.icon}</span>
                         </div>
                         <div>
-                            <p style={{ fontSize: 22, fontWeight: 900, color: '#181c22', fontFamily: 'Manrope,sans-serif', lineHeight: 1 }}>{s.value}</p>
-                            <p style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'Manrope,sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>{s.label}</p>
+                            <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 900, fontSize: 24, color: '#181c22', margin: 0, lineHeight: 1 }}>{m.value}</p>
+                            <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', margin: 0, marginTop: 3 }}>{m.label}</p>
                         </div>
                     </div>
                 ))}
             </div>
 
-            <div className="a3" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
+            {/* Map + sidebar */}
+            <div className="a3" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}>
 
-                {/* Left — map */}
-                <div>
-                    <div className="card" style={{ overflow: 'hidden' }}>
-                        {/* Map header */}
-                        <div style={{ padding: '14px 20px', background: '#00450d', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span className="msf" style={{ fontSize: 18, color: 'rgba(163,246,156,0.9)' }}>thermostat</span>
-                                <div>
-                                    <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: 'white' }}>Live Heatmap</p>
-                                    <p style={{ fontSize: 11, color: 'rgba(163,246,156,0.7)' }}>
-                                        {skippedPoints} skipped stops plotted · {gpsPoints} total GPS points
-                                    </p>
-                                </div>
+                {/* Map */}
+                <div className="card" style={{ overflow: 'hidden' }}>
+                    {/* Map legend */}
+                    <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', background: '#fafdf9' }}>
+                        {[
+                            { color: '#1d4ed8', label: 'In Progress' },
+                            { color: '#d97706', label: 'Pending' },
+                            { color: '#ba1a1a', label: 'Unassigned' },
+                            { color: '#00450d', label: 'Completed' },
+                        ].map(l => (
+                            <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: l.color, border: '2px solid white', boxShadow: `0 0 0 1px ${l.color}` }} />
+                                <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{l.label}</span>
                             </div>
-                            {/* Mode toggle */}
-                            <div style={{ display: 'flex', gap: 6 }}>
-                                {(['skipped', 'all'] as const).map(m => (
-                                    <button key={m} onClick={() => setMapMode(m)}
-                                        style={{ padding: '5px 12px', borderRadius: 99, fontSize: 11, fontWeight: 700, fontFamily: 'Manrope,sans-serif', border: 'none', cursor: 'pointer', background: mapMode === m ? 'white' : 'rgba(255,255,255,0.15)', color: mapMode === m ? '#00450d' : 'white', transition: 'all 0.2s' }}>
-                                        {m === 'skipped' ? 'Skips Only' : 'All Stops'}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Map */}
-                        <div style={{ position: 'relative', height: 480 }}>
-                            <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
-
-                            {!mapLoaded && !mapError && (
-                                <div style={{ position: 'absolute', inset: 0, background: '#f4f6f3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
-                                    <div style={{ width: 28, height: 28, border: '2px solid #dc2626', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
-                                    <p style={{ fontSize: 13, color: '#717a6d', fontFamily: 'Manrope,sans-serif' }}>Loading heatmap...</p>
-                                </div>
-                            )}
-
-                            {mapError && (
-                                <div style={{ position: 'absolute', inset: 0, background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, padding: 24, textAlign: 'center' }}>
-                                    <span className="msf" style={{ fontSize: 36, color: '#dc2626' }}>error</span>
-                                    <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, color: '#181c22' }}>Map failed to load</p>
-                                    <p style={{ fontSize: 12, color: '#717a6d' }}>Check Google Maps API key and ensure Maps JavaScript API + Visualization library are enabled.</p>
-                                </div>
-                            )}
-
-                            {mapLoaded && !mapError && gpsPoints === 0 && (
-                                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <div style={{ background: 'white', borderRadius: 16, padding: '24px 32px', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', maxWidth: 300 }}>
-                                        <span className="msf" style={{ fontSize: 36, color: '#94a3b8', display: 'block', marginBottom: 12 }}>location_off</span>
-                                        <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 15, color: '#181c22', marginBottom: 6 }}>No GPS data yet</p>
-                                        <p style={{ fontSize: 12, color: '#717a6d', lineHeight: 1.6 }}>
-                                            GPS coordinates are captured when drivers mark stops. Data will appear here as drivers complete routes in the selected period.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Heatmap legend */}
-                        <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 16, background: '#fafafa', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', fontFamily: 'Manrope,sans-serif' }}>INTENSITY</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <div style={{ height: 8, width: 120, borderRadius: 99, background: 'linear-gradient(90deg, rgba(0,255,0,0.4), rgba(255,255,0,0.6), rgba(255,165,0,0.8), rgba(255,0,0,1))' }} />
-                            </div>
-                            <div style={{ display: 'flex', gap: 12 }}>
-                                {[['rgba(0,255,0,0.6)', 'Low'], ['rgba(255,255,0,0.8)', 'Medium'], ['rgba(255,0,0,1)', 'High']].map(([c, l]) => (
-                                    <div key={l as string} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: c as string }} />
-                                        <span style={{ fontSize: 11, color: '#64748b', fontFamily: 'Manrope,sans-serif' }}>{l}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                        ))}
                     </div>
+
+                    {/* Google Map */}
+                    {!mapLoaded ? (
+                        <div style={{ height: 520, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', gap: 12 }}>
+                            <div style={{ width: 28, height: 28, border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+                            <p style={{ fontSize: 13, color: '#94a3b8' }}>Loading map…</p>
+                        </div>
+                    ) : (
+                        <div ref={mapRef} style={{ height: 520 }} />
+                    )}
+
+                    {routes.length === 0 && !loading && (
+                        <div style={{ padding: '20px', background: 'rgba(255,255,255,0.9)', textAlign: 'center', borderTop: '1px solid rgba(0,69,13,0.06)' }}>
+                            <p style={{ fontSize: 13, color: '#94a3b8' }}>No routes scheduled for today in {profile?.district}</p>
+                        </div>
+                    )}
                 </div>
 
-                {/* Right — route stats */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {/* Heat breakdown */}
-                    <div className="card" style={{ padding: 18 }}>
-                        <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', marginBottom: 12 }}>Heat by Level</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {(Object.entries(HEAT_CONFIG) as [string, typeof HEAT_CONFIG.critical][]).map(([key, cfg]) => {
-                                const count = routeStats.filter(r => r.heat === key).length
-                                const pct = routeStats.length > 0 ? Math.round((count / routeStats.length) * 100) : 0
+                {/* Sidebar */}
+                <div className="card">
+                    <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#181c22', margin: 0 }}>
+                            Today's Routes
+                        </h3>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{routes.length} total</span>
+                    </div>
+
+                    {loading ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+                            <div style={{ width: 22, height: 22, border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+                        </div>
+                    ) : routes.length === 0 ? (
+                        <div style={{ padding: '40px 16px', textAlign: 'center' }}>
+                            <span className="msym" style={{ fontSize: 32, color: '#d1d5db', display: 'block', marginBottom: 8 }}>route</span>
+                            <p style={{ fontSize: 13, color: '#94a3b8' }}>No routes today</p>
+                        </div>
+                    ) : (
+                        <div style={{ maxHeight: 480, overflowY: 'auto' }}>
+                            {routes.map(route => {
+                                const color = getMarkerColor(route)
+                                const statusLabel = getStatusLabel(route)
+                                const progress = route.total_stops > 0 ? Math.round((route.completed_stops / route.total_stops) * 100) : 0
+                                const isSelected = selectedRoute?.id === route.id
+
                                 return (
-                                    <div key={key}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: cfg.dot }} />
-                                                <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{cfg.label}</span>
+                                    <div key={route.id} className={`route-row ${isSelected ? 'selected' : ''}`}
+                                        onClick={() => {
+                                            setSelectedRoute(route)
+                                            // Pan map to route's ward
+                                            if (mapInstanceRef.current) {
+                                                const coords = getWardCoords(route.ward)
+                                                mapInstanceRef.current.panTo(coords)
+                                                mapInstanceRef.current.setZoom(15)
+                                                // Open marker info window
+                                                const marker = markersRef.current[routes.indexOf(route)]
+                                                if (marker && infoWindowRef.current) {
+                                                    window.google.maps.event.trigger(marker, 'click')
+                                                }
+                                            }
+                                        }}>
+                                        {/* Status dot */}
+                                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 0 2px white, 0 0 0 3px ${color}` }} />
+
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                                                <p style={{ fontSize: 12, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
+                                                    {route.route_name}
+                                                </p>
+                                                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: color + '15', color: color, fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+                                                    {statusLabel}
+                                                </span>
                                             </div>
-                                            <span style={{ fontSize: 12, fontWeight: 700, color: cfg.color, fontFamily: 'Manrope,sans-serif' }}>{count} routes</span>
-                                        </div>
-                                        <div style={{ height: 4, borderRadius: 99, background: '#f0f0f0', overflow: 'hidden' }}>
-                                            <div style={{ height: '100%', width: `${pct}%`, background: cfg.dot, borderRadius: 99, transition: 'width 0.5s ease' }} />
+
+                                            <p style={{ fontSize: 11, color: '#717a6d', margin: '0 0 5px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <span className="msym" style={{ fontSize: 12 }}>location_on</span>
+                                                {route.ward}
+                                                {route.schedule_time && <> · {route.schedule_time}</>}
+                                            </p>
+
+                                            {/* Progress bar */}
+                                            {route.total_stops > 0 && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <div className="progress-track">
+                                                        <div className="progress-fill" style={{ width: `${progress}%`, background: color }} />
+                                                    </div>
+                                                    <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{progress}%</span>
+                                                </div>
+                                            )}
+
+                                            {/* Driver / vehicle */}
+                                            <div style={{ marginTop: 4, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                                                {route.driver_name
+                                                    ? <span className="badge" style={{ background: '#f0fdf4', color: '#00450d' }}><span className="msym" style={{ fontSize: 10 }}>person</span>{route.driver_name.split(' ')[0]}</span>
+                                                    : <span className="badge" style={{ background: '#fef2f2', color: '#ba1a1a' }}>No driver</span>
+                                                }
+                                                {route.vehicle_number && (
+                                                    <span className="badge" style={{ background: '#f8fafc', color: '#64748b' }}><span className="msym" style={{ fontSize: 10 }}>local_shipping</span>{route.vehicle_number}</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 )
                             })}
                         </div>
-                    </div>
-
-                    {/* Route list */}
-                    <div className="card">
-                        <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#181c22' }}>Routes by Skip Rate</p>
-                            <span style={{ fontSize: 11, color: '#94a3b8' }}>{routeStats.length} routes</span>
-                        </div>
-                        {loading ? (
-                            <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
-                                <div style={{ width: 24, height: 24, border: '2px solid #dc2626', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
-                            </div>
-                        ) : routeStats.length === 0 ? (
-                            <div style={{ padding: '32px 20px', textAlign: 'center' }}>
-                                <span className="msf" style={{ fontSize: 28, color: '#22c55e', display: 'block', marginBottom: 8 }}>check_circle</span>
-                                <p style={{ fontSize: 13, color: '#94a3b8' }}>No route data for this period</p>
-                            </div>
-                        ) : routeStats.map(r => {
-                            const hc = HEAT_CONFIG[r.heat]
-                            const isSelected = selected?.route_id === r.route_id
-                            return (
-                                <div key={r.route_id}
-                                    className={`route-row ${isSelected ? 'selected' : ''}`}
-                                    onClick={() => setSelected(isSelected ? null : r)}>
-                                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: hc.dot, flexShrink: 0 }} />
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <p style={{ fontSize: 13, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>{r.route_name}</p>
-                                        <p style={{ fontSize: 11, color: '#94a3b8' }}>{r.ward} · {r.skipped}/{r.total} skipped</p>
-                                    </div>
-                                    <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                                        <p style={{ fontSize: 16, fontWeight: 900, color: hc.color, fontFamily: 'Manrope,sans-serif', lineHeight: 1 }}>{r.skip_rate}%</p>
-                                        {r.alerts > 0 && <span style={{ fontSize: 9, color: '#d97706', fontFamily: 'Manrope,sans-serif', fontWeight: 700 }}>{r.alerts} alerts</span>}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
+                    )}
 
                     {/* Selected route detail */}
-                    {selected && (() => {
-                        const hc = HEAT_CONFIG[selected.heat]
-                        return (
-                            <div className="card" style={{ border: `1.5px solid ${hc.border}` }}>
-                                <div style={{ padding: '14px 18px', background: hc.bg, borderBottom: `1px solid ${hc.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: hc.color }}>{selected.route_name}</p>
-                                        <p style={{ fontSize: 11, color: '#717a6d', marginTop: 2 }}>{selected.ward}</p>
+                    {selectedRoute && (
+                        <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(0,69,13,0.06)', background: '#f9fdf9' }}>
+                            <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', marginBottom: 8 }}>Selected Route</p>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', marginBottom: 6 }}>{selectedRoute.route_name}</p>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                {[
+                                    { label: 'Completed', value: selectedRoute.completed_stops, color: '#00450d' },
+                                    { label: 'Skipped', value: selectedRoute.skipped_stops, color: '#ba1a1a' },
+                                    { label: 'Remaining', value: selectedRoute.total_stops - selectedRoute.completed_stops - selectedRoute.skipped_stops, color: '#d97706' },
+                                    { label: 'Total', value: selectedRoute.total_stops, color: '#374151' },
+                                ].map(s => (
+                                    <div key={s.label} style={{ background: 'white', borderRadius: 8, padding: '8px 10px', border: '1px solid rgba(0,69,13,0.07)' }}>
+                                        <p style={{ fontSize: 18, fontWeight: 900, color: s.color, fontFamily: 'Manrope,sans-serif', margin: 0, lineHeight: 1 }}>{s.value}</p>
+                                        <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'Manrope,sans-serif', margin: '3px 0 0' }}>{s.label}</p>
                                     </div>
-                                    <button onClick={() => setSelected(null)}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-                                        <span className="msf" style={{ fontSize: 16, color: '#94a3b8' }}>close</span>
-                                    </button>
-                                </div>
-                                <div style={{ padding: 16 }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
-                                        {[
-                                            { l: 'Total', v: selected.total, c: '#00450d', bg: '#f0fdf4' },
-                                            { l: 'Skipped', v: selected.skipped, c: '#dc2626', bg: '#fef2f2' },
-                                            { l: 'Skip Rate', v: `${selected.skip_rate}%`, c: hc.color, bg: hc.bg },
-                                            { l: 'Alerts', v: selected.alerts, c: '#d97706', bg: '#fffbeb' },
-                                        ].map(s => (
-                                            <div key={s.l} style={{ background: s.bg, borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-                                                <p style={{ fontSize: 18, fontWeight: 900, color: s.c, fontFamily: 'Manrope,sans-serif', lineHeight: 1 }}>{s.v}</p>
-                                                <p style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'Manrope,sans-serif', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>{s.l}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    {Object.keys(selected.skip_reasons).length > 0 && (
-                                        <div>
-                                            <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', marginBottom: 8 }}>Skip Reasons</p>
-                                            {Object.entries(selected.skip_reasons).sort(([, a], [, b]) => b - a).map(([r, c]) => (
-                                                <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #f5f5f5' }}>
-                                                    <span style={{ fontSize: 12, color: '#374151' }}>{r.replace(/_/g, ' ')}</span>
-                                                    <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', fontFamily: 'Manrope,sans-serif' }}>{c}×</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    <a href="/dashboard/district-engineer/routes"
-                                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', borderRadius: 10, background: '#00450d', color: 'white', textDecoration: 'none', fontSize: 12, fontWeight: 700, fontFamily: 'Manrope,sans-serif', marginTop: 14 }}>
-                                        <span className="msf" style={{ fontSize: 15 }}>route</span>View Route
-                                    </a>
-                                </div>
+                                ))}
                             </div>
-                        )
-                    })()}
+                        </div>
+                    )}
                 </div>
             </div>
         </DashboardLayout>

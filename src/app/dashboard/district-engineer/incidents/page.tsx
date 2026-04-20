@@ -7,13 +7,12 @@ import DashboardLayout from '@/components/DashboardLayout'
 const DE_NAV = [
     { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
     { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
+    { label: 'History', href: '/dashboard/district-engineer/collection-history', icon: 'history' },
     { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
     { label: 'Heatmap', href: '/dashboard/district-engineer/heatmap', icon: 'thermostat' },
-    { label: 'Complaints', href: '/dashboard/district-engineer/complaints', icon: 'feedback' },
-    { label: 'Waste Reports', href: '/dashboard/district-engineer/waste-reports', icon: 'report' },
+    { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'report_problem' },
     { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
     { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
-    { label: 'Zones', href: '/dashboard/district-engineer/zones', icon: 'map' },
     { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
 

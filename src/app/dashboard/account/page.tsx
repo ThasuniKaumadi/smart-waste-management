@@ -18,15 +18,13 @@ const ROLE_NAV: Record<string, { label: string; href: string; icon: string }[]> 
         { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard' },
         { label: 'Schedule', href: '/dashboard/resident/schedule', icon: 'calendar_today' },
         { label: 'Track Vehicle', href: '/dashboard/resident/track', icon: 'location_on' },
-        { label: 'Report Issue', href: '/dashboard/resident/report-dumping', icon: 'report_problem' },
-        { label: 'Complaints', href: '/dashboard/resident/complaints', icon: 'feedback' },
-    ],
+        { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem' },
+        ],
     commercial_establishment: [
         { label: 'Overview', href: '/dashboard/commercial', icon: 'dashboard' },
         { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'receipt_long' },
         { label: 'Schedule', href: '/dashboard/commercial/schedule', icon: 'calendar_today' },
-        { label: 'Complaints', href: '/dashboard/commercial/complaints', icon: 'feedback' },
-    ],
+        ],
     driver: [
         { label: 'Overview', href: '/dashboard/driver', icon: 'dashboard' },
         { label: 'My Route', href: '/dashboard/driver/route', icon: 'route' },

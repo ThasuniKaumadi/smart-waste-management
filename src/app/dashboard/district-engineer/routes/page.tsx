@@ -8,12 +8,12 @@ import { getWardsForDistrict } from '@/lib/districts'
 const DE_NAV = [
     { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
     { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
+    { label: 'History', href: '/dashboard/district-engineer/collection-history', icon: 'history' },
     { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
     { label: 'Heatmap', href: '/dashboard/district-engineer/heatmap', icon: 'thermostat' },
-    { label: 'Complaints', href: '/dashboard/district-engineer/complaints', icon: 'feedback' },
-    { label: 'Waste Reports', href: '/dashboard/district-engineer/waste-reports', icon: 'report' },
+    { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'report_problem' },
+    { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
     { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
-    { label: 'Zones', href: '/dashboard/district-engineer/zones', icon: 'map' },
     { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
 
@@ -87,7 +87,6 @@ interface Stop {
 export default function DERoutesPage() {
     const [profile, setProfile] = useState<any>(null)
     const [routes, setRoutes] = useState<Route[]>([])
-    const [drivers, setDrivers] = useState<any[]>([])
     const [contractors, setContractors] = useState<any[]>([])
     const [commercials, setCommercials] = useState<any[]>([])
     const [schedules, setSchedules] = useState<any[]>([])
@@ -102,19 +101,16 @@ export default function DERoutesPage() {
     const [routeStops, setRouteStops] = useState<Record<string, RouteStop[]>>({})
     const [loadingStops, setLoadingStops] = useState<string | null>(null)
     const [wards, setWards] = useState<string[]>([])
-    // AI Optimization state
     const [optimizing, setOptimizing] = useState<string | null>(null)
     const [optimizeResult, setOptimizeResult] = useState<Record<string, string>>({})
     const [stops, setStops] = useState<Stop[]>([{
-        road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day',
-        bin_size: '240L', waste_type: 'general', bin_quantity: 1,
+        road_name: '', address: '', is_commercial: false, commercial_id: '',
+        frequency: 'once_a_day', bin_size: '240L', waste_type: 'general', bin_quantity: 1,
     }])
     const [formData, setFormData] = useState({
         route_name: '',
         ward: '',
         contractor_id: '',
-        driver_id: '',
-        vehicle_number: '',
         date: new Date().toISOString().split('T')[0],
         shift: 'day',
         schedule_id: '',
@@ -140,13 +136,13 @@ export default function DERoutesPage() {
             .order('date', { ascending: false })
         setRoutes(routesData || [])
 
+        // Only load contractors for this district
         const { data: contractorData } = await supabase
-            .from('profiles').select('id, full_name, organisation_name').eq('role', 'contractor')
+            .from('profiles')
+            .select('id, full_name, organisation_name, district')
+            .eq('role', 'contractor')
+            .eq('district', p?.district || '')
         setContractors(contractorData || [])
-
-        const { data: driverData } = await supabase
-            .from('profiles').select('id, full_name, contractor_id').eq('role', 'driver')
-        setDrivers(driverData || [])
 
         const { data: commercialData } = await supabase
             .from('profiles').select('id, full_name, organisation_name, address')
@@ -162,12 +158,8 @@ export default function DERoutesPage() {
         setLoading(false)
     }
 
-    const filteredDrivers = formData.contractor_id
-        ? drivers.filter(d => d.contractor_id === formData.contractor_id)
-        : drivers
-
     const wardSchedules = formData.ward
-        ? schedules.filter(s => !s.ward || s.ward === formData.ward)
+        ? schedules.filter(s => !s.wards?.length || s.wards.includes(formData.ward) || s.ward === formData.ward)
         : schedules
 
     function handleScheduleSelect(scheduleId: string) {
@@ -178,15 +170,34 @@ export default function DERoutesPage() {
                 schedule_id: scheduleId,
                 shift: schedule.shift || 'day',
                 date: schedule.scheduled_date || prev.date,
-                ward: schedule.ward || prev.ward,
+                ward: prev.ward || schedule.ward || '',
             }))
+            // Auto-populate streets from schedule.streets for the selected ward
+            if (schedule.streets) {
+                const ward = formData.ward || schedule.ward
+                const scheduleStreets: string[] = ward && schedule.streets[ward]
+                    ? schedule.streets[ward]
+                    : Object.values(schedule.streets as Record<string, string[]>).flat()
+                if (scheduleStreets.length > 0) {
+                    setStops(scheduleStreets.map(street => ({
+                        road_name: street,
+                        address: street,
+                        is_commercial: false,
+                        commercial_id: '',
+                        frequency: 'once_a_day',
+                        bin_size: '240L',
+                        waste_type: 'general',
+                        bin_quantity: 1,
+                    })))
+                }
+            }
         }
     }
 
     function addStop() {
         setStops([...stops, {
-            road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day',
-            bin_size: '240L', waste_type: 'general', bin_quantity: 1,
+            road_name: '', address: '', is_commercial: false, commercial_id: '',
+            frequency: 'once_a_day', bin_size: '240L', waste_type: 'general', bin_quantity: 1,
         }])
     }
 
@@ -213,10 +224,9 @@ export default function DERoutesPage() {
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         if (!formData.ward) { setMessage('Please select a ward'); return }
-        if (!formData.driver_id) { setMessage('Please assign a driver'); return }
-        if (!formData.vehicle_number) { setMessage('Please enter a vehicle number'); return }
+        if (!formData.contractor_id) { setMessage('Please select a contractor'); return }
         const validStops = stops.filter(s => s.road_name.trim() !== '')
-        if (validStops.length === 0) { setMessage('Please add at least one road/stop'); return }
+        if (validStops.length === 0) { setMessage('Please add at least one street/stop'); return }
 
         setSaving(true)
         setMessage('')
@@ -232,14 +242,13 @@ export default function DERoutesPage() {
                 route_name: routeName,
                 district: profile?.district,
                 ward: formData.ward,
-                driver_id: formData.driver_id,
-                contractor_id: formData.contractor_id || null,
-                vehicle_number: formData.vehicle_number,
+                contractor_id: formData.contractor_id,
                 date: formData.date,
                 shift: formData.shift,
                 schedule_id: formData.schedule_id || null,
                 created_by: user?.id,
                 status: 'pending',
+                // driver and vehicle left null — contractor assigns these
             })
             .select().single()
 
@@ -264,16 +273,15 @@ export default function DERoutesPage() {
         if (stopsError) {
             setMessage('Error creating stops: ' + stopsError.message)
         } else {
-            setMessage('Route created successfully!')
+            setMessage('Route created! The assigned contractor can now staff it with a driver and vehicle.')
             setShowForm(false)
             setFormData({
-                route_name: '', ward: '', contractor_id: '', driver_id: '',
-                vehicle_number: '', date: new Date().toISOString().split('T')[0],
-                shift: 'day', schedule_id: '',
+                route_name: '', ward: '', contractor_id: '',
+                date: new Date().toISOString().split('T')[0], shift: 'day', schedule_id: '',
             })
             setStops([{
-                road_name: '', address: '', is_commercial: false, commercial_id: '', frequency: 'once_a_day',
-                bin_size: '240L', waste_type: 'general', bin_quantity: 1,
+                road_name: '', address: '', is_commercial: false, commercial_id: '',
+                frequency: 'once_a_day', bin_size: '240L', waste_type: 'general', bin_quantity: 1,
             }])
             loadData()
         }
@@ -309,61 +317,39 @@ export default function DERoutesPage() {
         }
         setOptimizing(routeId)
         setOptimizeResult(prev => ({ ...prev, [routeId]: '' }))
-
         try {
-            // Get the route's district/ward for context
             const route = routes.find(r => r.id === routeId)
             const locationContext = route?.ward ? `${route.ward}, Colombo, Sri Lanka` : 'Colombo, Sri Lanka'
-
             const origin = `${pendingStops[0].road_name || pendingStops[0].address}, ${locationContext}`
             const destination = `${pendingStops[pendingStops.length - 1].road_name || pendingStops[pendingStops.length - 1].address}, ${locationContext}`
             const waypoints = pendingStops.slice(1, -1)
                 .map(s => encodeURIComponent(`${s.road_name || s.address}, ${locationContext}`))
                 .join('|')
-
             const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=optimize:true|${waypoints}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&region=lk`
-
             const res = await fetch(`/api/optimize-route?${new URLSearchParams({ url })}`)
             const data = await res.json()
-
             if (data.status !== 'OK') {
-                setOptimizeResult(prev => ({ ...prev, [routeId]: `Maps API error: ${data.status}. Check Directions API is enabled.` }))
+                setOptimizeResult(prev => ({ ...prev, [routeId]: `Maps API error: ${data.status}` }))
                 setOptimizing(null)
                 return
             }
-
-            // Rebuild optimized order — Google returns indices into the middle waypoints
             const order: number[] = data.routes[0].waypoint_order
             const middleStops = pendingStops.slice(1, -1)
-            const reordered = [
-                pendingStops[0],
-                ...order.map(i => middleStops[i]),
-                pendingStops[pendingStops.length - 1],
-            ]
-
-            // Update stop_order for pending stops only, keep completed/skipped stops at their positions
+            const reordered = [pendingStops[0], ...order.map(i => middleStops[i]), pendingStops[pendingStops.length - 1]]
             const supabase = createClient()
-            // Find the highest order among non-pending stops to avoid conflicts
             const nonPending = routeStopList.filter(s => s.status !== 'pending')
             const baseOrder = nonPending.length > 0 ? Math.max(...nonPending.map(s => s.stop_order)) : 0
-
             await Promise.all(reordered.map((stop, index) =>
-                supabase.from('collection_stops')
-                    .update({ stop_order: baseOrder + index + 1 })
-                    .eq('id', stop.id)
+                supabase.from('collection_stops').update({ stop_order: baseOrder + index + 1 }).eq('id', stop.id)
             ))
-
-            // Reload stops with new order
             const { data: updated } = await supabase
                 .from('collection_stops').select('*')
                 .eq('route_id', routeId).order('stop_order', { ascending: true })
             setRouteStops(prev => ({ ...prev, [routeId]: updated || [] }))
-
-            // Calculate total distance saved
             const totalKm = (data.routes[0].legs.reduce((s: number, l: any) => s + l.distance.value, 0) / 1000).toFixed(1)
-            setOptimizeResult(prev => ({ ...prev, [routeId]: `✓ Optimized — ${totalKm} km total · ${pendingStops.length} stops reordered` }))
-        } catch (err) {
-            setOptimizeResult(prev => ({ ...prev, [routeId]: 'Optimization failed. Check API key and Directions API.' }))
+            setOptimizeResult(prev => ({ ...prev, [routeId]: `✓ Optimized — ${totalKm} km · ${pendingStops.length} stops reordered` }))
+        } catch {
+            setOptimizeResult(prev => ({ ...prev, [routeId]: 'Optimization failed. Check API key.' }))
         }
         setOptimizing(null)
     }
@@ -406,103 +392,44 @@ export default function DERoutesPage() {
           display: inline-block; vertical-align: middle; line-height: 1;
         }
         .font-headline { font-family: 'Manrope', sans-serif; }
-        .bento-card {
-          background: white; border-radius: 16px;
-          box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08);
-          border: 1px solid rgba(0,69,13,0.04); overflow: hidden;
-        }
-        .form-field {
-          width: 100%; padding: 11px 14px;
-          border: 1.5px solid #e5e7eb; border-radius: 10px;
-          font-size: 14px; color: #181c22; font-family: 'Inter', sans-serif;
-          background: #fafafa; transition: all 0.2s ease; outline: none; box-sizing: border-box;
-        }
+        .bento-card { background: white; border-radius: 16px; box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08); border: 1px solid rgba(0,69,13,0.04); overflow: hidden; }
+        .form-field { width: 100%; padding: 11px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 14px; color: #181c22; font-family: 'Inter', sans-serif; background: #fafafa; transition: all 0.2s ease; outline: none; box-sizing: border-box; }
         .form-field:focus { border-color: #00450d; background: white; box-shadow: 0 0 0 3px rgba(0,69,13,0.08); }
         .form-field::placeholder { color: #9ca3af; }
-        .select-field {
-          width: 100%; padding: 11px 14px;
-          border: 1.5px solid #e5e7eb; border-radius: 10px;
-          font-size: 14px; color: #181c22; font-family: 'Inter', sans-serif;
-          background: #fafafa; transition: all 0.2s ease; outline: none;
-          cursor: pointer; appearance: none; box-sizing: border-box;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23717a6d'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
-          background-repeat: no-repeat; background-position: right 12px center; background-size: 14px;
-        }
+        .select-field { width: 100%; padding: 11px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 14px; color: #181c22; font-family: 'Inter', sans-serif; background: #fafafa; transition: all 0.2s ease; outline: none; cursor: pointer; appearance: none; box-sizing: border-box; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23717a6d'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 14px; }
         .select-field:focus { border-color: #00450d; background-color: white; box-shadow: 0 0 0 3px rgba(0,69,13,0.08); }
-        .field-label {
-          display: block; font-size: 11px; font-weight: 700; text-transform: uppercase;
-          letter-spacing: 0.1em; color: #374151; font-family: 'Manrope', sans-serif; margin-bottom: 7px;
-        }
-        .submit-btn {
-          background: #00450d; color: white; border: none; border-radius: 10px; padding: 13px 24px;
-          font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 14px;
-          cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px;
-        }
+        .field-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #374151; font-family: 'Manrope', sans-serif; margin-bottom: 7px; }
+        .submit-btn { background: #00450d; color: white; border: none; border-radius: 10px; padding: 13px 24px; font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; }
         .submit-btn:hover { background: #1b5e20; box-shadow: 0 4px 16px rgba(0,69,13,0.25); }
         .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .shift-btn {
-          flex: 1; padding: 10px; border-radius: 10px; border: 1.5px solid #e5e7eb;
-          font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 13px;
-          cursor: pointer; transition: all 0.2s ease;
-          display: flex; align-items: center; justify-content: center; gap: 6px;
-        }
-        .shift-btn.active-day   { border-color: #d97706; background: #fefce8; color: #92400e; }
+        .shift-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1.5px solid #e5e7eb; font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .shift-btn.active-day { border-color: #d97706; background: #fefce8; color: #92400e; }
         .shift-btn.active-night { border-color: #1d4ed8; background: #eff6ff; color: #1e3a8a; }
         .shift-btn:not(.active-day):not(.active-night) { background: white; color: #64748b; }
         .stop-card { background: #f9f9ff; border: 1.5px solid #e5e7eb; border-radius: 12px; padding: 16px; }
-        .filter-btn {
-          padding: 6px 14px; border-radius: 99px; font-size: 12px; font-weight: 700;
-          font-family: 'Manrope', sans-serif; border: none; cursor: pointer; transition: all 0.2s ease;
-        }
+        .filter-btn { padding: 6px 14px; border-radius: 99px; font-size: 12px; font-weight: 700; font-family: 'Manrope', sans-serif; border: none; cursor: pointer; transition: all 0.2s ease; }
         .filter-btn.active { background: #00450d; color: white; }
         .filter-btn:not(.active) { background: #f1f5f9; color: #64748b; }
         .filter-btn:not(.active):hover { background: #e2e8f0; }
-        .route-row {
-          padding: 18px 24px; border-bottom: 1px solid rgba(0,69,13,0.04);
-          transition: background 0.2s ease; cursor: pointer;
-        }
+        .route-row { padding: 18px 24px; border-bottom: 1px solid rgba(0,69,13,0.04); transition: background 0.2s ease; cursor: pointer; }
         .route-row:hover { background: #f9f9ff; }
         .route-row:last-child { border-bottom: none; }
-        .badge {
-          display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
-          border-radius: 99px; font-size: 10px; font-weight: 700;
-          font-family: 'Manrope', sans-serif; letter-spacing: 0.08em;
-          text-transform: uppercase; white-space: nowrap;
-        }
-        .stop-row {
-          display: flex; align-items: center; gap: 12px;
-          padding: 10px 16px; border-bottom: 1px solid rgba(0,69,13,0.04); font-size: 13px;
-        }
+        .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 99px; font-size: 10px; font-weight: 700; font-family: 'Manrope', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+        .stop-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid rgba(0,69,13,0.04); font-size: 13px; }
         .stop-row:last-child { border-bottom: none; }
-        .ward-card {
-          background: white; border-radius: 14px; padding: 16px 20px;
-          border: 1px solid rgba(0,69,13,0.06); transition: all 0.2s ease;
-        }
+        .ward-card { background: white; border-radius: 14px; padding: 16px 20px; border: 1px solid rgba(0,69,13,0.06); transition: all 0.2s ease; }
         .ward-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.06); transform: translateY(-2px); }
-        .action-btn {
-          padding: 6px 14px; border-radius: 99px; font-size: 11px; font-weight: 700;
-          font-family: 'Manrope', sans-serif; cursor: pointer; transition: all 0.2s ease;
-          border: 1.5px solid; white-space: nowrap;
-        }
-        .sub-label {
-          display: block; font-size: 10px; font-weight: 700; color: #94a3b8;
-          text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px;
-          font-family: 'Manrope', sans-serif;
-        }
-        .optimize-btn {
-          display: flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 99px;
-          font-size: 12px; font-weight: 700; font-family: 'Manrope', sans-serif;
-          border: none; cursor: pointer; transition: all 0.2s ease;
-          background: linear-gradient(135deg, #00450d, #1b5e20); color: white;
-        }
+        .action-btn { padding: 6px 14px; border-radius: 99px; font-size: 11px; font-weight: 700; font-family: 'Manrope', sans-serif; cursor: pointer; transition: all 0.2s ease; border: 1.5px solid; white-space: nowrap; }
+        .sub-label { display: block; font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; font-family: 'Manrope', sans-serif; }
+        .optimize-btn { display: flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 99px; font-size: 12px; font-weight: 700; font-family: 'Manrope', sans-serif; border: none; cursor: pointer; transition: all 0.2s ease; background: linear-gradient(135deg, #00450d, #1b5e20); color: white; }
         .optimize-btn:hover { box-shadow: 0 4px 12px rgba(0,69,13,0.3); transform: translateY(-1px); }
         .optimize-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .staffing-row { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: rgba(0,69,13,0.03); border-top: 1px solid rgba(0,69,13,0.06); }
         @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         .s1 { animation: staggerIn 0.5s ease 0.05s both; }
-        .s2 { animation: staggerIn 0.5s ease 0.1s  both; }
+        .s2 { animation: staggerIn 0.5s ease 0.1s both; }
         .s3 { animation: staggerIn 0.5s ease 0.15s both; }
-        .s4 { animation: staggerIn 0.5s ease 0.2s  both; }
-        .s5 { animation: staggerIn 0.5s ease 0.25s both; }
+        .s4 { animation: staggerIn 0.5s ease 0.2s both; }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         .slide-down { animation: slideDown 0.3s ease both; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -510,25 +437,21 @@ export default function DERoutesPage() {
 
             {/* Hero */}
             <section className="mb-10 s1">
-                <span className="text-xs font-bold uppercase block mb-2"
-                    style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
+                <span className="text-xs font-bold uppercase block mb-2" style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
                     District Engineering · Route Management
                 </span>
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
-                        <h1 className="font-headline font-extrabold tracking-tight"
-                            style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
+                        <h1 className="font-headline font-extrabold tracking-tight" style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
                             District <span style={{ color: '#1b5e20' }}>Routes</span>
                         </h1>
                         <p className="text-sm mt-1" style={{ color: '#717a6d' }}>
-                            {profile?.district} · Create and monitor collection routes
+                            {profile?.district} · Create routes and assign to contractors for staffing
                         </p>
                     </div>
                     <button onClick={() => setShowForm(!showForm)}
                         style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', background: showForm ? '#f1f5f9' : '#00450d', color: showForm ? '#64748b' : 'white', border: 'none', cursor: 'pointer', fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', transition: 'all 0.2s ease' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                            {showForm ? 'close' : 'add'}
-                        </span>
+                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{showForm ? 'close' : 'add'}</span>
                         {showForm ? 'Cancel' : 'New Route'}
                     </button>
                 </div>
@@ -552,7 +475,6 @@ export default function DERoutesPage() {
                 ))}
             </div>
 
-            {/* Message */}
             {message && (
                 <div className="mb-6 flex items-center gap-3 p-4 rounded-xl text-sm"
                     style={{ background: message.startsWith('Error') || message.startsWith('Please') ? '#fef2f2' : '#f0fdf4', border: `1px solid ${message.startsWith('Error') || message.startsWith('Please') ? 'rgba(186,26,26,0.2)' : 'rgba(0,69,13,0.15)'}`, color: message.startsWith('Error') || message.startsWith('Please') ? '#ba1a1a' : '#00450d' }}>
@@ -570,6 +492,7 @@ export default function DERoutesPage() {
                         <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>Create New Route</h3>
                         <p className="text-sm mt-1" style={{ color: '#717a6d' }}>
                             District: <strong style={{ color: '#00450d' }}>{profile?.district}</strong>
+                            {' · '}Driver and vehicle will be assigned by the contractor
                         </p>
                     </div>
 
@@ -601,12 +524,12 @@ export default function DERoutesPage() {
                                 </div>
                             </div>
 
-                            {/* Schedule */}
+                            {/* Schedule link */}
                             <div style={{ gridColumn: '1 / -1' }}>
                                 <label className="field-label">
                                     Link to Published Schedule
                                     <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>
-                                        (Optional — auto-fills date and waste type)
+                                        (Auto-fills date, shift and streets)
                                     </span>
                                 </label>
                                 {wardSchedules.length === 0 ? (
@@ -631,50 +554,37 @@ export default function DERoutesPage() {
                                         <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '16px' }}>link</span>
                                         <span style={{ fontSize: '12px', color: '#00450d' }}>
                                             Linked: <strong>{selectedSchedule.waste_type?.replace('_', ' ')} — {selectedSchedule.collection_day}</strong>
+                                            {selectedSchedule.streets && Object.keys(selectedSchedule.streets).length > 0 &&
+                                                <span style={{ marginLeft: '8px', color: '#717a6d' }}>· Streets auto-populated from schedule</span>
+                                            }
                                         </span>
                                     </div>
                                 )}
                             </div>
 
-                            {/* Contractor */}
-                            <div>
-                                <label className="field-label">
-                                    Contractor
-                                    <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>(Leave blank for CMC Direct)</span>
-                                </label>
-                                <select className="select-field" value={formData.contractor_id}
-                                    onChange={e => setFormData({ ...formData, contractor_id: e.target.value, driver_id: '' })}>
-                                    <option value="">CMC Direct (No Contractor)</option>
-                                    {contractors.map(c => (
-                                        <option key={c.id} value={c.id}>{c.organisation_name || c.full_name}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Driver */}
-                            <div>
-                                <label className="field-label">Assign Driver *</label>
-                                {filteredDrivers.length === 0 ? (
-                                    <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#fefce8', border: '1px solid rgba(217,119,6,0.2)', fontSize: '13px', color: '#92400e' }}>
-                                        ⚠ {formData.contractor_id ? 'No drivers for this contractor.' : 'No drivers available.'}
+                            {/* Contractor — filtered to this district only */}
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <label className="field-label">Assign to Contractor *</label>
+                                {contractors.length === 0 ? (
+                                    <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#fef2f2', border: '1px solid rgba(186,26,26,0.2)', fontSize: '13px', color: '#ba1a1a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>warning</span>
+                                        No contractors registered for {profile?.district}. Add a contractor account with this district first.
                                     </div>
                                 ) : (
-                                    <select className="select-field" value={formData.driver_id}
-                                        onChange={e => setFormData({ ...formData, driver_id: e.target.value })} required>
-                                        <option value="">Select driver</option>
-                                        {filteredDrivers.map(d => (
-                                            <option key={d.id} value={d.id}>{d.full_name}</option>
+                                    <select className="select-field" value={formData.contractor_id}
+                                        onChange={e => setFormData({ ...formData, contractor_id: e.target.value })} required>
+                                        <option value="">Select contractor</option>
+                                        {contractors.map(c => (
+                                            <option key={c.id} value={c.id}>{c.organisation_name || c.full_name}</option>
                                         ))}
                                     </select>
                                 )}
-                            </div>
-
-                            {/* Vehicle */}
-                            <div>
-                                <label className="field-label">Vehicle Number *</label>
-                                <input type="text" className="form-field" placeholder="e.g. WP CAB 1234"
-                                    value={formData.vehicle_number}
-                                    onChange={e => setFormData({ ...formData, vehicle_number: e.target.value })} required />
+                                {formData.contractor_id && (
+                                    <p style={{ fontSize: '11px', color: '#00450d', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>info</span>
+                                        The contractor will assign a driver and vehicle to this route from their fleet.
+                                    </p>
+                                )}
                             </div>
 
                             {/* Date */}
@@ -686,7 +596,7 @@ export default function DERoutesPage() {
                             </div>
 
                             {/* Route name */}
-                            <div style={{ gridColumn: '1 / -1' }}>
+                            <div>
                                 <label className="field-label">
                                     Route Name
                                     <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>(Auto-generated if empty)</span>
@@ -698,14 +608,19 @@ export default function DERoutesPage() {
                             </div>
                         </div>
 
-                        {/* Collection Stops */}
+                        {/* Collection Streets / Stops */}
                         <div style={{ marginBottom: '20px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                <label className="field-label" style={{ margin: 0 }}>Collection Roads / Stops *</label>
+                                <div>
+                                    <label className="field-label" style={{ margin: 0 }}>Streets / Collection Points *</label>
+                                    <p style={{ fontSize: '12px', color: '#717a6d', marginTop: '4px' }}>
+                                        These are the streets the driver will cover on this route
+                                    </p>
+                                </div>
                                 <button type="button" onClick={addStop}
                                     style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '99px', border: '1.5px solid rgba(0,69,13,0.2)', background: 'white', color: '#00450d', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', cursor: 'pointer' }}>
                                     <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>add</span>
-                                    Add Road
+                                    Add Street
                                 </button>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -713,7 +628,7 @@ export default function DERoutesPage() {
                                     <div key={index} className="stop-card">
                                         <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr auto', gap: '10px', alignItems: 'start' }}>
                                             <div>
-                                                <label className="sub-label">Road Name *</label>
+                                                <label className="sub-label">Street Name *</label>
                                                 <input type="text" className="form-field" placeholder="e.g. Kotahena Street"
                                                     value={stop.road_name}
                                                     onChange={e => updateStop(index, 'road_name', e.target.value)} />
@@ -751,9 +666,7 @@ export default function DERoutesPage() {
                                                         onChange={e => updateStop(index, 'commercial_id', e.target.value)}>
                                                         <option value="">Select establishment</option>
                                                         {commercials.map(c => (
-                                                            <option key={c.id} value={c.id}>
-                                                                {c.organisation_name || c.full_name} — {c.address}
-                                                            </option>
+                                                            <option key={c.id} value={c.id}>{c.organisation_name || c.full_name} — {c.address}</option>
                                                         ))}
                                                     </select>
                                                     {stop.commercial_id
@@ -788,11 +701,6 @@ export default function DERoutesPage() {
                                                             onChange={e => updateStop(index, 'bin_quantity', Number(e.target.value))} />
                                                     </div>
                                                 </div>
-                                                <div style={{ padding: '8px 12px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)' }}>
-                                                    <p style={{ fontSize: '11px', color: '#00450d', margin: 0 }}>
-                                                        💰 Charge basis: <strong>{stop.bin_quantity} × {stop.bin_size}</strong> bin{stop.bin_quantity !== 1 ? 's' : ''} of <strong>{stop.waste_type}</strong> waste
-                                                    </p>
-                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -803,18 +711,9 @@ export default function DERoutesPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <button type="submit" disabled={saving} className="submit-btn">
                                 {saving ? (
-                                    <>
-                                        <svg style={{ width: '16px', height: '16px', animation: 'spin 0.8s linear infinite' }} fill="none" viewBox="0 0 24 24">
-                                            <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                        </svg>
-                                        Creating Route...
-                                    </>
+                                    <><svg style={{ width: '16px', height: '16px', animation: 'spin 0.8s linear infinite' }} fill="none" viewBox="0 0 24 24"><circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Creating Route...</>
                                 ) : (
-                                    <>
-                                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>add_road</span>
-                                        Create Route
-                                    </>
+                                    <><span className="material-symbols-outlined" style={{ fontSize: '18px' }}>add_road</span>Create Route</>
                                 )}
                             </button>
                             <button type="button" onClick={() => setShowForm(false)}
@@ -850,20 +749,17 @@ export default function DERoutesPage() {
 
             {/* Route list */}
             <div className="bento-card s4">
-                <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-3"
-                    style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
+                <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-3" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
                     <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>All Routes</h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                         {['all', 'active', 'pending', 'completed'].map(f => (
-                            <button key={f} onClick={() => setFilterStatus(f)}
-                                className={`filter-btn ${filterStatus === f ? 'active' : ''}`}>
+                            <button key={f} onClick={() => setFilterStatus(f)} className={`filter-btn ${filterStatus === f ? 'active' : ''}`}>
                                 {f.charAt(0).toUpperCase() + f.slice(1)}
                             </button>
                         ))}
                         <div style={{ width: '1px', height: '20px', background: 'rgba(0,69,13,0.1)' }} />
                         {['all', 'day', 'night'].map(f => (
-                            <button key={f} onClick={() => setFilterShift(f)}
-                                className={`filter-btn ${filterShift === f ? 'active' : ''}`}>
+                            <button key={f} onClick={() => setFilterShift(f)} className={`filter-btn ${filterShift === f ? 'active' : ''}`}>
                                 {f === 'day' ? '☀️ Day' : f === 'night' ? '🌙 Night' : 'All Shifts'}
                             </button>
                         ))}
@@ -872,8 +768,7 @@ export default function DERoutesPage() {
 
                 {loading ? (
                     <div className="flex items-center justify-center py-16">
-                        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-                            style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
+                        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center px-8">
@@ -881,12 +776,9 @@ export default function DERoutesPage() {
                             <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '32px' }}>route</span>
                         </div>
                         <p className="font-headline font-bold text-lg mb-1" style={{ color: '#181c22' }}>No routes found</p>
-                        <p style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '20px' }}>
-                            Create the first collection route for {profile?.district}
-                        </p>
+                        <p style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '20px' }}>Create the first collection route for {profile?.district}</p>
                         <button onClick={() => setShowForm(true)} className="submit-btn" style={{ width: 'auto' }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>add</span>
-                            New Route
+                            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>add</span>New Route
                         </button>
                     </div>
                 ) : (
@@ -896,6 +788,7 @@ export default function DERoutesPage() {
                             const ws = route.waste_type ? (WASTE_STYLE[route.waste_type] || { color: '#64748b', bg: '#f8fafc' }) : null
                             const isExpanded = expandedRoute === route.id
                             const currentStops = routeStops[route.id] || []
+                            const isStaffed = !!route.driver_id && !!route.vehicle_number
 
                             return (
                                 <div key={route.id}>
@@ -912,6 +805,11 @@ export default function DERoutesPage() {
                                                     <span className="badge" style={{ background: ss.bg, color: ss.color }}>{route.status}</span>
                                                     {ws && <span className="badge" style={{ background: ws.bg, color: ws.color }}>{route.waste_type?.replace('_', ' ')}</span>}
                                                     {route.shift === 'night' && <span className="badge" style={{ background: '#eff6ff', color: '#1e3a8a' }}>🌙 Night</span>}
+                                                    {/* Staffing status */}
+                                                    <span className="badge" style={{ background: isStaffed ? '#f0fdf4' : '#fef2f2', color: isStaffed ? '#00450d' : '#ba1a1a' }}>
+                                                        <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>{isStaffed ? 'check_circle' : 'warning'}</span>
+                                                        {isStaffed ? 'Staffed' : 'Awaiting assignment'}
+                                                    </span>
                                                 </div>
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', fontSize: '12px', color: '#94a3b8' }}>
                                                     <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -919,17 +817,21 @@ export default function DERoutesPage() {
                                                         {route.ward || route.district}
                                                     </span>
                                                     <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>person</span>
-                                                        {route.profiles?.full_name || 'Unassigned'}
+                                                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>business</span>
+                                                        {route.contractor?.organisation_name || route.contractor?.full_name || 'No contractor'}
                                                     </span>
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>local_shipping</span>
-                                                        {route.contractor?.organisation_name || route.contractor?.full_name || 'CMC Direct'}
-                                                    </span>
-                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                                        <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>directions_car</span>
-                                                        {route.vehicle_number}
-                                                    </span>
+                                                    {route.profiles?.full_name && (
+                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>person</span>
+                                                            {route.profiles.full_name}
+                                                        </span>
+                                                    )}
+                                                    {route.vehicle_number && (
+                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>directions_car</span>
+                                                            {route.vehicle_number}
+                                                        </span>
+                                                    )}
                                                     <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                                                         <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>calendar_today</span>
                                                         {new Date(route.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -938,7 +840,7 @@ export default function DERoutesPage() {
                                             </div>
 
                                             <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                                                {route.status === 'pending' && (
+                                                {route.status === 'pending' && isStaffed && (
                                                     <button onClick={() => updateRouteStatus(route.id, 'active')}
                                                         className="action-btn"
                                                         style={{ borderColor: 'rgba(29,78,216,0.2)', color: '#1d4ed8', background: 'white' }}>
@@ -960,22 +862,19 @@ export default function DERoutesPage() {
                                         </div>
                                     </div>
 
-                                    {/* Expanded stops */}
                                     {isExpanded && (
                                         <div className="slide-down" style={{ background: '#f9fdf9', borderBottom: '1px solid rgba(0,69,13,0.04)' }}>
                                             {loadingStops === route.id ? (
                                                 <div style={{ padding: '20px', textAlign: 'center' }}>
-                                                    <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto"
-                                                        style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
+                                                    <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
                                                 </div>
                                             ) : currentStops.length === 0 ? (
-                                                <div style={{ padding: '16px 24px', fontSize: '13px', color: '#94a3b8' }}>No stops added yet</div>
+                                                <div style={{ padding: '16px 24px', fontSize: '13px', color: '#94a3b8' }}>No streets/stops added yet</div>
                                             ) : (
                                                 <div>
-                                                    {/* Stops header with Optimize button */}
                                                     <div style={{ padding: '12px 24px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                                                         <p style={{ fontSize: '11px', fontWeight: 700, color: '#717a6d', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'Manrope, sans-serif' }}>
-                                                            {currentStops.length} roads/stops
+                                                            {currentStops.length} streets
                                                         </p>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                                                             <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#94a3b8' }}>
@@ -983,7 +882,6 @@ export default function DERoutesPage() {
                                                                 <span style={{ color: '#dc2626' }}>✗ {currentStops.filter(s => s.status === 'skipped').length} skipped</span>
                                                                 <span style={{ color: '#d97706' }}>○ {currentStops.filter(s => s.status === 'pending').length} pending</span>
                                                             </div>
-                                                            {/* Optimize button — show when 3+ pending stops */}
                                                             {currentStops.filter(s => s.status === 'pending').length >= 3 && (
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                                                     {optimizeResult[route.id] && (
@@ -991,22 +889,16 @@ export default function DERoutesPage() {
                                                                             {optimizeResult[route.id]}
                                                                         </span>
                                                                     )}
-                                                                    <button
-                                                                        className="optimize-btn"
-                                                                        disabled={optimizing === route.id}
+                                                                    <button className="optimize-btn" disabled={optimizing === route.id}
                                                                         onClick={e => { e.stopPropagation(); optimizeRoute(route.id, currentStops) }}>
-                                                                        {optimizing === route.id ? (
-                                                                            <><div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />Optimizing...</>
-                                                                        ) : (
-                                                                            <><span className="material-symbols-outlined" style={{ fontSize: 14 }}>auto_fix_high</span>AI Optimize Order</>
-                                                                        )}
+                                                                        {optimizing === route.id
+                                                                            ? <><div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />Optimizing...</>
+                                                                            : <><span className="material-symbols-outlined" style={{ fontSize: 14 }}>auto_fix_high</span>AI Optimize Order</>}
                                                                     </button>
                                                                 </div>
                                                             )}
                                                         </div>
                                                     </div>
-
-                                                    {/* Stop rows */}
                                                     {currentStops.map(stop => {
                                                         const fs = getStopFrequencyStyle(stop.frequency)
                                                         return (
@@ -1017,35 +909,16 @@ export default function DERoutesPage() {
                                                                     </span>
                                                                 </div>
                                                                 <div style={{ flex: 1 }}>
-                                                                    <p style={{ margin: 0, fontWeight: 600, color: '#181c22', fontSize: '13px' }}>
-                                                                        {stop.road_name || stop.address}
-                                                                    </p>
+                                                                    <p style={{ margin: 0, fontWeight: 600, color: '#181c22', fontSize: '13px' }}>{stop.road_name || stop.address}</p>
                                                                     {stop.skip_reason && (
-                                                                        <p style={{ margin: 0, fontSize: '11px', color: '#ba1a1a', marginTop: '2px' }}>
-                                                                            Skipped: {stop.skip_reason.replace(/_/g, ' ')}
-                                                                        </p>
+                                                                        <p style={{ margin: 0, fontSize: '11px', color: '#ba1a1a', marginTop: '2px' }}>Skipped: {stop.skip_reason.replace(/_/g, ' ')}</p>
                                                                     )}
                                                                 </div>
                                                                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                                                     <span style={{ fontSize: '10px', color: '#94a3b8', fontFamily: 'Manrope, sans-serif', fontWeight: 700 }}>#{stop.stop_order}</span>
-                                                                    {stop.frequency && (
-                                                                        <span className="badge" style={{ background: fs.bg, color: fs.color }}>
-                                                                            {stop.frequency.replace(/_/g, ' ')}
-                                                                        </span>
-                                                                    )}
-                                                                    {stop.is_commercial && (
-                                                                        <span className="badge" style={{ background: '#eff6ff', color: '#1d4ed8' }}>Commercial</span>
-                                                                    )}
-                                                                    {stop.is_commercial && stop.bin_quantity > 0 && (
-                                                                        <span className="badge" style={{ background: '#fefce8', color: '#92400e' }}>
-                                                                            {stop.bin_quantity} × {stop.bin_size}
-                                                                        </span>
-                                                                    )}
-                                                                    {stop.is_commercial && stop.waste_type && (
-                                                                        <span className="badge" style={{ background: '#f0fdf4', color: '#00450d' }}>
-                                                                            {stop.waste_type}
-                                                                        </span>
-                                                                    )}
+                                                                    {stop.frequency && <span className="badge" style={{ background: fs.bg, color: fs.color }}>{stop.frequency.replace(/_/g, ' ')}</span>}
+                                                                    {stop.is_commercial && <span className="badge" style={{ background: '#eff6ff', color: '#1d4ed8' }}>Commercial</span>}
+                                                                    {stop.is_commercial && stop.bin_quantity > 0 && <span className="badge" style={{ background: '#fefce8', color: '#92400e' }}>{stop.bin_quantity} × {stop.bin_size}</span>}
                                                                 </div>
                                                             </div>
                                                         )

@@ -16,6 +16,7 @@ const SUPERVISOR_NAV = [
     { label: 'Ward Heatmap', href: '/dashboard/supervisor/heatmap', icon: 'map', section: 'Reports' },
     { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf', section: 'Reports' },
     { label: 'Announcements', href: '/dashboard/supervisor/announcements', icon: 'campaign', section: 'Communications' },
+    { label: 'Schedules', href: '/dashboard/supervisor/schedules', icon: 'calendar_month', section: 'Operations' },
 ]
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string }> = {

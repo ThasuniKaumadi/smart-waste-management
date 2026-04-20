@@ -2,44 +2,76 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import Link from 'next/link'
 import DashboardLayout from '@/components/DashboardLayout'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import Link from 'next/link'
 
 const DE_NAV = [
   { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
   { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
+  { label: 'History', href: '/dashboard/district-engineer/collection-history', icon: 'history' },
   { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
   { label: 'Heatmap', href: '/dashboard/district-engineer/heatmap', icon: 'thermostat' },
-  { label: 'Complaints', href: '/dashboard/district-engineer/complaints', icon: 'feedback' },
-  { label: 'Waste Reports', href: '/dashboard/district-engineer/waste-reports', icon: 'report' },
-  { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
-  { label: 'Zones', href: '/dashboard/district-engineer/zones', icon: 'map' },
-  { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+  { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'report_problem' },
   { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
+  { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
+  { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
 
-const COLORS = ['#00450d', '#1b5e20', '#2e7d32', '#388e3c', '#43a047']
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
 
-export default function DistrictEngineerDashboardPage() {
+function getFirstName(fullName: string) {
+  return fullName?.split(' ')[0] || fullName
+}
+
+interface Stats {
+  totalCollections: number
+  completedCollections: number
+  activeRoutes: number
+  openComplaints: number
+  pendingWasteReports: number
+  publishedSchedules: number
+  totalRoutes: number
+  resolvedComplaints: number
+  collectionRate: number
+  resolutionRate: number
+  blockchainVerified: number
+}
+
+interface RecentComplaint {
+  id: string
+  complaint_type: string
+  description: string
+  status: string
+  created_at: string
+  reporter_name: string
+}
+
+interface RecentWasteReport {
+  id: string
+  report_type: string
+  description: string
+  status: string
+  created_at: string
+  location_address: string
+}
+
+export default function DEOverviewPage() {
   const [profile, setProfile] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState({
-    totalSchedules: 0,
-    publishedSchedules: 0,
-    totalRoutes: 0,
-    activeRoutes: 0,
-    totalComplaints: 0,
-    openComplaints: 0,
-    resolvedComplaints: 0,
-    totalReports: 0,
-    pendingReports: 0,
-    totalCollections: 0,
-    completedCollections: 0,
-    skippedCollections: 0,
+  const [stats, setStats] = useState<Stats>({
+    totalCollections: 0, completedCollections: 0, activeRoutes: 0,
+    openComplaints: 0, pendingWasteReports: 0, publishedSchedules: 0,
+    totalRoutes: 0, resolvedComplaints: 0, collectionRate: 0,
+    resolutionRate: 0, blockchainVerified: 0,
   })
-  const [complaintData, setComplaintData] = useState<any[]>([])
-  const [recentComplaints, setRecentComplaints] = useState<any[]>([])
+  const [recentComplaints, setRecentComplaints] = useState<RecentComplaint[]>([])
+  const [recentReports, setRecentReports] = useState<RecentWasteReport[]>([])
+  const [loading, setLoading] = useState(true)
+  const [now] = useState(new Date())
 
   useEffect(() => { loadData() }, [])
 
@@ -49,410 +81,466 @@ export default function DistrictEngineerDashboardPage() {
     if (!user) return
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
+    const district = p?.district || ''
 
-    const district = p?.district
-
-    const results = await Promise.all([
-      supabase.from('schedules').select('*', { count: 'exact', head: true }).eq('district', district),
-      supabase.from('schedules').select('*', { count: 'exact', head: true }).eq('district', district).eq('status', 'published'),
-      supabase.from('routes').select('*', { count: 'exact', head: true }).eq('district', district),
-      supabase.from('routes').select('*', { count: 'exact', head: true }).eq('district', district).eq('status', 'active'),
-      supabase.from('complaints').select('*', { count: 'exact', head: true }).eq('district', district),
-      supabase.from('complaints').select('*', { count: 'exact', head: true }).eq('district', district).eq('status', 'open'),
-      supabase.from('complaints').select('*', { count: 'exact', head: true }).eq('district', district).eq('status', 'resolved'),
-      supabase.from('waste_reports').select('*', { count: 'exact', head: true }).eq('district', district),
-      supabase.from('waste_reports').select('*', { count: 'exact', head: true }).eq('district', district).eq('status', 'pending'),
-      supabase.from('collection_events').select('*', { count: 'exact', head: true }),
-      supabase.from('collection_events').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
-      supabase.from('collection_events').select('*', { count: 'exact', head: true }).eq('status', 'skipped'),
+    const [
+      schedulesRes, routesRes, stopsRes,
+      complaintsRes, wasteReportsRes, blockchainRes,
+    ] = await Promise.all([
+      supabase.from('schedules').select('id, status').eq('district', district),
+      supabase.from('routes').select('id, status').eq('district', district),
+      supabase.from('collection_stops').select('id, status').in('route_id',
+        (await supabase.from('routes').select('id').eq('district', district)).data?.map((r: any) => r.id) || []
+      ),
+      supabase.from('complaints').select('*, profiles!submitted_by(full_name)').eq('district', district).order('created_at', { ascending: false }).limit(5),
+      supabase.from('waste_reports').select('*').eq('district', district).order('created_at', { ascending: false }).limit(5),
+      supabase.from('collection_stops').select('id').not('blockchain_tx', 'is', null),
     ])
 
+    const schedules = schedulesRes.data || []
+    const routes = routesRes.data || []
+    const stops = stopsRes.data || []
+    const complaints = complaintsRes.data || []
+    const wasteReports = wasteReportsRes.data || []
+
+    const publishedSchedules = schedules.filter((s: any) => s.status === 'published').length
+    const activeRoutes = routes.filter((r: any) => r.status === 'active').length
+    const totalStops = stops.length
+    const completedStops = stops.filter((s: any) => s.status === 'completed').length
+    const openComplaints = complaints.filter((c: any) => c.status !== 'resolved').length
+    const resolvedComplaints = complaints.filter((c: any) => c.status === 'resolved').length
+    const pendingReports = wasteReports.filter((r: any) => r.status !== 'resolved').length
+    const collectionRate = totalStops > 0 ? Math.round((completedStops / totalStops) * 100) : 0
+    const totalComplaints = complaints.length
+    const resolutionRate = totalComplaints > 0 ? Math.round((resolvedComplaints / totalComplaints) * 100) : 0
+
     setStats({
-      totalSchedules: results[0].count || 0,
-      publishedSchedules: results[1].count || 0,
-      totalRoutes: results[2].count || 0,
-      activeRoutes: results[3].count || 0,
-      totalComplaints: results[4].count || 0,
-      openComplaints: results[5].count || 0,
-      resolvedComplaints: results[6].count || 0,
-      totalReports: results[7].count || 0,
-      pendingReports: results[8].count || 0,
-      totalCollections: results[9].count || 0,
-      completedCollections: results[10].count || 0,
-      skippedCollections: results[11].count || 0,
+      totalCollections: totalStops, completedCollections: completedStops,
+      activeRoutes, openComplaints, pendingWasteReports: pendingReports,
+      publishedSchedules, totalRoutes: routes.length,
+      resolvedComplaints, collectionRate, resolutionRate,
+      blockchainVerified: blockchainRes.data?.length || 0,
     })
 
-    const { data: compData } = await supabase
-      .from('complaints').select('complaint_type').eq('district', district)
-    if (compData) {
-      const counts: Record<string, number> = {}
-      compData.forEach(c => { if (c.complaint_type) counts[c.complaint_type] = (counts[c.complaint_type] || 0) + 1 })
-      setComplaintData(Object.entries(counts).map(([name, value]) => ({ name: name.replace(/_/g, ' '), value })))
-    }
+    setRecentComplaints(complaints.slice(0, 4).map((c: any) => ({
+      id: c.id, complaint_type: c.complaint_type, description: c.description,
+      status: c.status, created_at: c.created_at,
+      reporter_name: c.profiles?.full_name || 'Unknown',
+    })))
 
-    const { data: recent } = await supabase
-      .from('complaints').select('*').eq('district', district)
-      .order('created_at', { ascending: false }).limit(4)
-    setRecentComplaints(recent || [])
+    setRecentReports(wasteReports.slice(0, 3).map((r: any) => ({
+      id: r.id, report_type: r.report_type, description: r.description,
+      status: r.status, created_at: r.created_at,
+      location_address: r.location_address,
+    })))
 
     setLoading(false)
   }
 
-  const resolutionRate = stats.totalComplaints > 0
-    ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100) : 0
-  const completionRate = stats.totalCollections > 0
-    ? Math.round((stats.completedCollections / stats.totalCollections) * 100) : 0
+  const dateStr = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-  function statusStyle(status: string) {
-    if (status === 'resolved') return { background: '#f0fdf4', color: '#00450d' }
-    if (status === 'open') return { background: '#fef2f2', color: '#ba1a1a' }
-    if (status === 'in_progress') return { background: '#eff6ff', color: '#1d4ed8' }
-    return { background: '#f8fafc', color: '#64748b' }
+  const COMPLAINT_ICONS: Record<string, string> = {
+    missed_collection: 'delete', delayed_collection: 'schedule',
+    illegal_dumping: 'delete_forever', bin_damage: 'broken_image',
+    noise_complaint: 'volume_up', other: 'feedback',
   }
 
-  const QUICK_LINKS = [
-    { label: 'Create Schedule', desc: 'Plan waste collection for your district', icon: 'add_circle', href: '/dashboard/district-engineer/schedules/new', color: '#00450d' },
-    { label: 'Manage Routes', desc: 'View and oversee collection routes', icon: 'route', href: '/dashboard/district-engineer/routes', color: '#1b5e20' },
-    { label: 'Complaints', desc: 'Review and resolve resident complaints', icon: 'feedback', href: '/dashboard/district-engineer/complaints', color: '#2e7d32' },
-    { label: 'Waste Reports', desc: 'Review crowdsourced waste incidents', icon: 'report', href: '/dashboard/district-engineer/waste-reports', color: '#388e3c' },
-  ]
+  const REPORT_ICONS: Record<string, string> = {
+    illegal_dumping: 'delete_forever', missed_collection: 'delete',
+    blocked_drainage: 'water_damage', overflowing_bin: 'delete_sweep', other: 'report',
+  }
+
+  const statusStyle = (status: string) => {
+    if (status === 'resolved') return { color: '#00450d', bg: '#f0fdf4' }
+    if (status === 'in_progress' || status === 'assigned') return { color: '#1d4ed8', bg: '#eff6ff' }
+    return { color: '#d97706', bg: '#fefce8' }
+  }
 
   return (
-    <DashboardLayout
-      role="District Engineer"
-      userName={profile?.full_name || ''}
+    <DashboardLayout role="District Engineer" userName={profile?.full_name || ''}
       navItems={DE_NAV}
-      primaryAction={{ label: 'New Schedule', href: '/dashboard/district-engineer/schedules/new', icon: 'add' }}
-    >
+      primaryAction={{ label: 'New Schedule', href: '/dashboard/district-engineer/schedules', icon: 'add' }}>
       <style>{`
-        .material-symbols-outlined {
-          font-family: 'Material Symbols Outlined';
-          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-          display: inline-block; vertical-align: middle; line-height: 1;
-        }
-        .font-headline { font-family: 'Manrope', sans-serif; }
-        .font-label { font-family: 'Manrope', sans-serif; }
-        .bento-card {
-          background: white; border-radius: 16px;
-          box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08);
-          border: 1px solid rgba(0,69,13,0.04);
-          transition: all 0.4s cubic-bezier(0.05,0.7,0.1,1.0); overflow: hidden;
-        }
-        .bento-card:hover { transform: translateY(-4px); box-shadow: 0 20px 50px -15px rgba(24,28,34,0.12); }
-        .bento-card-green {
-          background: #00450d; border-radius: 16px; color: white;
-          transition: all 0.4s cubic-bezier(0.05,0.7,0.1,1.0); overflow: hidden; position: relative;
-        }
-        .bento-card-green:hover { transform: translateY(-4px); }
-        .quick-link {
-          background: white; border-radius: 16px; padding: 24px;
-          border: 1px solid rgba(0,69,13,0.06);
-          transition: all 0.35s cubic-bezier(0.05,0.7,0.1,1.0); text-decoration: none; display: block;
-        }
-        .quick-link:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -15px rgba(0,69,13,0.12); border-color: rgba(0,69,13,0.15); }
-        .status-badge {
-          display: inline-flex; align-items: center; padding: 3px 10px;
-          border-radius: 99px; font-size: 10px; font-weight: 700;
-          font-family: 'Manrope', sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
-        }
-        .progress-bar { height: 6px; border-radius: 99px; background: #f0fdf4; overflow: hidden; }
-        .progress-fill { height: 100%; border-radius: 99px; }
-        @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-        .s1 { animation: staggerIn 0.5s ease 0.05s both; }
-        .s2 { animation: staggerIn 0.5s ease 0.1s both; }
-        .s3 { animation: staggerIn 0.5s ease 0.15s both; }
-        .s4 { animation: staggerIn 0.5s ease 0.2s both; }
-        .s5 { animation: staggerIn 0.5s ease 0.25s both; }
-        .s6 { animation: staggerIn 0.5s ease 0.3s both; }
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap');
+        .msym { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+        .msym-fill { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+
+        /* Cards */
+        .g-card { background:white; border-radius:20px; border:1px solid rgba(0,69,13,0.07); box-shadow:0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.04); overflow:hidden; }
+        .g-card-hover { transition:transform 0.2s, box-shadow 0.2s; }
+        .g-card-hover:hover { transform:translateY(-2px); box-shadow:0 4px 20px rgba(0,69,13,0.1); }
+
+        /* Hero banner */
+        .hero-banner { background:linear-gradient(135deg, #00450d 0%, #1a5c20 50%, #0d3d0a 100%); border-radius:24px; padding:36px 40px; position:relative; overflow:hidden; }
+        .hero-banner::before { content:''; position:absolute; top:-60px; right:-60px; width:280px; height:280px; background:rgba(163,246,156,0.06); border-radius:50%; }
+        .hero-banner::after { content:''; position:absolute; bottom:-40px; right:120px; width:180px; height:180px; background:rgba(255,255,255,0.03); border-radius:50%; }
+
+        /* Stat cards */
+        .stat-card { padding:22px 24px; display:flex; flex-direction:column; gap:0; }
+        .stat-num { font-family:'Manrope',sans-serif; font-weight:900; font-size:36px; line-height:1; color:#181c22; letter-spacing:-0.02em; }
+        .stat-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; color:#94a3b8; font-family:'Manrope',sans-serif; margin-top:5px; }
+        .stat-sub { font-size:12px; color:#717a6d; font-weight:500; margin-top:3px; }
+
+        /* Health bars */
+        .health-row { display:flex; align-items:center; gap:14px; padding:12px 0; border-bottom:1px solid rgba(0,69,13,0.05); }
+        .health-row:last-child { border-bottom:none; }
+        .health-bar-track { flex:1; height:6px; background:#f0f4f0; border-radius:99px; overflow:hidden; }
+        .health-bar-fill { height:100%; border-radius:99px; transition:width 0.8s cubic-bezier(0.34,1.56,0.64,1); }
+
+        /* Quick action cards */
+        .qa-card { padding:22px 20px; cursor:pointer; transition:all 0.2s; text-decoration:none; display:block; border-top:3px solid transparent; }
+        .qa-card:hover { background:#f9fdf9; border-top-color:#00450d; }
+
+        /* Activity rows */
+        .activity-row { padding:12px 20px; border-bottom:1px solid rgba(0,69,13,0.04); display:flex; align-items:flex-start; gap:12px; transition:background 0.15s; }
+        .activity-row:hover { background:#fafdf9; }
+        .activity-row:last-child { border-bottom:none; }
+
+        /* Badge */
+        .badge { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; font-family:'Manrope',sans-serif; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; }
+
+        /* Animations */
+        @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+        .a1{animation:fadeUp .45s ease .04s both}
+        .a2{animation:fadeUp .45s ease .1s both}
+        .a3{animation:fadeUp .45s ease .16s both}
+        .a4{animation:fadeUp .45s ease .22s both}
+        .a5{animation:fadeUp .45s ease .28s both}
+        .a6{animation:fadeUp .45s ease .34s both}
+        @keyframes spin { to{transform:rotate(360deg)} }
+        @keyframes countUp { from{opacity:0;transform:scale(0.85)} to{opacity:1;transform:scale(1)} }
+        .count-anim { animation:countUp .5s cubic-bezier(0.34,1.56,0.64,1) both; }
       `}</style>
 
-      {/* Hero */}
-      <section className="mb-10 s1">
-        <span className="font-label text-xs font-bold uppercase block mb-2"
-          style={{ letterSpacing: '0.2em', color: '#717a6d' }}>
-          District Engineering Console · ClearPath
-        </span>
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <h1 className="font-headline font-extrabold tracking-tight"
-            style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
-            District <span style={{ color: '#1b5e20' }}>Intelligence</span>
-          </h1>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: '#f0fdf4' }}>
-              <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#16a34a' }} />
-              <span className="text-sm font-medium" style={{ color: '#14532d', fontFamily: 'Inter, sans-serif' }}>
-                {profile?.district || 'Your District'}
-              </span>
-            </div>
-            <Link href="/dashboard/district-engineer/performance"
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-80"
-              style={{ background: '#1b5e20', color: 'white', textDecoration: 'none', fontFamily: 'Manrope, sans-serif' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>analytics</span>
-              Full Report
-            </Link>
-          </div>
-        </div>
-      </section>
+      {/* ── Greeting (above banner) ── */}
+      <div className="a1" style={{ marginBottom: 20 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: 6 }}>
+          {dateStr}
+        </p>
+        <h1 style={{ fontSize: 40, fontWeight: 900, color: '#181c22', lineHeight: 1.05, fontFamily: 'Manrope,sans-serif', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
+          {getGreeting()}, {getFirstName(profile?.full_name || 'Engineer')}
+        </h1>
+        <p style={{ fontSize: 13, color: '#717a6d', margin: 0, fontWeight: 500 }}>
+          {profile?.district} · District Engineering Console
+        </p>
+      </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <div className="text-center">
-            <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
-              style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
-            <p className="text-sm" style={{ color: '#717a6d' }}>Loading district data...</p>
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Row 1 — large overview + health */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
-            <div className="bento-card-green md:col-span-8 p-8 s2">
-              <div className="absolute top-0 right-0 w-56 h-56 rounded-full -mr-20 -mt-20"
-                style={{ background: 'rgba(163,246,156,0.06)' }} />
-              <div className="relative z-10">
-                <div className="flex items-start justify-between mb-8">
-                  <div>
-                    <span className="font-label text-xs font-bold uppercase block mb-2"
-                      style={{ letterSpacing: '0.2em', color: 'rgba(163,246,156,0.6)' }}>
-                      Active Pickup Streams
-                    </span>
-                    <h2 className="font-headline font-extrabold text-3xl tracking-tight">District Operations</h2>
-                    <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', marginTop: '4px' }}>
-                      Real-time logistics for {profile?.district || 'your district'}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: '28px' }}>engineering</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { label: 'Total Collections', value: stats.totalCollections, icon: 'local_shipping' },
-                    { label: 'Completed', value: stats.completedCollections, icon: 'check_circle' },
-                    { label: 'Active Routes', value: stats.activeRoutes, icon: 'route' },
-                    { label: 'Open Complaints', value: stats.openComplaints, icon: 'feedback' },
-                  ].map(m => (
-                    <div key={m.label} className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                      <span className="material-symbols-outlined mb-2 block"
-                        style={{ color: 'rgba(163,246,156,0.7)', fontSize: '18px' }}>{m.icon}</span>
-                      <p className="font-headline font-bold text-2xl">{m.value}</p>
-                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{m.label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+      {/* ── Hero banner ── */}
+      <div className="hero-banner a2" style={{ marginBottom: 24 }}>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(163,246,156,0.75)', fontFamily: 'Manrope,sans-serif', margin: '0 0 4px' }}>
+                District Operations
+              </p>
+              <p style={{ fontSize: 14, color: 'rgba(163,246,156,0.55)', margin: 0, fontWeight: 500 }}>
+                Real-time logistics overview
+              </p>
             </div>
 
-            <div className="bento-card md:col-span-4 p-8 flex flex-col justify-between s2">
-              <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>District Health</h2>
-                  <span className="material-symbols-outlined" style={{ color: '#717a6d', fontSize: '20px' }}>monitor_heart</span>
-                </div>
-                <div className="space-y-5">
-                  {[
-                    { label: 'Collection Rate', value: completionRate, color: '#00450d' },
-                    { label: 'Resolution Rate', value: resolutionRate, color: '#1b5e20' },
-                    { label: 'Schedule Published', value: stats.totalSchedules > 0 ? Math.round((stats.publishedSchedules / stats.totalSchedules) * 100) : 0, color: '#2e7d32' },
-                  ].map(m => (
-                    <div key={m.label}>
-                      <div className="flex justify-between text-sm mb-1.5">
-                        <span className="font-medium" style={{ color: '#181c22' }}>{m.label}</span>
-                        <span className="font-bold" style={{ color: m.color }}>{m.value}%</span>
-                      </div>
-                      <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${m.value}%`, background: m.color }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <Link href="/dashboard/district-engineer/performance"
-                className="mt-6 w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90"
-                style={{ background: '#f0fdf4', color: '#00450d', textDecoration: 'none', fontFamily: 'Manrope, sans-serif' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_forward</span>
-                View Full Performance
-              </Link>
+            {/* Live status pill */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', borderRadius: 12, background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.12)', flexShrink: 0 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#a3f69c', boxShadow: '0 0 0 3px rgba(163,246,156,0.3)' }} />
+              <span style={{ fontSize: 13, color: 'white', fontWeight: 700, fontFamily: 'Manrope,sans-serif' }}>Live · {profile?.district}</span>
             </div>
           </div>
 
-          {/* Row 2 — 4 metric cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6 s3">
+          {/* Quick stats row inside hero */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 28 }}>
             {[
-              { label: 'Schedules', value: stats.totalSchedules, sub: `${stats.publishedSchedules} published`, icon: 'calendar_month', color: '#00450d' },
-              { label: 'Routes', value: stats.totalRoutes, sub: `${stats.activeRoutes} active`, icon: 'route', color: '#1b5e20' },
-              { label: 'Complaints', value: stats.totalComplaints, sub: `${stats.openComplaints} open`, icon: 'feedback', color: '#ba1a1a' },
-              { label: 'Waste Reports', value: stats.totalReports, sub: `${stats.pendingReports} pending`, icon: 'report', color: '#2e7d32' },
-            ].map((m, i) => (
-              <div key={m.label} className="bento-card p-6" style={{ animationDelay: `${0.1 + i * 0.05}s` }}>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
-                  style={{ background: `${m.color}12` }}>
-                  <span className="material-symbols-outlined" style={{ color: m.color, fontSize: '20px' }}>{m.icon}</span>
-                </div>
-                <p className="font-headline font-extrabold text-3xl tracking-tight mb-1" style={{ color: '#181c22' }}>{m.value}</p>
-                <p className="font-label text-xs font-bold uppercase mb-1" style={{ letterSpacing: '0.12em', color: '#94a3b8' }}>{m.label}</p>
-                <p className="text-xs" style={{ color: m.color, fontWeight: 600 }}>{m.sub}</p>
+              { label: 'Total Collections', value: stats.totalCollections, icon: 'local_shipping' },
+              { label: 'Completed', value: stats.completedCollections, icon: 'check_circle' },
+              { label: 'Active Routes', value: stats.activeRoutes, icon: 'route' },
+              { label: 'Open Complaints', value: stats.openComplaints, icon: 'feedback' },
+            ].map(m => (
+              <div key={m.label} style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <span className="msym" style={{ fontSize: 16, color: 'rgba(163,246,156,0.7)', display: 'block', marginBottom: 6 }}>{m.icon}</span>
+                <p style={{ fontSize: 28, fontWeight: 900, color: 'white', fontFamily: 'Manrope,sans-serif', margin: '0 0 2px', lineHeight: 1 }} className="count-anim">{m.value}</p>
+                <p style={{ fontSize: 10, color: 'rgba(163,246,156,0.6)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'Manrope,sans-serif', margin: 0 }}>{m.label}</p>
               </div>
             ))}
           </div>
+        </div>
+      </div>
 
-          {/* Row 3 — chart + recent complaints */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 s4">
-            <div className="bento-card lg:col-span-7 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>Complaint Analytics</h3>
-                  <p className="text-sm mt-1" style={{ color: '#717a6d' }}>Distribution by type in {profile?.district || 'your district'}</p>
-                </div>
-                <Link href="/dashboard/district-engineer/complaints"
-                  className="px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-colors hover:opacity-80"
-                  style={{ background: '#f1f5f9', color: '#41493e', textDecoration: 'none', fontFamily: 'Manrope, sans-serif' }}>
-                  View All
-                </Link>
-              </div>
-              {complaintData.length === 0 ? (
-                <div className="h-48 flex items-center justify-center flex-col gap-3">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: '#f0fdf4' }}>
-                    <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '24px' }}>check_circle</span>
-                  </div>
-                  <p className="text-sm" style={{ color: '#94a3b8' }}>No complaints in your district yet</p>
-                </div>
-              ) : (
-                <div style={{ height: '200px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={complaintData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'Inter' }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
-                      <Bar dataKey="value" fill="#1b5e20" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </div>
+      {/* ── Main grid ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, marginBottom: 20 }}>
 
-            <div className="bento-card lg:col-span-5 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>Recent Complaints</h3>
-                <Link href="/dashboard/district-engineer/complaints"
-                  className="text-xs font-bold uppercase tracking-wider flex items-center gap-1 hover:opacity-70 transition-opacity"
-                  style={{ color: '#00450d', textDecoration: 'none', fontFamily: 'Manrope, sans-serif' }}>
-                  All <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>chevron_right</span>
-                </Link>
-              </div>
-              {recentComplaints.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: '#f0fdf4' }}>
-                    <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '24px' }}>check_circle</span>
+        {/* Left: stat cards 2×2 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="a2">
+            {/* Schedules card */}
+            <Link href="/dashboard/district-engineer/schedules" style={{ textDecoration: 'none' }}>
+              <div className="g-card g-card-hover stat-card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="msym-fill" style={{ color: '#00450d', fontSize: 20 }}>calendar_month</span>
                   </div>
-                  <p className="text-sm font-medium" style={{ color: '#181c22' }}>No complaints</p>
-                  <p className="text-xs mt-1" style={{ color: '#94a3b8' }}>District is all clear</p>
+                  <span className="msym" style={{ color: '#d1d5db', fontSize: 18 }}>arrow_forward</span>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {recentComplaints.map(c => (
-                    <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: '#f8fafc' }}>
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#f0fdf4' }}>
-                        <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '16px' }}>feedback</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate" style={{ color: '#181c22' }}>
-                          {c.complaint_type?.replace(/_/g, ' ')}
-                        </p>
-                        <p className="text-xs" style={{ color: '#94a3b8' }}>{new Date(c.created_at).toLocaleDateString()}</p>
-                      </div>
-                      <span className="status-badge" style={statusStyle(c.status)}>{c.status?.replace('_', ' ')}</span>
-                    </div>
-                  ))}
+                <p className="stat-num">{stats.publishedSchedules}</p>
+                <p className="stat-label">Published Schedules</p>
+                <p className="stat-sub">{stats.publishedSchedules === 1 ? '1 active collection' : `${stats.publishedSchedules} active collections`}</p>
+              </div>
+            </Link>
+
+            {/* Routes card */}
+            <Link href="/dashboard/district-engineer/routes" style={{ textDecoration: 'none' }}>
+              <div className="g-card g-card-hover stat-card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="msym" style={{ color: '#1d4ed8', fontSize: 20 }}>route</span>
+                  </div>
+                  <span className="msym" style={{ color: '#d1d5db', fontSize: 18 }}>arrow_forward</span>
                 </div>
-              )}
-              <Link href="/dashboard/district-engineer/complaints"
-                className="mt-4 w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90"
-                style={{ background: '#00450d', color: 'white', textDecoration: 'none', fontFamily: 'Manrope, sans-serif', display: 'flex', marginTop: '16px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>feedback</span>
-                Manage Complaints
-              </Link>
-            </div>
+                <p className="stat-num">{stats.totalRoutes}</p>
+                <p className="stat-label">Total Routes</p>
+                <p className="stat-sub">{stats.activeRoutes} currently active</p>
+              </div>
+            </Link>
+
+            {/* Complaints card */}
+            <Link href="/dashboard/district-engineer/reports" style={{ textDecoration: 'none' }}>
+              <div className="g-card g-card-hover stat-card" style={{ borderTop: stats.openComplaints > 0 ? '3px solid #d97706' : '3px solid transparent' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: stats.openComplaints > 0 ? '#fefce8' : '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="msym" style={{ color: stats.openComplaints > 0 ? '#d97706' : '#00450d', fontSize: 20 }}>feedback</span>
+                  </div>
+                  {stats.openComplaints > 0 && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: '#fefce8', color: '#d97706', fontFamily: 'Manrope,sans-serif' }}>
+                      {stats.openComplaints} open
+                    </span>
+                  )}
+                </div>
+                <p className="stat-num">{stats.openComplaints}</p>
+                <p className="stat-label">Open Complaints</p>
+                <p className="stat-sub">{stats.resolvedComplaints} resolved</p>
+              </div>
+            </Link>
+
+            {/* Waste reports card */}
+            <Link href="/dashboard/district-engineer/reports" style={{ textDecoration: 'none' }}>
+              <div className="g-card g-card-hover stat-card" style={{ borderTop: stats.pendingWasteReports > 0 ? '3px solid #ba1a1a' : '3px solid transparent' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: stats.pendingWasteReports > 0 ? '#fef2f2' : '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="msym" style={{ color: stats.pendingWasteReports > 0 ? '#ba1a1a' : '#00450d', fontSize: 20 }}>report</span>
+                  </div>
+                  {stats.pendingWasteReports > 0 && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: '#fef2f2', color: '#ba1a1a', fontFamily: 'Manrope,sans-serif' }}>
+                      Attention
+                    </span>
+                  )}
+                </div>
+                <p className="stat-num">{stats.pendingWasteReports}</p>
+                <p className="stat-label">Waste Reports</p>
+                <p className="stat-sub">Pending field action</p>
+              </div>
+            </Link>
           </div>
 
-          {/* Row 4 — quick actions */}
-          <div className="s5">
-            <h3 className="font-headline font-bold text-base mb-4" style={{ color: '#181c22' }}>Quick Actions</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              {QUICK_LINKS.map(link => (
-                <Link key={link.href} href={link.href} className="quick-link">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
-                    style={{ background: `${link.color}12` }}>
-                    <span className="material-symbols-outlined" style={{ color: link.color, fontSize: '22px' }}>{link.icon}</span>
+          {/* Quick actions */}
+          <div className="g-card a3" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
+              <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#181c22', margin: 0 }}>Quick Actions</h3>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
+              {[
+                { label: 'Create Schedule', sub: 'Plan collection', icon: 'add_circle', color: '#00450d', bg: '#f0fdf4', href: '/dashboard/district-engineer/schedules' },
+                { label: 'Manage Routes', sub: 'View & oversee', icon: 'route', color: '#1d4ed8', bg: '#eff6ff', href: '/dashboard/district-engineer/routes' },
+                { label: 'Complaints', sub: 'Review & resolve', icon: 'feedback', color: '#d97706', bg: '#fefce8', href: '/dashboard/district-engineer/reports' },
+                { label: 'Waste Reports', sub: 'Field incidents', icon: 'report', color: '#ba1a1a', bg: '#fef2f2', href: '/dashboard/district-engineer/reports' },
+              ].map((qa, i) => (
+                <Link key={qa.label} href={qa.href} className="qa-card"
+                  style={{ borderRight: i < 3 ? '1px solid rgba(0,69,13,0.06)' : 'none' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: qa.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                    <span className="msym" style={{ color: qa.color, fontSize: 18 }}>{qa.icon}</span>
                   </div>
-                  <p className="font-bold text-sm mb-1" style={{ color: '#181c22', fontFamily: 'Manrope, sans-serif' }}>{link.label}</p>
-                  <p className="text-xs" style={{ color: '#717a6d' }}>{link.desc}</p>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', margin: '0 0 3px' }}>{qa.label}</p>
+                  <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>{qa.sub}</p>
                 </Link>
               ))}
             </div>
           </div>
+        </div>
 
-          {/* Row 5 — District Tonnage summary */}
-          <div className="bento-card mt-6 mb-6 s6">
-            <div className="px-8 py-6 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
-              <div>
-                <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>District Tonnage</h3>
-                <p className="text-sm mt-1" style={{ color: '#717a6d' }}>
-                  Waste collection and report resolution overview for {profile?.district}
-                </p>
-              </div>
-              <Link href="/dashboard/district-engineer/disposal"
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all hover:opacity-80"
-                style={{ background: '#f0fdf4', color: '#00450d', textDecoration: 'none', fontFamily: 'Manrope, sans-serif' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>open_in_new</span>
-                Full Disposal Report
+        {/* Right: District health */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="g-card a2">
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#181c22', margin: 0 }}>District Health</h3>
+              <Link href="/dashboard/district-engineer/performance" style={{ fontSize: 11, color: '#00450d', textDecoration: 'none', fontWeight: 700, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 3 }}>
+                Full Report <span className="msym" style={{ fontSize: 14 }}>arrow_forward</span>
               </Link>
             </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {[
-                  { label: 'Collections Completed', value: stats.completedCollections, icon: 'check_circle', color: '#00450d', sub: 'verified on-chain' },
-                  { label: 'Complaints Resolved', value: stats.resolvedComplaints, icon: 'task_alt', color: '#1b5e20', sub: `of ${stats.totalComplaints} total` },
-                  { label: 'Pending Waste Reports', value: stats.pendingReports, icon: 'pending', color: stats.pendingReports > 0 ? '#d97706' : '#00450d', sub: 'require attention' },
-                ].map(m => (
-                  <div key={m.label} style={{ padding: '20px', borderRadius: '12px', background: '#f9fafb', border: '1px solid rgba(0,69,13,0.04)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: `${m.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <span className="material-symbols-outlined" style={{ color: m.color, fontSize: '22px' }}>{m.icon}</span>
-                    </div>
-                    <div>
-                      <p className="font-headline font-extrabold text-2xl" style={{ color: '#181c22' }}>{m.value}</p>
-                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', fontFamily: 'Manrope, sans-serif', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{m.label}</p>
-                      <p style={{ fontSize: '11px', color: m.color, fontWeight: 600 }}>{m.sub}</p>
-                    </div>
+            <div style={{ padding: '8px 20px 16px' }}>
+              {[
+                { label: 'Collection Rate', value: stats.collectionRate, color: stats.collectionRate >= 80 ? '#00450d' : stats.collectionRate >= 60 ? '#d97706' : '#ba1a1a' },
+                { label: 'Resolution Rate', value: stats.resolutionRate, color: stats.resolutionRate >= 70 ? '#00450d' : stats.resolutionRate >= 40 ? '#d97706' : '#ba1a1a' },
+                { label: 'Schedules Published', value: stats.publishedSchedules > 0 ? 100 : 0, color: '#00450d' },
+              ].map(h => (
+                <div key={h.label} className="health-row">
+                  <div style={{ minWidth: 120 }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', margin: 0 }}>{h.label}</p>
                   </div>
-                ))}
-              </div>
+                  <div className="health-bar-track">
+                    <div className="health-bar-fill" style={{ width: `${h.value}%`, background: h.color }} />
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: h.color, fontFamily: 'Manrope,sans-serif', minWidth: 40, textAlign: 'right' }}>{h.value}%</span>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Intelligence log bar */}
-          <div className="p-6 rounded-2xl flex items-center justify-between s6"
-            style={{ background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.08)' }}>
-            <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '24px' }}>verified</span>
+          {/* Blockchain stat */}
+          <div className="g-card a3" style={{ padding: '18px 20px', background: 'linear-gradient(135deg, #0a1628 0%, #0d2137 100%)', border: '1px solid rgba(99,179,237,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(99,179,237,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span className="msym-fill" style={{ color: '#63b3ed', fontSize: 20 }}>verified</span>
+              </div>
               <div>
-                <p className="text-sm font-bold" style={{ color: '#00450d', fontFamily: 'Manrope, sans-serif' }}>
-                  Blockchain-verified collections active
-                </p>
-                <p className="text-xs" style={{ color: '#717a6d' }}>
-                  {stats.completedCollections} collections logged on Polygon Amoy · {profile?.district || 'Your District'} · CMC 2026
-                </p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'rgba(163,220,255,0.7)', fontFamily: 'Manrope,sans-serif', margin: '0 0 1px', textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 10 }}>Blockchain</p>
+                <p style={{ fontSize: 12, fontWeight: 600, color: '#63b3ed', margin: 0 }}>Polygon Amoy Testnet</p>
               </div>
             </div>
-            <Link href="/dashboard/district-engineer/performance"
-              className="px-5 py-2.5 rounded-full text-sm font-bold transition-all hover:opacity-90 whitespace-nowrap"
-              style={{ background: '#00450d', color: 'white', textDecoration: 'none', fontFamily: 'Manrope, sans-serif' }}>
-              View Analytics
+            <p style={{ fontSize: 32, fontWeight: 900, color: 'white', fontFamily: 'Manrope,sans-serif', margin: '0 0 4px', lineHeight: 1 }}>{stats.blockchainVerified}</p>
+            <p style={{ fontSize: 11, color: 'rgba(163,220,255,0.5)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'Manrope,sans-serif', margin: 0 }}>Collections on-chain</p>
+            <p style={{ fontSize: 11, color: 'rgba(163,220,255,0.35)', marginTop: 8 }}>{profile?.district} · CMC EcoLedger 2026</p>
+          </div>
+
+          {/* District Tonnage */}
+          <div className="g-card a4" style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#181c22', margin: 0 }}>District Tonnage</h3>
+              <Link href="/dashboard/district-engineer/disposal" style={{ fontSize: 11, color: '#00450d', textDecoration: 'none', fontWeight: 700, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 3 }}>
+                Full Report <span className="msym" style={{ fontSize: 14 }}>arrow_forward</span>
+              </Link>
+            </div>
+            {[
+              { label: 'Collections completed', value: stats.completedCollections, icon: 'check_circle', sub: 'verified on-chain', color: '#00450d', bg: '#f0fdf4' },
+              { label: 'Complaints resolved', value: stats.resolvedComplaints, icon: 'task_alt', sub: `of ${stats.openComplaints + stats.resolvedComplaints} total`, color: '#1d4ed8', bg: '#eff6ff' },
+              { label: 'Pending waste reports', value: stats.pendingWasteReports, icon: 'report_problem', sub: 'require attention', color: stats.pendingWasteReports > 0 ? '#d97706' : '#00450d', bg: stats.pendingWasteReports > 0 ? '#fefce8' : '#f0fdf4' },
+            ].map(t => (
+              <div key={t.label} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid rgba(0,69,13,0.05)' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span className="msym-fill" style={{ color: t.color, fontSize: 16 }}>{t.icon}</span>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', margin: '0 0 1px' }}>{t.label}</p>
+                  <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>{t.sub}</p>
+                </div>
+                <p style={{ fontSize: 20, fontWeight: 900, color: t.color, fontFamily: 'Manrope,sans-serif', margin: 0, lineHeight: 1 }}>{t.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Recent activity ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }} className="a5">
+
+        {/* Recent complaints */}
+        <div className="g-card">
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#181c22', margin: 0 }}>Recent Complaints</h3>
+            <Link href="/dashboard/district-engineer/reports" style={{ fontSize: 11, color: '#00450d', textDecoration: 'none', fontWeight: 700, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 3 }}>
+              All <span className="msym" style={{ fontSize: 14 }}>arrow_forward</span>
             </Link>
           </div>
-        </>
-      )}
+          {loading ? (
+            <div style={{ padding: '40px', textAlign: 'center' }}>
+              <div style={{ width: 24, height: 24, border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite', margin: '0 auto' }} />
+            </div>
+          ) : recentComplaints.length === 0 ? (
+            <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+              <span className="msym-fill" style={{ fontSize: 32, color: '#d1fae5', display: 'block', marginBottom: 8 }}>check_circle</span>
+              <p style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>No complaints</p>
+              <p style={{ fontSize: 11, color: '#d1d5db' }}>District is all clear</p>
+            </div>
+          ) : recentComplaints.map(c => {
+            const ss = statusStyle(c.status)
+            const icon = COMPLAINT_ICONS[c.complaint_type] || 'feedback'
+            return (
+              <div key={c.id} className="activity-row">
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#fefce8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span className="msym" style={{ color: '#d97706', fontSize: 16 }}>{icon}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', margin: 0, textTransform: 'capitalize' }}>
+                      {c.complaint_type.replace(/_/g, ' ')}
+                    </p>
+                    <span className="badge" style={{ background: ss.bg, color: ss.color }}>{c.status.replace('_', ' ')}</span>
+                  </div>
+                  <p style={{ fontSize: 11, color: '#717a6d', margin: 0 }}>
+                    {c.reporter_name} · {new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  </p>
+                </div>
+              </div>
+            )
+          })}
+          {recentComplaints.length > 0 && (
+            <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(0,69,13,0.05)', background: '#fafdf9' }}>
+              <Link href="/dashboard/district-engineer/reports"
+                style={{ fontSize: 12, color: '#00450d', textDecoration: 'none', fontWeight: 700, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span className="msym" style={{ fontSize: 15 }}>manage_accounts</span>
+                Manage Complaints
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Recent waste reports */}
+        <div className="g-card">
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#181c22', margin: 0 }}>Recent Waste Reports</h3>
+            <Link href="/dashboard/district-engineer/reports" style={{ fontSize: 11, color: '#00450d', textDecoration: 'none', fontWeight: 700, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 3 }}>
+              All <span className="msym" style={{ fontSize: 14 }}>arrow_forward</span>
+            </Link>
+          </div>
+          {loading ? (
+            <div style={{ padding: '40px', textAlign: 'center' }}>
+              <div style={{ width: 24, height: 24, border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite', margin: '0 auto' }} />
+            </div>
+          ) : recentReports.length === 0 ? (
+            <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+              <span className="msym-fill" style={{ fontSize: 32, color: '#d1fae5', display: 'block', marginBottom: 8 }}>eco</span>
+              <p style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>No waste reports</p>
+              <p style={{ fontSize: 11, color: '#d1d5db' }}>All clear in your district</p>
+            </div>
+          ) : recentReports.map(r => {
+            const ss = statusStyle(r.status)
+            const icon = REPORT_ICONS[r.report_type] || 'report'
+            return (
+              <div key={r.id} className="activity-row">
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span className="msym" style={{ color: '#ba1a1a', fontSize: 16 }}>{icon}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', margin: 0, textTransform: 'capitalize' }}>
+                      {r.report_type.replace(/_/g, ' ')}
+                    </p>
+                    <span className="badge" style={{ background: ss.bg, color: ss.color }}>{r.status}</span>
+                  </div>
+                  <p style={{ fontSize: 11, color: '#717a6d', margin: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span className="msym" style={{ fontSize: 11 }}>location_on</span>
+                    {r.location_address || 'No location'} · {new Date(r.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  </p>
+                </div>
+              </div>
+            )
+          })}
+          {recentReports.length > 0 && (
+            <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(0,69,13,0.05)', background: '#fafdf9' }}>
+              <Link href="/dashboard/district-engineer/reports"
+                style={{ fontSize: 12, color: '#00450d', textDecoration: 'none', fontWeight: 700, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span className="msym" style={{ fontSize: 15 }}>map</span>
+                View All Reports
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
     </DashboardLayout>
   )
 }
