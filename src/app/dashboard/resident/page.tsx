@@ -317,7 +317,7 @@ export default function ResidentDashboardPage() {
       )}
 
       {/* Greeting */}
-      <div className="a1" style={{ marginBottom: 20 }}>
+      <div className="a1" style={{ marginBottom: 32 }}>
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: '0 0 6px' }}>
           {greetingEmoji()} {timeGreeting()}
         </p>
@@ -336,9 +336,9 @@ export default function ResidentDashboardPage() {
           <div style={{ width: 28, height: 28, border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 28, alignItems: 'start' }}>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
             {/* Next collection */}
             <div className="a2">
@@ -465,7 +465,7 @@ export default function ResidentDashboardPage() {
             </div>
 
             {/* Complaints + Reports */}
-            <div className="a4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="a4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
               {[
                 { title: 'Complaints', items: complaints, emptyIcon: 'check_circle', emptyMsg: 'All clear', emptySub: 'No complaints filed', itemIcon: 'warning', itemBg: '#fef2f2', itemColor: '#dc2626', keyFn: (c: any) => c.complaint_type?.replace(/_/g, ' ') },
                 { title: 'My Reports', items: reports, emptyIcon: 'photo_camera', emptyMsg: 'No reports yet', emptySub: 'Report issues in your area', itemIcon: 'report_problem', itemBg: '#faf5ff', itemColor: '#7c3aed', keyFn: (r: any) => r.report_type?.replace(/_/g, ' ') },
@@ -520,7 +520,7 @@ export default function ResidentDashboardPage() {
           </div>
 
           {/* RIGHT sidebar */}
-          <div style={{ position: 'sticky', top: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ position: 'sticky', top: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Stats hero */}
             <div className="hero a1">
@@ -550,68 +550,6 @@ export default function ResidentDashboardPage() {
               <RecyclingSlideshow />
             </div>
 
-            {/* Schedule list */}
-            <div className="card a1">
-              <div style={{ padding: '16px 18px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(0,69,13,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span className="msf" style={{ color: '#00450d', fontSize: 16 }}>calendar_month</span>
-                  </div>
-                  <div>
-                    <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22', lineHeight: 1.2, margin: 0 }}>Upcoming Collections</p>
-                    <p style={{ fontSize: 10, color: '#94a3b8', margin: 0 }}>{profile?.district}{profile?.ward ? ` · ${profile.ward}` : ''}</p>
-                  </div>
-                </div>
-                <Link href="/dashboard/resident/schedules" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 1 }}>All <span className="msf" style={{ fontSize: 13 }}>open_in_new</span></Link>
-              </div>
-              {schedules.length === 0 ? (
-                <div style={{ padding: '28px 18px', textAlign: 'center' }}>
-                  <span className="msf" style={{ fontSize: 30, color: '#d1d5db', display: 'block', marginBottom: 8 }}>event_busy</span>
-                  <p style={{ fontSize: 12, color: '#94a3b8' }}>No schedules published yet</p>
-                </div>
-              ) : (
-                <div>
-                  {schedules.slice(0, 6).map(s => {
-                    const wc = WASTE_COLORS[s.waste_type] || { label: s.waste_type, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0', icon: 'delete_sweep', dot: '#94a3b8', gradient: '' }
-                    const date = new Date(s.scheduled_date)
-                    const isToday = date.toDateString() === new Date().toDateString()
-                    const isTmrw = date.toDateString() === new Date(Date.now() + 86400000).toDateString()
-                    const cs = confirmStatuses[s.id]
-                    return (
-                      <div key={s.id} style={{ padding: '12px 18px', borderBottom: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', gap: 12, background: isToday ? 'rgba(0,69,13,0.02)' : undefined }}>
-                        <div style={{ flexShrink: 0, width: 42, textAlign: 'center' }}>
-                          {isToday || isTmrw ? (
-                            <>
-                              <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: isToday ? '#00450d' : '#1d4ed8', fontFamily: 'Manrope,sans-serif', margin: 0 }}>{isToday ? 'Today' : 'Tmrw'}</p>
-                              {isToday && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00450d', margin: '3px auto 0' }} />}
-                            </>
-                          ) : (
-                            <>
-                              <p style={{ fontSize: 9, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', fontFamily: 'Manrope,sans-serif', margin: 0 }}>{date.toLocaleDateString('en-GB', { weekday: 'short' })}</p>
-                              <p style={{ fontSize: 20, fontWeight: 800, color: '#181c22', fontFamily: 'Manrope,sans-serif', lineHeight: 1.1, margin: 0 }}>{date.getDate()}</p>
-                              <p style={{ fontSize: 9, color: '#94a3b8', margin: 0 }}>{date.toLocaleDateString('en-GB', { month: 'short' })}</p>
-                            </>
-                          )}
-                        </div>
-                        <div style={{ width: 26, height: 26, borderRadius: 7, background: wc.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <span className="msf" style={{ fontSize: 13, color: wc.color }}>{wc.icon}</span>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 12, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{wc.label}</p>
-                          <p style={{ fontSize: 10, color: '#94a3b8', margin: 0 }}>{s.collection_time} · {FREQUENCIES[s.frequency] || s.frequency}</p>
-                          {cs && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, display: 'inline-flex', alignItems: 'center', gap: 2, marginTop: 2, fontFamily: 'Manrope,sans-serif', background: cs === 'confirmed' ? 'rgba(0,69,13,0.08)' : 'rgba(220,38,38,0.08)', color: cs === 'confirmed' ? '#00450d' : '#dc2626' }}>{cs === 'confirmed' ? '✓ Ready' : '✗ Unable'}</span>}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              <div style={{ padding: '11px 18px', borderTop: '1px solid #f0f0f0', background: '#fafafa' }}>
-                <Link href="/dashboard/resident/schedules" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#00450d', textDecoration: 'none', fontFamily: 'Manrope,sans-serif' }}>
-                  <span className="msf" style={{ fontSize: 14 }}>calendar_month</span>View full schedule
-                </Link>
-              </div>
-            </div>
           </div>
         </div>
       )}
