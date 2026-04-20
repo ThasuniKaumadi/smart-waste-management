@@ -24,7 +24,7 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState({
     totalUsers: 0, totalRoutes: 0, totalComplaints: 0, resolvedComplaints: 0,
     totalCollections: 0, blockchainRecords: 0, totalReports: 0, activeRoutes: 0,
-    totalUsers: 0, unresolvedAlerts: 0,
+    unresolvedAlerts: 0,
   })
   const [roleData, setRoleData] = useState<any[]>([])
   const [complaintData, setComplaintData] = useState<any[]>([])
@@ -66,7 +66,7 @@ export default function AdminDashboardPage() {
       totalComplaints: totalComplaints || 0, resolvedComplaints: resolvedComplaints || 0,
       totalCollections: totalCollections || 0, blockchainRecords: blockchainRecords || 0,
       totalReports: totalReports || 0, activeRoutes: activeRoutes || 0,
-      totalUsers: totalUsers || 0, unresolvedAlerts: unresolvedAlerts || 0,
+      unresolvedAlerts: unresolvedAlerts || 0,
     })
 
     const { data: rolesData } = await supabase.from('profiles').select('role')
@@ -366,3 +366,4 @@ export default function AdminDashboardPage() {
     </DashboardLayout>
   )
 }
+
