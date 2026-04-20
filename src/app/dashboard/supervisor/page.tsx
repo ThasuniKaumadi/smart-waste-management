@@ -9,17 +9,18 @@ import DashboardLayout from '@/components/DashboardLayout'
 import AnnouncementsWidget from '@/components/AnnouncementsWidget'
 
 const SUPERVISOR_NAV = [
-  { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard', section: 'Main' },
-  { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route', section: 'Operations' },
-  { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people', section: 'Operations' },
-  { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed', section: 'Operations' },
-  { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications_active', section: 'Operations' },
-  { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback', section: 'Operations' },
-  { label: 'Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'fact_check', section: 'Reports' },
-  { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report', section: 'Reports' },
-  { label: 'Ward Heatmap', href: '/dashboard/supervisor/heatmap', icon: 'map', section: 'Reports' },
-  { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf', section: 'Reports' },
-  { label: 'Announcements', href: '/dashboard/supervisor/announcements', icon: 'campaign', section: 'Communications' },
+  { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard', section: 'Menu' },
+  { label: 'Schedules', href: '/dashboard/supervisor/schedules', icon: 'calendar_month', section: 'Menu' },
+  { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route', section: 'Menu' },
+  { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people', section: 'Menu' },
+  { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed', section: 'Menu' },
+  { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications_active', section: 'Menu' },
+  { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback', section: 'Menu' },
+  { label: 'Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'fact_check', section: 'Menu' },
+  { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report', section: 'Menu' },
+  { label: 'Ward Heatmap', href: '/dashboard/supervisor/heatmap', icon: 'map', section: 'Menu' },
+  { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf', section: 'Menu' },
+  { label: 'Announcements', href: '/dashboard/supervisor/announcements', icon: 'campaign', section: 'Menu' },
 ]
 
 interface Profile {
@@ -241,11 +242,18 @@ export default function SupervisorDashboard() {
     e_waste: '#7c3aed', bulk: '#d97706',
   }
 
-  const timeGreeting = () => {
+  function timeGreeting() {
     const h = currentTime.getHours()
     if (h < 12) return 'Good morning'
     if (h < 17) return 'Good afternoon'
     return 'Good evening'
+  }
+
+  function getGreetingEmoji() {
+    const h = currentTime.getHours()
+    if (h < 12) return '🌤️'
+    if (h < 17) return '☀️'
+    return '🌙'
   }
 
   const assignedWards = profile?.assigned_wards || []
@@ -285,6 +293,72 @@ export default function SupervisorDashboard() {
           font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
           display: inline-block; vertical-align: middle; line-height: 1;
         }
+        /* ── Hero greeting ── */
+        .hero-section {
+          background: linear-gradient(135deg, #00450d 0%, #1b5e20 60%, #2e7d32 100%);
+          border-radius: 20px;
+          padding: 36px 40px;
+          margin-bottom: 28px;
+          position: relative;
+          overflow: hidden;
+        }
+        .hero-section::before {
+          content: '';
+          position: absolute; inset: 0;
+          background: radial-gradient(ellipse at 80% 50%, rgba(255,255,255,0.07) 0%, transparent 60%);
+          pointer-events: none;
+        }
+        .hero-section::after {
+          content: '';
+          position: absolute; right: -40px; top: -40px;
+          width: 220px; height: 220px;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.04);
+          pointer-events: none;
+        }
+        .hero-greeting {
+          font-family: 'Manrope', sans-serif;
+          font-size: 13px; font-weight: 600;
+          color: rgba(255,255,255,0.65);
+          letter-spacing: 0.08em; text-transform: uppercase;
+          margin: 0 0 6px;
+        }
+        .hero-name {
+          font-family: 'Manrope', sans-serif;
+          font-size: 38px; font-weight: 800;
+          color: white; line-height: 1.1;
+          margin: 0 0 8px;
+        }
+        .hero-meta {
+          font-size: 13px; color: rgba(255,255,255,0.6);
+          margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+        }
+        .hero-dot { width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.35); }
+        .hero-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 99px; padding: 5px 14px;
+          font-size: 12px; font-weight: 700; color: white;
+          font-family: 'Manrope', sans-serif;
+        }
+        .hero-stats {
+          display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap;
+        }
+        .hero-stat {
+          display: flex; flex-direction: column; gap: 2px;
+        }
+        .hero-stat-value {
+          font-family: 'Manrope', sans-serif;
+          font-size: 26px; font-weight: 800; color: white; line-height: 1;
+        }
+        .hero-stat-label {
+          font-size: 11px; color: rgba(255,255,255,0.55);
+          font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+        }
+        .hero-divider {
+          width: 1px; background: rgba(255,255,255,0.15); margin: 4px 0;
+        }
+        /* ── Cards ── */
         .stat-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
         .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.09); }
         .alert-row { transition: background 0.15s; border-radius: 10px; }
@@ -316,70 +390,98 @@ export default function SupervisorDashboard() {
         .tab-inactive:hover { background: #f0fdf4; color: #00450d; }
         .progress-track { height: 6px; border-radius: 99px; background: #f0fdf4; overflow: hidden; }
         .progress-fill  { height: 100%; border-radius: 99px; transition: width 0.8s ease; }
-        .schedule-row { padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.04); transition: background 0.15s; }
+        .schedule-row { padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.04); }
         .schedule-row:last-child { border-bottom: none; }
         @keyframes spin  { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
         .live-dot { animation: pulse 2s ease-in-out infinite; }
+        .fade-up { animation: fadeUp 0.5s ease both; }
+        .fu1 { animation-delay: 0.05s; }
+        .fu2 { animation-delay: 0.12s; }
+        .fu3 { animation-delay: 0.19s; }
+        .fu4 { animation-delay: 0.26s; }
       `}</style>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <p style={{ fontSize: '12px', color: '#717a6d', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 4px' }}>
-            {timeGreeting()}, {profile?.full_name?.split(' ')[0]}
-          </p>
-          <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '32px', fontWeight: 800, color: '#181c22', margin: '0 0 4px' }}>
-            Supervisor Overview
-          </h1>
-          <p style={{ fontSize: '13px', color: '#717a6d', margin: 0 }}>
-            {currentTime.toLocaleDateString('en-LK', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            {profile?.district && ` · ${profile.district}`}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button onClick={refresh} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(0,69,13,0.2)', background: 'white', color: '#00450d', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', cursor: 'pointer' }}>
-            <span className="ms2" style={{ fontSize: '16px', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>refresh</span>
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button onClick={() => setActiveTab('overview')} className={`tab-btn ${activeTab === 'overview' ? 'tab-active' : 'tab-inactive'}`}>Overview</button>
-            <button onClick={() => setActiveTab('monitor')} className={`tab-btn ${activeTab === 'monitor' ? 'tab-active' : 'tab-inactive'}`} style={{ position: 'relative' }}>
-              Live Monitor
-              {stats.activeRoutes > 0 && (
-                <span style={{ marginLeft: '6px', background: activeTab === 'monitor' ? 'rgba(255,255,255,0.3)' : '#00450d', color: 'white', borderRadius: '99px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
-                  {stats.activeRoutes}
-                </span>
+      {/* ── HERO GREETING ── */}
+      <div className="hero-section fade-up fu1">
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+            <div>
+              <p className="hero-greeting">{getGreetingEmoji()} {timeGreeting()}</p>
+              <h1 className="hero-name">{profile?.full_name || 'Supervisor'}</h1>
+              <p className="hero-meta">
+                <span>{currentTime.toLocaleDateString('en-LK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                <span className="hero-dot" />
+                <span>{currentTime.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</span>
+                {profile?.district && (
+                  <>
+                    <span className="hero-dot" />
+                    <span>{profile.district}</span>
+                  </>
+                )}
+              </p>
+              {assignedWards.length > 0 && (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
+                  {assignedWards.map((ward: string) => (
+                    <span key={ward} className="hero-badge">
+                      <span className="ms2" style={{ fontSize: '13px' }}>location_on</span>
+                      {ward}
+                    </span>
+                  ))}
+                </div>
               )}
-            </button>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <button onClick={refresh} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: '12px', fontWeight: 700, fontFamily: 'Manrope, sans-serif', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+                <span className="ms2" style={{ fontSize: '16px', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>refresh</span>
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          {/* Hero quick stats */}
+          <div className="hero-stats">
+            {[
+              { value: stats.activeRoutes, label: 'Active Routes' },
+              { value: stats.driversOnDuty, label: 'Drivers on Duty' },
+              { value: stats.unresolvedAlerts, label: 'Open Alerts' },
+              { value: stats.completedToday, label: 'Stops Done Today' },
+            ].map((s, i) => (
+              <div key={s.label} style={{ display: 'flex', alignItems: 'stretch', gap: '24px' }}>
+                {i > 0 && <div className="hero-divider" />}
+                <div className="hero-stat">
+                  <span className="hero-stat-value">{s.value}</span>
+                  <span className="hero-stat-label">{s.label}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
+      </div>
+
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }} className="fade-up fu2">
+        <button onClick={() => setActiveTab('overview')} className={`tab-btn ${activeTab === 'overview' ? 'tab-active' : 'tab-inactive'}`}>
+          <span className="ms2" style={{ fontSize: '15px', marginRight: '4px' }}>dashboard</span>
+          Overview
+        </button>
+        <button onClick={() => setActiveTab('monitor')} className={`tab-btn ${activeTab === 'monitor' ? 'tab-active' : 'tab-inactive'}`}>
+          <span className="ms2" style={{ fontSize: '15px', marginRight: '4px' }}>radar</span>
+          Live Monitor
+          {stats.activeRoutes > 0 && (
+            <span style={{ marginLeft: '6px', background: activeTab === 'monitor' ? 'rgba(255,255,255,0.3)' : '#00450d', color: 'white', borderRadius: '99px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
+              {stats.activeRoutes}
+            </span>
+          )}
+        </button>
       </div>
 
       <AnnouncementsWidget role="supervisor" district={profile?.district} compact />
 
-      {/* Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-        {[
-          { icon: 'route', label: 'Active Routes', value: stats.activeRoutes, color: '#00450d', bg: 'rgba(0,69,13,0.06)', sub: 'In progress today' },
-          { icon: 'warning', label: 'Unresolved Alerts', value: stats.unresolvedAlerts, color: stats.unresolvedAlerts > 0 ? '#dc2626' : '#00450d', bg: stats.unresolvedAlerts > 0 ? 'rgba(220,38,38,0.06)' : 'rgba(0,69,13,0.06)', sub: 'Require attention' },
-          { icon: 'check_circle', label: 'Completed Today', value: stats.completedToday, color: '#2563eb', bg: 'rgba(37,99,235,0.06)', sub: 'Collection stops' },
-          { icon: 'person_pin_circle', label: 'Drivers on Duty', value: stats.driversOnDuty, color: '#7c3aed', bg: 'rgba(124,58,237,0.06)', sub: 'Assigned to routes' },
-        ].map(card => (
-          <div key={card.label} className="stat-card" style={{ background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-              <span className="ms2" style={{ fontSize: '20px', color: card.color }}>{card.icon}</span>
-            </div>
-            <p style={{ fontSize: '32px', fontFamily: 'Manrope, sans-serif', fontWeight: 800, color: '#181c22', margin: '0 0 2px', lineHeight: 1 }}>{card.value}</p>
-            <p style={{ fontSize: '13px', fontWeight: 600, color: '#41493e', margin: '0 0 2px' }}>{card.label}</p>
-            <p style={{ fontSize: '11px', color: '#717a6d', margin: 0 }}>{card.sub}</p>
-          </div>
-        ))}
-      </div>
-
       {/* ── OVERVIEW TAB ── */}
       {activeTab === 'overview' && (
-        <>
+        <div className="fade-up fu3">
           {/* Shift Summary */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
             {shiftSummary.map(shift => (
@@ -416,7 +518,7 @@ export default function SupervisorDashboard() {
                 {shift.routes > 0 && (
                   <div style={{ marginTop: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '11px', color: '#717a6d' }}>Completion rate</span>
+                      <span style={{ fontSize: '11px', color: '#717a6d' }}>Route completion rate</span>
                       <span style={{ fontSize: '11px', fontWeight: 700, color: '#00450d' }}>
                         {Math.round((shift.completed / shift.routes) * 100)}%
                       </span>
@@ -460,7 +562,7 @@ export default function SupervisorDashboard() {
                     ))}
                   </div>
                   <p style={{ fontSize: '12px', color: '#717a6d', padding: '10px 14px', background: '#f4f6f3', borderRadius: '8px', margin: 0 }}>
-                    You are responsible for {assignedWards.length} ward{assignedWards.length > 1 ? 's' : ''} in this district.
+                    Responsible for {assignedWards.length} ward{assignedWards.length > 1 ? 's' : ''} in this district.
                   </p>
                 </>
               )}
@@ -468,12 +570,17 @@ export default function SupervisorDashboard() {
 
             {/* Upcoming schedules */}
             <div style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
-              <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '15px', color: '#181c22', margin: '0 0 20px' }}>Upcoming Schedules</h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <h2 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '15px', color: '#181c22', margin: 0 }}>Upcoming Schedules</h2>
+                <Link href="/dashboard/supervisor/schedules" style={{ fontSize: '12px', color: '#00450d', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  View all <span className="ms2" style={{ fontSize: '14px' }}>arrow_forward</span>
+                </Link>
+              </div>
               {schedules.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '20px', background: '#f4f6f3', borderRadius: '12px' }}>
                   <span className="ms2" style={{ fontSize: '32px', color: '#c4c9c0', display: 'block', marginBottom: '8px' }}>calendar_today</span>
-                  <p style={{ fontSize: '13px', fontWeight: 600, color: '#41493e', margin: '0 0 4px' }}>No schedules assigned</p>
-                  <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>The DE will assign schedules to you</p>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: '#41493e', margin: '0 0 4px' }}>No schedules yet</p>
+                  <p style={{ fontSize: '12px', color: '#717a6d', margin: 0 }}>Your DE will assign schedules</p>
                 </div>
               ) : (
                 <div>
@@ -483,11 +590,11 @@ export default function SupervisorDashboard() {
                     return (
                       <div key={schedule.id} className="schedule-row">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: `${color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: `${color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             <span className="ms2" style={{ fontSize: '16px', color }}>delete_sweep</span>
                           </div>
                           <div style={{ flex: 1 }}>
-                            <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: '0 0 2px' }}>
+                            <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: '0 0 2px', textTransform: 'capitalize' }}>
                               {schedule.waste_type?.replace(/_/g, ' ')} collection
                             </p>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -570,7 +677,7 @@ export default function SupervisorDashboard() {
                   {[
                     { icon: 'notifications_active', label: 'Manage Alerts', sub: 'Review & resolve exceptions', href: '/dashboard/supervisor/alerts', color: '#ef4444', bg: 'rgba(239,68,68,0.06)' },
                     { icon: 'route', label: 'View Routes', sub: 'Monitor collection routes', href: '/dashboard/supervisor/routes', color: '#1d4ed8', bg: 'rgba(29,78,216,0.06)' },
-                    { icon: 'map', label: 'Ward Heatmap', sub: 'Collection performance by ward', href: '/dashboard/supervisor/heatmap', color: '#00450d', bg: 'rgba(0,69,13,0.06)' },
+                    { icon: 'map', label: 'Ward Heatmap', sub: 'Performance by ward', href: '/dashboard/supervisor/heatmap', color: '#00450d', bg: 'rgba(0,69,13,0.06)' },
                     { icon: 'fact_check', label: 'Compliance', sub: 'Schedule compliance view', href: '/dashboard/supervisor/schedule-compliance', color: '#7c3aed', bg: 'rgba(124,58,237,0.06)' },
                     { icon: 'picture_as_pdf', label: 'Shift Report', sub: 'Export daily PDF report', href: '/dashboard/supervisor/shift-report', color: '#d97706', bg: 'rgba(217,119,6,0.06)' },
                   ].map(action => (
@@ -612,12 +719,12 @@ export default function SupervisorDashboard() {
               </div>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* ── LIVE MONITOR TAB ── */}
       {activeTab === 'monitor' && (
-        <div>
+        <div className="fade-up fu3">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div className="live-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 0 3px rgba(34,197,94,0.2)' }} />
@@ -683,7 +790,6 @@ export default function SupervisorDashboard() {
                       </div>
                     </div>
 
-                    {/* Driver info */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', padding: '10px 12px', borderRadius: '10px', background: route.driver_id ? 'rgba(0,69,13,0.05)' : '#f8fafc' }}>
                       <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: route.driver_id ? '#00450d' : '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <span className="ms2" style={{ fontSize: '16px', color: route.driver_id ? 'white' : '#9ca3af' }}>person</span>
@@ -699,7 +805,6 @@ export default function SupervisorDashboard() {
                       </div>
                     </div>
 
-                    {/* GPS location */}
                     {isActive && vehicleLocations[route.id] && (
                       <div style={{ marginBottom: '14px', padding: '8px 12px', borderRadius: '10px', background: 'rgba(0,69,13,0.04)', border: '1px solid rgba(0,69,13,0.08)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div className="live-dot" style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
@@ -722,9 +827,8 @@ export default function SupervisorDashboard() {
                       </div>
                     )}
 
-                    {/* Progress */}
                     {route.total_stops > 0 && (
-                      <div style={{ marginBottom: '14px' }}>
+                      <div style={{ marginBottom: hasAlerts ? '14px' : 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                           <span style={{ fontSize: '12px', color: '#717a6d' }}>Collection Progress</span>
                           <span style={{ fontSize: '12px', fontWeight: 700, color: completionPct >= 80 ? '#00450d' : completionPct >= 50 ? '#d97706' : '#64748b' }}>{completionPct}%</span>
@@ -733,25 +837,13 @@ export default function SupervisorDashboard() {
                           <div className="progress-fill" style={{ width: `${completionPct}%`, background: completionPct >= 80 ? '#00450d' : completionPct >= 50 ? '#d97706' : '#94a3b8' }} />
                         </div>
                         <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '11px', color: '#94a3b8' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#00450d', fontWeight: 600 }}>
-                            <span className="ms2" style={{ fontSize: '12px' }}>check_circle</span>
-                            {route.completed_stops} done
-                          </span>
-                          {route.skipped_stops > 0 && (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#dc2626', fontWeight: 600 }}>
-                              <span className="ms2" style={{ fontSize: '12px' }}>cancel</span>
-                              {route.skipped_stops} skipped
-                            </span>
-                          )}
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <span className="ms2" style={{ fontSize: '12px' }}>location_on</span>
-                            {route.total_stops} total
-                          </span>
+                          <span style={{ color: '#00450d', fontWeight: 600 }}>✓ {route.completed_stops} done</span>
+                          {route.skipped_stops > 0 && <span style={{ color: '#dc2626', fontWeight: 600 }}>✗ {route.skipped_stops} skipped</span>}
+                          <span>◌ {route.total_stops} total</span>
                         </div>
                       </div>
                     )}
 
-                    {/* Alert list */}
                     {hasAlerts && (
                       <div style={{ borderTop: '1px solid rgba(239,68,68,0.1)', paddingTop: '12px' }}>
                         {routeAlerts.slice(0, 2).map((a: AlertItem) => (
