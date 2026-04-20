@@ -5,11 +5,11 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const RESIDENT_NAV = [
-  { label: 'Overview', href: '/dashboard/resident', icon: 'dashboard', section: 'Menu' },
+  { label: 'Home', href: '/dashboard/resident', icon: 'dashboard', section: 'Menu' },
   { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today', section: 'Menu' },
   { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on', section: 'Menu' },
   { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem', section: 'Menu' },
-  { label: 'Rate Service', href: '/dashboard/resident/feedback', icon: 'star', section: 'Menu' },
+  { label: 'Feedback', href: '/dashboard/resident/feedback', icon: 'star', section: 'Menu' },
   { label: 'My Profile', href: '/dashboard/resident/profile', icon: 'person', section: 'Menu' },
 ]
 
