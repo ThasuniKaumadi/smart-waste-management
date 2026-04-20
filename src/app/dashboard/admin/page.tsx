@@ -7,21 +7,14 @@ import DashboardLayout from '@/components/DashboardLayout'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const ADMIN_NAV = [
-  { label: 'Overview', href: '/dashboard/admin', icon: 'dashboard', section: 'Main' },
-  { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts', section: 'Management' },
-  { label: 'Supervisors', href: '/dashboard/admin/supervisors', icon: 'supervisor_account', section: 'Management' },
-  { label: 'Zones', href: '/dashboard/admin/zones', icon: 'map', section: 'Management' },
-  { label: 'Contracts', href: '/dashboard/admin/contracts', icon: 'description', section: 'Management' },
-  { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments', section: 'Finance' },
-  { label: 'Contractor Billing', href: '/dashboard/admin/billing-contractor', icon: 'receipt_long', section: 'Finance' },
-  { label: 'Commercial Analytics', href: '/dashboard/admin/commercial-analytics', icon: 'store', section: 'Finance' },
-  { label: 'Recycler Analytics', href: '/dashboard/admin/recycler-analytics', icon: 'recycling', section: 'Finance' },
-  { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link', section: 'Analytics' },
-  { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics', section: 'Analytics' },
-  { label: 'Incidents', href: '/dashboard/admin/incidents', icon: 'warning', section: 'Analytics' },
-  { label: 'Disposal', href: '/dashboard/admin/disposal', icon: 'delete_sweep', section: 'Analytics' },
-  { label: 'Announcements', href: '/dashboard/admin/announcements', icon: 'campaign', section: 'Communications' },
-  { label: 'Communications', href: '/dashboard/admin/communications', icon: 'chat', section: 'Communications' },
+  { label: 'Overview',      href: '/dashboard/admin',               icon: 'dashboard'       },
+  { label: 'Users',         href: '/dashboard/admin/users',         icon: 'manage_accounts' },
+  { label: 'Billing',       href: '/dashboard/admin/billing',       icon: 'payments'        },
+  { label: 'Billing Rates', href: '/dashboard/admin/billing-rates', icon: 'tune'            },
+  { label: 'Blockchain',    href: '/dashboard/admin/blockchain',    icon: 'link'            },
+  { label: 'Performance',   href: '/dashboard/admin/performance',   icon: 'analytics'       },
+  { label: 'Reports',       href: '/dashboard/admin/reports',       icon: 'rate_review'     },
+  { label: 'Profile',       href: '/dashboard/admin/profile',       icon: 'person'          },
 ]
 
 export default function AdminDashboardPage() {
@@ -30,7 +23,7 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState({
     totalUsers: 0, totalRoutes: 0, totalComplaints: 0, resolvedComplaints: 0,
     totalCollections: 0, blockchainRecords: 0, totalReports: 0, activeRoutes: 0,
-    totalContracts: 0, unresolvedAlerts: 0,
+    totalUsers: 0, unresolvedAlerts: 0,
   })
   const [roleData, setRoleData] = useState<any[]>([])
   const [complaintData, setComplaintData] = useState<any[]>([])
@@ -53,7 +46,6 @@ export default function AdminDashboardPage() {
       { count: blockchainRecords },
       { count: totalReports },
       { count: activeRoutes },
-      { count: totalContracts },
       { count: unresolvedAlerts },
     ] = await Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
@@ -64,7 +56,7 @@ export default function AdminDashboardPage() {
       supabase.from('collection_events').select('*', { count: 'exact', head: true }).not('blockchain_tx', 'is', null),
       supabase.from('waste_reports').select('*', { count: 'exact', head: true }),
       supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-      supabase.from('contracts').select('*', { count: 'exact', head: true }),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('exception_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
     ])
 
@@ -73,7 +65,7 @@ export default function AdminDashboardPage() {
       totalComplaints: totalComplaints || 0, resolvedComplaints: resolvedComplaints || 0,
       totalCollections: totalCollections || 0, blockchainRecords: blockchainRecords || 0,
       totalReports: totalReports || 0, activeRoutes: activeRoutes || 0,
-      totalContracts: totalContracts || 0, unresolvedAlerts: unresolvedAlerts || 0,
+      totalUsers: totalUsers || 0, unresolvedAlerts: unresolvedAlerts || 0,
     })
 
     const { data: rolesData } = await supabase.from('profiles').select('role')
@@ -144,7 +136,7 @@ export default function AdminDashboardPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {stats.unresolvedAlerts > 0 && (
-              <Link href="/dashboard/admin/incidents" style={{ textDecoration: 'none' }}>
+              <Link href="/dashboard/admin/reports" style={{ textDecoration: 'none' }}>
                 <span className="alert-pill" style={{ background: '#fef2f2', color: '#dc2626' }}>
                   <span className="ms" style={{ fontSize: '14px' }}>warning</span>
                   {stats.unresolvedAlerts} unresolved alert{stats.unresolvedAlerts !== 1 ? 's' : ''}
@@ -175,7 +167,7 @@ export default function AdminDashboardPage() {
               { icon: 'group', label: 'Total Users', value: stats.totalUsers, color: '#00450d', bg: '#f0fdf4', sub: 'Registered accounts' },
               { icon: 'route', label: 'Total Routes', value: stats.totalRoutes, color: '#1d4ed8', bg: '#eff6ff', sub: `${stats.activeRoutes} active now` },
               { icon: 'feedback', label: 'Complaints', value: stats.totalComplaints, color: stats.totalComplaints > 0 ? '#d97706' : '#00450d', bg: stats.totalComplaints > 0 ? '#fefce8' : '#f0fdf4', sub: `${resolutionRate}% resolved` },
-              { icon: 'description', label: 'Contracts', value: stats.totalContracts, color: '#7c3aed', bg: '#f5f3ff', sub: 'Active agreements' },
+              { icon: 'description', label: 'Active Users', value: stats.totalUsers, color: '#7c3aed', bg: '#f5f3ff', sub: 'Active agreements' },
               { icon: 'link', label: 'On-Chain', value: stats.blockchainRecords, color: '#0891b2', bg: '#f0f9ff', sub: `${blockchainRate}% verified` },
             ].map(card => (
               <div key={card.label} className="bento stat-card" style={{ padding: '20px' }}>
@@ -350,10 +342,10 @@ export default function AdminDashboardPage() {
                 { label: 'Blockchain Logs', desc: 'View on-chain transaction records', icon: 'link', href: '/dashboard/admin/blockchain', color: '#0891b2', bg: '#f0f9ff' },
                 { label: 'System Performance', desc: 'Analytics and system-wide charts', icon: 'analytics', href: '/dashboard/admin/performance', color: '#7c3aed', bg: '#f5f3ff' },
                 { label: 'Billing Management', desc: 'Commercial invoices and payments', icon: 'payments', href: '/dashboard/admin/billing', color: '#d97706', bg: '#fefce8' },
-                { label: 'Contracts', desc: 'Manage contractor agreements', icon: 'description', href: '/dashboard/admin/contracts', color: '#1d4ed8', bg: '#eff6ff' },
-                { label: 'Zone Assignments', desc: 'Assign wards to contractors', icon: 'map', href: '/dashboard/admin/zones', color: '#00450d', bg: '#f0fdf4' },
-                { label: 'Announcements', desc: 'Post notices to all staff', icon: 'campaign', href: '/dashboard/admin/announcements', color: '#dc2626', bg: '#fef2f2' },
-                { label: 'Incidents', desc: 'Review exception alerts', icon: 'warning', href: '/dashboard/admin/incidents', color: '#d97706', bg: '#fefce8' },
+                { label: 'Active Users', desc: 'Manage contractor agreements', icon: 'description', href: '/dashboard/admin/users', color: '#1d4ed8', bg: '#eff6ff' },
+                { label: 'Zone Assignments', desc: 'Assign wards to contractors', icon: 'map', href: '/dashboard/admin/billing-rates', color: '#00450d', bg: '#f0fdf4' },
+                { label: 'Reports', desc: 'Waste reports and complaints', icon: 'campaign', href: '/dashboard/admin/reports', color: '#dc2626', bg: '#fef2f2' },
+                { label: 'Incidents', desc: 'Review exception alerts', icon: 'warning', href: '/dashboard/admin/reports', color: '#d97706', bg: '#fefce8' },
               ].map(action => (
                 <Link key={action.label} href={action.href} className="quick-link">
                   <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
