@@ -5,15 +5,15 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const ADMIN_NAV = [
-  { label: 'Overview',      href: '/dashboard/admin',               icon: 'dashboard'       },
-  { label: 'Users',         href: '/dashboard/admin/users',         icon: 'manage_accounts' },
-  { label: 'Billing',       href: '/dashboard/admin/billing',       icon: 'payments'        },
-  { label: 'Billing Rates', href: '/dashboard/admin/billing-rates', icon: 'tune'            },
-  { label: 'Blockchain',    href: '/dashboard/admin/blockchain',    icon: 'link'            },
-  { label: 'Performance',   href: '/dashboard/admin/performance',   icon: 'analytics'       },
-  { label: 'Disposal',      href: '/dashboard/admin/disposal',      icon: 'delete_sweep'    },
-  { label: 'Reports',       href: '/dashboard/admin/reports',       icon: 'rate_review'     },
-  { label: 'Profile',       href: '/dashboard/admin/profile',       icon: 'person'          },
+    { label: 'Home', href: '/dashboard/admin', icon: 'dashboard' },
+    { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts' },
+    { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
+    { label: 'Billing Rates', href: '/dashboard/admin/billing-rates', icon: 'tune' },
+    { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
+    { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
+    { label: 'Disposal', href: '/dashboard/admin/disposal', icon: 'delete_sweep' },
+    { label: 'Reports', href: '/dashboard/admin/reports', icon: 'rate_review' },
+    { label: 'Profile', href: '/dashboard/admin/profile', icon: 'person' },
 ]
 
 // ─── Shared config ────────────────────────────────────────────────────────────
@@ -242,10 +242,13 @@ export default function AdminReportsComplaintsPage() {
 
                 {/* ── Page header ── */}
                 <div style={{ marginBottom: 24 }}>
-                    <h1 style={{ fontSize: 22, fontWeight: 800, color: '#181c22', fontFamily: 'Manrope', margin: 0 }}>Reports &amp; Complaints</h1>
-                    <p style={{ fontSize: 14, color: '#717a6d', fontFamily: 'Inter', marginTop: 4 }}>
-                        Manage all citizen waste reports and complaints across every district from one place.
+                    <h1> Waste <span style={{ color: '#1b5e20' }}>Disposal</span></h1>
+                    <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                        🗑️ System Administration
                     </p>
+                    <h1 style={{ fontFamily: 'Manrope,sans-serif', fontSize: 46, fontWeight: 800, color: '#181c22', lineHeight: 1.05, margin: '0 0 4px' }}>
+                        Waste <span style={{ color: '#00450d' }}>Disposal</span>
+                    </h1>
                 </div>
 
                 {/* ── Combined stats strip ── */}
