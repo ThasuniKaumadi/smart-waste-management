@@ -125,7 +125,7 @@ const EMPTY_FORM = {
   terms_and_conditions: '',
   facility_name: '', facility_type: '', facility_type_custom: '',
   facility_address: '', facility_email: '', facility_phone: '',
-  license_number: '', license_expiry: '', contractor_id: '', vehicle_registration: '',
+  license_number: '', license_expiry: '', vehicle_registration: '',
 }
 
 export default function AdminUsersPage() {
@@ -198,7 +198,7 @@ export default function AdminUsersPage() {
       if (formData.role === 'supervisor') { profileInsert.assigned_wards = assignedWards.length > 0 ? assignedWards : null; profileInsert.phone = formData.phone || null }
       if (['district_engineer', 'engineer'].includes(formData.role)) profileInsert.phone = formData.phone || null
       if (formData.role === 'contractor') { profileInsert.organisation_name = formData.contractor_name || null; profileInsert.address = formData.contractor_address || null; profileInsert.phone = formData.contractor_phone || null; profileInsert.district = formData.contractor_district || null; profileInsert.business_registration_number = formData.business_registration_number || null }
-      if (formData.role === 'recycling_partner') { profileInsert.organisation_name = formData.facility_name || null; profileInsert.address = formData.facility_address || null; profileInsert.phone = formData.facility_phone || null; profileInsert.waste_profile = wasteTypes.length > 0 ? wasteTypes.join\(', '\) : null }
+      if (formData.role === 'recycling_partner') { profileInsert.organisation_name = formData.facility_name || null; profileInsert.address = formData.facility_address || null; profileInsert.phone = formData.facility_phone || null; profileInsert.waste_profile = wasteTypes.length > 0 ? wasteTypes.join(', ') : null }
       if (formData.role === 'driver') { profileInsert.phone = formData.phone || null; profileInsert.address = [formData.license_number, formData.vehicle_registration].filter(Boolean).join(' | ') || null }
       const { error: profileError } = await supabase.from('profiles').insert(profileInsert)
       if (profileError) {
@@ -285,7 +285,6 @@ export default function AdminUsersPage() {
         @media (max-width:768px) { .form-grid { grid-template-columns:1fr; } }
       `}</style>
 
-      {/* ── Heading ── */}
       <div className="a1" style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div>
@@ -307,7 +306,6 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* ── Stats ── */}
       <div className="a2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
         {[
           { label: 'Total Users', value: users.length, icon: 'group', color: '#15803d', bg: '#f0fdf4' },
@@ -325,7 +323,6 @@ export default function AdminUsersPage() {
         ))}
       </div>
 
-      {/* ── Toast ── */}
       {message && (
         <div className={`toast ${message.startsWith('Error') ? 'toast-err' : 'toast-ok'}`}>
           <span className="msf" style={{ fontSize: 18 }}>{message.startsWith('Error') ? 'error' : 'check_circle'}</span>
@@ -333,7 +330,6 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* ── Create form ── */}
       {showForm && (
         <div className="card slide-down" style={{ marginBottom: 24 }}>
           <div style={{ padding: '20px 28px', borderBottom: '1px solid rgba(0,69,13,0.05)' }}>
@@ -341,8 +337,6 @@ export default function AdminUsersPage() {
             <p style={{ fontSize: 13, color: '#717a6d', margin: '4px 0 0' }}>Select a user type then fill in the details.</p>
           </div>
           <form onSubmit={handleCreateUser} style={{ padding: 28 }}>
-
-            {/* Role selector */}
             <div style={{ marginBottom: 28 }}>
               <label className="field-label">User Type *</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
@@ -361,7 +355,6 @@ export default function AdminUsersPage() {
               </div>
             </div>
 
-            {/* Person roles */}
             {isPersonRole && (
               <div className="form-grid slide-down">
                 <div><label className="field-label">First Name *</label><input type="text" className="form-field" placeholder="e.g. Kasun" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} required /></div>
@@ -408,7 +401,7 @@ export default function AdminUsersPage() {
                   {contractors.length === 0 ? (
                     <div style={{ padding: '12px 14px', borderRadius: 10, background: '#fffbeb', border: '1px solid rgba(217,119,6,0.2)', fontSize: 13, color: '#92400e' }}>⚠ No contractor accounts found.</div>
                   ) : (
-                    <select className="select-field" value={formData.contractor_id} onChange={e => setFormData({ ...formData, contractor_id: e.target.value })}>
+                    <select className="select-field" value={formData.vehicle_registration} onChange={e => setFormData({ ...formData, vehicle_registration: e.target.value })}>
                       <option value="">Select contractor</option>
                       {contractors.map(c => <option key={c.id} value={c.id}>{c.organisation_name || c.full_name}</option>)}
                     </select>
@@ -516,7 +509,6 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* ── User list ── */}
       <div className="card a3">
         <div style={{ padding: '18px 24px', borderBottom: '1px solid rgba(0,69,13,0.05)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 17, color: '#181c22', margin: 0 }}>All Users</h3>
@@ -581,7 +573,6 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* ── Edit modal ── */}
       {editingUser && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' }}>
           <div style={{ background: 'white', borderRadius: 24, padding: 32, width: '100%', maxWidth: 500, boxShadow: '0 24px 80px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -624,5 +615,3 @@ export default function AdminUsersPage() {
     </DashboardLayout>
   )
 }
-
-
