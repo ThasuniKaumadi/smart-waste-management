@@ -17,6 +17,7 @@ const SUPERVISOR_NAV = [
     { label: 'Ward Heatmap', href: '/dashboard/supervisor/heatmap', icon: 'map', section: 'Menu' },
     { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf', section: 'Menu' },
     { label: 'Announcements', href: '/dashboard/supervisor/announcements', icon: 'campaign', section: 'Menu' },
+    { label: 'Profile', href: '/dashboard/supervisor/profile', icon: 'person', section: 'Menu' },
 ]
 
 const WASTE_STYLES: Record<string, { label: string; color: string; bg: string; icon: string; dot: string }> = {
