@@ -275,7 +275,6 @@ export default function DashboardLayout({
           to   { opacity: 1; transform: translateX(0); }
         }
 
-        /* Arrow pointing left toward sidebar */
         .sb-dropdown::before {
           content: '';
           position: absolute; left: -6px; top: 16px;
@@ -378,9 +377,6 @@ export default function DashboardLayout({
           background: none; border: none; text-decoration: none;
         }
         .sb-foot-btn .ms { font-size: 17px; flex-shrink: 0; }
-        .sb-foot-btn.account { color: #6b7280; }
-        .sb-foot-btn.account:hover { background: rgba(0,69,13,0.05); color: #00450d; }
-        .sb-foot-btn.account.active { color: #00450d; background: #edf7ee; }
         .sb-foot-btn.logout { color: #c0392b; }
         .sb-foot-btn.logout:hover { background: rgba(192,57,43,0.06); }
 
@@ -470,15 +466,6 @@ export default function DashboardLayout({
                             </div>
                         )}
                     </div>
-                    <Link
-                        href="/dashboard/account"
-                        onClick={() => setMobileOpen(false)}
-                        className={`sb-foot-btn account${pathname === '/dashboard/account' ? ' active' : ''}`}
-                        title={collapsed ? 'Manage Account' : undefined}
-                    >
-                        <span className="ms">manage_accounts</span>
-                        {!collapsed && 'Manage Account'}
-                    </Link>
                     <button
                         className="sb-foot-btn logout"
                         onClick={handleLogout}
