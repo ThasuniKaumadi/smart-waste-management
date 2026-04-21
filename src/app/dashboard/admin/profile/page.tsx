@@ -391,7 +391,7 @@ export default function AdminProfilePage() {
                         <p className="section-title">System Configuration</p>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
                             {[
-                                { label: 'Project', value: 'ClearPath / EcoLedger', icon: 'eco' },
+                                { label: 'Project', value: 'EcoLedger', icon: 'eco' },
                                 { label: 'Organization', value: 'Colombo Municipal Council', icon: 'apartment' },
                                 { label: 'Database', value: 'Supabase (Singapore)', icon: 'storage' },
                                 { label: 'Blockchain', value: 'Polygon Amoy Testnet', icon: 'link' },
