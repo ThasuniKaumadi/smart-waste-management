@@ -19,14 +19,6 @@ const DE_NAV = [
     { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
 ]
 
-const FACILITIES = [
-    { name: 'Karadiyana Sanitary Landfill', type: 'landfill', location: 'Karadiyana, Kesbewa', icon: 'delete', color: '#64748b', bg: '#f8fafc', waste: ['non_recyclable', 'bulk', 'other'] },
-    { name: 'Kerawalapitiya Compost Plant', type: 'composting', location: 'Kerawalapitiya, Wattala', icon: 'compost', color: '#00450d', bg: '#f0fdf4', waste: ['organic'] },
-    { name: 'Homagama MRF', type: 'recycling', location: 'Homagama', icon: 'recycling', color: '#1d4ed8', bg: '#eff6ff', waste: ['recyclable'] },
-    { name: 'E-Waste Collection Centre', type: 'e_waste', location: 'Boralesgamuwa', icon: 'computer', color: '#7c3aed', bg: '#f5f3ff', waste: ['e_waste'] },
-    { name: 'CMC Transfer Station', type: 'transfer', location: 'Colombo', icon: 'local_shipping', color: '#d97706', bg: '#fefce8', waste: ['non_recyclable', 'bulk', 'organic', 'recyclable', 'e_waste', 'other'] },
-]
-
 const WASTE_TYPES = [
     { value: 'organic', label: 'Organic', icon: 'compost', color: '#00450d' },
     { value: 'non_recyclable', label: 'Non-Recyclable', icon: 'delete', color: '#ba1a1a' },
@@ -52,6 +44,12 @@ const RECORD_STATUS: Record<string, { label: string; color: string; bg: string; 
     rejected: { label: 'Rejected', color: '#ba1a1a', bg: '#fef2f2', dot: '#ef4444' },
 }
 
+// Role meta for registered partners
+const ROLE_META: Record<string, { label: string; color: string; bg: string; border: string; icon: string }> = {
+    recycling_partner: { label: 'Recycling Partner', color: '#00450d', bg: '#f0fdf4', border: '#bbf7d0', icon: 'recycling' },
+    facility_operator: { label: 'Facility Operator', color: '#0369a1', bg: '#f0f9ff', border: '#bae6fd', icon: 'delete_sweep' },
+}
+
 function wasteCategoryColor(category: string) {
     const map: Record<string, { bg: string; color: string }> = {
         general: { bg: '#f8fafc', color: '#64748b' },
@@ -65,40 +63,30 @@ function wasteCategoryColor(category: string) {
 }
 
 interface DisposalSchedule {
-    id: string
-    waste_type: string
-    facility_name: string
-    facility_type: string
-    scheduled_date: string
-    scheduled_time: string | null
-    vehicle_number: string | null
-    estimated_quantity: string | null
-    notes: string | null
-    status: string
-    published: boolean
-    created_at: string
-    collection_schedule_id: string | null
+    id: string; waste_type: string; facility_name: string; facility_type: string
+    scheduled_date: string; scheduled_time: string | null; vehicle_number: string | null
+    estimated_quantity: string | null; notes: string | null; status: string
+    published: boolean; created_at: string; collection_schedule_id: string | null
+    assigned_partner_id: string | null
 }
 
 interface HistoryItem {
-    id: string
-    source: 'schedule' | 'record'
-    waste_type: string
-    facility_name: string
-    status: string
-    date: string
-    quantity: string | null
-    vehicle: string | null
-    driver_name: string | null
-    contractor_name: string | null
-    blockchain_tx: string | null
-    notes: string | null
+    id: string; source: 'schedule' | 'record'; waste_type: string; facility_name: string
+    status: string; date: string; quantity: string | null; vehicle: string | null
+    driver_name: string | null; contractor_name: string | null
+    blockchain_tx: string | null; notes: string | null
+}
+
+interface Partner {
+    id: string; full_name: string; organisation_name: string | null
+    role: 'recycling_partner' | 'facility_operator'; district: string | null; phone: string | null
 }
 
 const EMPTY_FORM = {
     waste_type: '', facility_name: '', facility_type: '',
     scheduled_date: '', scheduled_time: '', vehicle_number: '',
     estimated_quantity: '', notes: '', collection_schedule_id: '',
+    assigned_partner_id: '',
 }
 
 export default function DEDisposalPage() {
@@ -109,12 +97,14 @@ export default function DEDisposalPage() {
     // Disposal schedules
     const [disposals, setDisposals] = useState<DisposalSchedule[]>([])
     const [collectionSchedules, setCollectionSchedules] = useState<any[]>([])
+    const [partners, setPartners] = useState<Partner[]>([])
     const [showForm, setShowForm] = useState(false)
     const [saving, setSaving] = useState<null | 'publish' | 'draft'>(null)
     const [message, setMessage] = useState('')
     const [filterDisposal, setFilterDisposal] = useState('all')
     const [updatingId, setUpdatingId] = useState<string | null>(null)
     const [formData, setFormData] = useState(EMPTY_FORM)
+    const [partnerFilter, setPartnerFilter] = useState<'all' | 'recycling_partner' | 'facility_operator'>('all')
 
     // Records & discrepancies
     const [records, setRecords] = useState<any[]>([])
@@ -138,15 +128,18 @@ export default function DEDisposalPage() {
         setProfile(p)
         const district = p?.district || ''
 
-        const [disposalRes, collSchedRes, recordsRes, discRes] = await Promise.all([
+        const [disposalRes, collSchedRes, partnersRes, recordsRes, discRes] = await Promise.all([
             supabase.from('disposal_schedules').select('*').eq('district', district).order('scheduled_date', { ascending: false }),
             supabase.from('schedules').select('id, waste_type, custom_waste_type, scheduled_date, wards, ward').eq('district', district).eq('status', 'published').order('scheduled_date', { ascending: false }).limit(20),
+            // Fetch all approved recycling partners and facility operators
+            supabase.from('profiles').select('id, full_name, organisation_name, role, district, phone').in('role', ['recycling_partner', 'facility_operator']).eq('is_approved', true).order('organisation_name'),
             supabase.from('disposal_records').select('*').eq('district', district).order('created_at', { ascending: false }),
             supabase.from('disposal_discrepancies').select('*').order('flagged_at', { ascending: false }),
         ])
 
         setDisposals(disposalRes.data || [])
         setCollectionSchedules(collSchedRes.data || [])
+        setPartners(partnersRes.data || [])
 
         // Enrich records
         const recs = recordsRes.data || []
@@ -181,7 +174,7 @@ export default function DEDisposalPage() {
             })))
         } else setDiscrepancies([])
 
-        // Build combined history from completed/cancelled disposal schedules + all disposal records
+        // Build history
         const completedSchedules: HistoryItem[] = (disposalRes.data || [])
             .filter((d: any) => ['completed', 'cancelled'].includes(d.status))
             .map((d: any) => ({
@@ -205,28 +198,23 @@ export default function DEDisposalPage() {
             notes: r.notes || null,
         }))
 
-        const combined = [...completedSchedules, ...recordHistory].sort(
+        setHistory([...completedSchedules, ...recordHistory].sort(
             (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-        )
-        setHistory(combined)
+        ))
         setLoading(false)
     }
 
-    function suggestFacility(wasteType: string) {
-        const f = FACILITIES.find(f => f.waste.includes(wasteType))
-        if (f) setFormData(prev => ({ ...prev, facility_name: f.name, facility_type: f.type }))
-    }
-
-    function resetForm() {
-        setFormData(EMPTY_FORM)
-        setMessage('')
-    }
+    function resetForm() { setFormData(EMPTY_FORM); setMessage('') }
 
     async function handleSubmit(publishNow: boolean) {
         setMessage('')
         if (!formData.waste_type) { setMessage('Please select a waste type'); return }
-        if (!formData.facility_name) { setMessage('Please select a facility'); return }
+        if (!formData.assigned_partner_id) { setMessage('Please select a recycling partner or facility operator'); return }
         if (!formData.scheduled_date) { setMessage('Please select a date'); return }
+
+        // Auto-fill facility name from selected partner
+        const partner = partners.find(p => p.id === formData.assigned_partner_id)
+        const facilityName = partner?.organisation_name || partner?.full_name || ''
 
         setSaving(publishNow ? 'publish' : 'draft')
         const supabase = createClient()
@@ -236,28 +224,24 @@ export default function DEDisposalPage() {
             district: profile?.district,
             created_by: user?.id,
             waste_type: formData.waste_type,
-            facility_name: formData.facility_name,
-            facility_type: formData.facility_type,
+            facility_name: facilityName,
+            facility_type: partner?.role === 'recycling_partner' ? 'recycling' : 'facility',
             scheduled_date: formData.scheduled_date,
             scheduled_time: formData.scheduled_time || null,
             vehicle_number: formData.vehicle_number || null,
             estimated_quantity: formData.estimated_quantity || null,
             notes: formData.notes || null,
             collection_schedule_id: formData.collection_schedule_id || null,
+            assigned_partner_id: formData.assigned_partner_id,
             status: publishNow ? 'published' : 'draft',
             published: publishNow,
         })
 
         if (error) { setMessage('Error: ' + error.message); setSaving(null); return }
 
-        if (publishNow) {
-            // TODO: notify recycling_partner and facility_operator roles via Firebase FCM
-            // await sendNotification({ roles: ['recycling_partner', 'facility_operator'], title: `Disposal Schedule — ${formData.waste_type}`, body: `New disposal scheduled at ${formData.facility_name} on ${formData.scheduled_date}` })
-            setMessage('Disposal schedule published. Recycling partners will be notified once FCM is connected.')
-        } else {
-            setMessage('Saved as draft.')
-        }
-
+        setMessage(publishNow
+            ? `Disposal schedule published and assigned to ${facilityName}.`
+            : 'Saved as draft.')
         setShowForm(false)
         resetForm()
         await loadData()
@@ -285,7 +269,7 @@ export default function DEDisposalPage() {
         setUpdatingId(null)
     }
 
-    // History filter
+    // Derived
     const filteredHistory = history.filter(h => {
         if (historySearch) {
             const q = historySearch.toLowerCase()
@@ -295,9 +279,9 @@ export default function DEDisposalPage() {
         if (historyDateTo && h.date > historyDateTo) return false
         return true
     })
-
     const filteredDisposals = filterDisposal === 'all' ? disposals : disposals.filter(d => d.status === filterDisposal)
     const filteredRecords = filterRecords === 'all' ? records : records.filter((r: any) => r.status === filterRecords)
+    const filteredPartners = partnerFilter === 'all' ? partners : partners.filter(p => p.role === partnerFilter)
 
     const stats = {
         drafts: disposals.filter(d => d.status === 'draft').length,
@@ -307,36 +291,38 @@ export default function DEDisposalPage() {
         openDiscrepancies: discrepancies.filter((d: any) => d.status === 'open').length,
     }
 
+    const selectedPartner = partners.find(p => p.id === formData.assigned_partner_id)
+
     return (
         <DashboardLayout role="District Engineer" userName={profile?.full_name || ''} navItems={DE_NAV}>
             <style>{`
-        .msym { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+        .msym      { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
         .msym-fill { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
-        .card { background:white; border-radius:20px; border:1px solid rgba(0,69,13,0.07); box-shadow:0 1px 3px rgba(0,0,0,0.04),0 8px 24px rgba(0,0,0,0.04); overflow:hidden; }
-        .form-field { width:100%; padding:11px 14px; border:1.5px solid #e5e7eb; border-radius:10px; font-size:13px; font-family:'Inter',sans-serif; color:#181c22; background:#fafafa; outline:none; box-sizing:border-box; transition:all 0.2s; }
-        .form-field:focus { border-color:#00450d; box-shadow:0 0 0 3px rgba(0,69,13,0.08); background:white; }
+        .card      { background:white; border-radius:20px; border:1px solid rgba(0,69,13,0.07); box-shadow:0 1px 3px rgba(0,0,0,0.04),0 8px 24px rgba(0,0,0,0.04); overflow:hidden; }
+        .form-field   { width:100%; padding:11px 14px; border:1.5px solid #e5e7eb; border-radius:10px; font-size:13px; font-family:'Inter',sans-serif; color:#181c22; background:#fafafa; outline:none; box-sizing:border-box; transition:all 0.2s; }
+        .form-field:focus   { border-color:#00450d; box-shadow:0 0 0 3px rgba(0,69,13,0.08); background:white; }
         .select-field { width:100%; padding:11px 14px; border:1.5px solid #e5e7eb; border-radius:10px; font-size:13px; font-family:'Inter',sans-serif; color:#181c22; background:#fafafa; outline:none; cursor:pointer; appearance:none; box-sizing:border-box; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23717a6d'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; background-size:14px; padding-right:36px; transition:all 0.2s; }
         .select-field:focus { border-color:#00450d; box-shadow:0 0 0 3px rgba(0,69,13,0.08); }
-        .field-label { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#6b7280; font-family:'Manrope',sans-serif; margin-bottom:7px; }
-        .tab-btn { padding:9px 18px; border-radius:99px; font-size:12px; font-weight:700; font-family:'Manrope',sans-serif; border:none; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:6px; white-space:nowrap; }
-        .tab-btn.on { background:#00450d; color:white; }
+        .field-label  { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#6b7280; font-family:'Manrope',sans-serif; margin-bottom:7px; }
+        .tab-btn  { padding:9px 18px; border-radius:99px; font-size:12px; font-weight:700; font-family:'Manrope',sans-serif; border:none; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+        .tab-btn.on  { background:#00450d; color:white; }
         .tab-btn.off { background:transparent; color:#64748b; }
         .tab-btn.off:hover { background:#f1f5f9; }
         .pill-btn { padding:5px 13px; border-radius:99px; font-size:11px; font-weight:700; font-family:'Manrope',sans-serif; border:none; cursor:pointer; transition:all 0.2s; }
-        .pill-btn.on { background:#00450d; color:white; }
+        .pill-btn.on  { background:#00450d; color:white; }
         .pill-btn.off { background:#f1f5f9; color:#64748b; }
         .pill-btn.off:hover { background:#e2e8f0; }
-        .facility-btn { border:1.5px solid rgba(0,69,13,0.1); border-radius:12px; padding:11px 14px; cursor:pointer; background:white; display:flex; align-items:center; gap:10px; transition:all 0.15s; text-align:left; width:100%; }
-        .facility-btn:hover { border-color:rgba(0,69,13,0.25); background:#f9fbf7; }
+        .partner-btn  { border:1.5px solid rgba(0,69,13,0.1); border-radius:12px; padding:11px 14px; cursor:pointer; background:white; display:flex; align-items:center; gap:10px; transition:all 0.15s; text-align:left; width:100%; }
+        .partner-btn:hover { border-color:rgba(0,69,13,0.25); background:#f9fbf7; }
         .row { padding:15px 20px; border-bottom:1px solid rgba(0,69,13,0.05); display:flex; align-items:flex-start; gap:13px; transition:background 0.15s; }
         .row:hover { background:#f9fdf9; }
         .row:last-child { border-bottom:none; }
         .badge { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:99px; font-size:10px; font-weight:700; font-family:'Manrope',sans-serif; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; }
         .btn-publish { display:flex; align-items:center; gap:7px; padding:11px 20px; border-radius:10px; background:#00450d; color:white; border:none; cursor:pointer; font-family:'Manrope',sans-serif; font-weight:700; font-size:13px; transition:all 0.2s; }
-        .btn-publish:hover { background:#1b5e20; }
+        .btn-publish:hover    { background:#1b5e20; }
         .btn-publish:disabled { opacity:0.6; cursor:not-allowed; }
-        .btn-draft { display:flex; align-items:center; gap:7px; padding:11px 18px; border-radius:10px; background:white; color:#00450d; border:1.5px solid rgba(0,69,13,0.2); cursor:pointer; font-family:'Manrope',sans-serif; font-weight:700; font-size:13px; transition:all 0.2s; }
-        .btn-draft:hover { background:#f0fdf4; }
+        .btn-draft   { display:flex; align-items:center; gap:7px; padding:11px 18px; border-radius:10px; background:white; color:#00450d; border:1.5px solid rgba(0,69,13,0.2); cursor:pointer; font-family:'Manrope',sans-serif; font-weight:700; font-size:13px; transition:all 0.2s; }
+        .btn-draft:hover    { background:#f0fdf4; }
         .btn-draft:disabled { opacity:0.6; cursor:not-allowed; }
         .btn-discard { display:flex; align-items:center; gap:6px; padding:11px 14px; border-radius:10px; background:transparent; color:#94a3b8; border:none; cursor:pointer; font-family:'Manrope',sans-serif; font-weight:600; font-size:13px; transition:all 0.2s; }
         .btn-discard:hover { color:#64748b; background:#f8fafc; }
@@ -344,10 +330,10 @@ export default function DEDisposalPage() {
         .search-input:focus { border-color:#00450d; background:white; box-shadow:0 0 0 3px rgba(0,69,13,0.08); }
         .date-input { padding:8px 12px; border:1.5px solid #e5e7eb; border-radius:10px; font-size:12px; font-family:'Inter',sans-serif; color:#181c22; background:#fafafa; outline:none; transition:all 0.2s; }
         .date-input:focus { border-color:#00450d; }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-        .a1{animation:fadeUp .4s ease .04s both} .a2{animation:fadeUp .4s ease .1s both} .a3{animation:fadeUp .4s ease .16s both}
-        @keyframes spin { to{transform:rotate(360deg)} }
+        @keyframes fadeUp    { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin      { to{transform:rotate(360deg)} }
         @keyframes slideDown { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+        .a1{animation:fadeUp .4s ease .04s both} .a2{animation:fadeUp .4s ease .1s both} .a3{animation:fadeUp .4s ease .16s both}
         .slide-down { animation:slideDown .2s ease both; }
       `}</style>
 
@@ -379,7 +365,7 @@ export default function DEDisposalPage() {
                     { label: 'Published', value: stats.published, icon: 'event', color: '#1d4ed8', bg: '#eff6ff' },
                     { label: 'In Transit', value: stats.inTransit, icon: 'local_shipping', color: '#d97706', bg: '#fefce8' },
                     { label: 'Completed', value: stats.completed, icon: 'check_circle', color: '#00450d', bg: '#f0fdf4' },
-                    { label: 'History', value: history.length, icon: 'history', color: '#7c3aed', bg: '#f5f3ff' },
+                    { label: 'Partners', value: partners.length, icon: 'handshake', color: '#7c3aed', bg: '#f5f3ff' },
                 ].map(m => (
                     <div key={m.label} className="card" style={{ padding: '16px 18px' }}>
                         <div style={{ width: 34, height: 34, borderRadius: 9, background: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
@@ -400,15 +386,13 @@ export default function DEDisposalPage() {
                         { key: 'discrepancies', label: 'Discrepancies', icon: 'warning', count: discrepancies.length },
                         { key: 'history', label: 'History', icon: 'history', count: history.length },
                     ] as const).map(t => (
-                        <button key={t.key} onClick={() => setActiveTab(t.key)}
-                            className={`tab-btn ${activeTab === t.key ? 'on' : 'off'}`}>
+                        <button key={t.key} onClick={() => setActiveTab(t.key)} className={`tab-btn ${activeTab === t.key ? 'on' : 'off'}`}>
                             <span className="msym" style={{ fontSize: 14 }}>{t.icon}</span>
                             {t.label}
                             <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: activeTab === t.key ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.07)', color: activeTab === t.key ? 'white' : '#64748b' }}>{t.count}</span>
                         </button>
                     ))}
                 </div>
-
                 {activeTab === 'schedule' && (
                     <button onClick={() => { setShowForm(!showForm); resetForm() }}
                         style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, background: showForm ? '#f1f5f9' : '#00450d', color: showForm ? '#64748b' : 'white', border: 'none', cursor: 'pointer', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s' }}>
@@ -433,10 +417,11 @@ export default function DEDisposalPage() {
 
                     {showForm && (
                         <div className="card slide-down" style={{ marginBottom: 20 }}>
+                            {/* Form header */}
                             <div style={{ padding: '16px 22px', borderBottom: '1px solid rgba(0,69,13,0.06)', background: '#00450d', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
                                     <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 15, color: 'white', margin: '0 0 2px' }}>New Disposal Schedule</h3>
-                                    <p style={{ fontSize: 11, color: 'rgba(163,246,156,0.7)', margin: 0 }}>Publish to notify recycling partners and facility operators</p>
+                                    <p style={{ fontSize: 11, color: 'rgba(163,246,156,0.7)', margin: 0 }}>Assign to a registered recycling partner or facility operator</p>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 99, background: 'rgba(255,255,255,0.1)' }}>
                                     <span className="msym" style={{ fontSize: 13, color: 'rgba(163,246,156,0.7)' }}>edit_note</span>
@@ -446,6 +431,7 @@ export default function DEDisposalPage() {
 
                             <div style={{ padding: 22 }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+
                                     {/* Waste type */}
                                     <div style={{ gridColumn: '1 / -1' }}>
                                         <label className="field-label">Waste Type *</label>
@@ -454,7 +440,7 @@ export default function DEDisposalPage() {
                                                 const isOn = formData.waste_type === wt.value
                                                 return (
                                                     <button key={wt.value} type="button"
-                                                        onClick={() => { setFormData(p => ({ ...p, waste_type: wt.value })); suggestFacility(wt.value) }}
+                                                        onClick={() => setFormData(p => ({ ...p, waste_type: wt.value }))}
                                                         style={{ border: `1.5px solid ${isOn ? wt.color : 'rgba(0,69,13,0.1)'}`, borderRadius: 10, padding: '9px 6px', cursor: 'pointer', background: isOn ? wt.color + '12' : 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 0.15s', boxShadow: isOn ? `0 0 0 3px ${wt.color}20` : 'none' }}>
                                                         <span className="msym" style={{ fontSize: 18, color: isOn ? wt.color : '#94a3b8' }}>{wt.icon}</span>
                                                         <span style={{ fontSize: 9, fontWeight: 700, color: isOn ? wt.color : '#374151', fontFamily: 'Manrope,sans-serif', textAlign: 'center', lineHeight: 1.2 }}>{wt.label}</span>
@@ -464,30 +450,78 @@ export default function DEDisposalPage() {
                                         </div>
                                     </div>
 
-                                    {/* Facility */}
+                                    {/* ── PARTNER SELECTION ── */}
                                     <div style={{ gridColumn: '1 / -1' }}>
-                                        <label className="field-label">Facility *{formData.waste_type && <span style={{ color: '#00450d', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}> — auto-suggested</span>}</label>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                            {FACILITIES.map(f => {
-                                                const isOn = formData.facility_name === f.name
-                                                return (
-                                                    <button key={f.name} type="button" className="facility-btn"
-                                                        style={isOn ? { borderColor: f.color, background: f.bg, borderWidth: 2, boxShadow: `0 0 0 3px ${f.color}18` } : {}}
-                                                        onClick={() => setFormData(p => ({ ...p, facility_name: f.name, facility_type: f.type }))}>
-                                                        <div style={{ width: 34, height: 34, borderRadius: 9, background: isOn ? f.color + '20' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                                            <span className="msym" style={{ fontSize: 17, color: isOn ? f.color : '#94a3b8' }}>{f.icon}</span>
-                                                        </div>
-                                                        <div style={{ flex: 1 }}>
-                                                            <p style={{ fontSize: 12, fontWeight: 700, color: isOn ? f.color : '#181c22', fontFamily: 'Manrope,sans-serif', margin: '0 0 1px' }}>{f.name}</p>
-                                                            <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>{f.location}</p>
-                                                        </div>
-                                                        {isOn && <span className="msym-fill" style={{ fontSize: 17, color: f.color, flexShrink: 0 }}>check_circle</span>}
-                                                    </button>
-                                                )
-                                            })}
+                                        <label className="field-label">
+                                            Assign to Registered Partner *
+                                            <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 6 }}>
+                                                — {partners.length} registered
+                                            </span>
+                                        </label>
+
+                                        {/* Role filter pills */}
+                                        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                                            {([
+                                                { key: 'all', label: `All (${partners.length})` },
+                                                { key: 'recycling_partner', label: `Recyclers (${partners.filter(p => p.role === 'recycling_partner').length})` },
+                                                { key: 'facility_operator', label: `Facilities (${partners.filter(p => p.role === 'facility_operator').length})` },
+                                            ] as const).map(f => (
+                                                <button key={f.key} type="button"
+                                                    onClick={() => setPartnerFilter(f.key)}
+                                                    className={`pill-btn ${partnerFilter === f.key ? 'on' : 'off'}`}>
+                                                    {f.label}
+                                                </button>
+                                            ))}
                                         </div>
+
+                                        {filteredPartners.length === 0 ? (
+                                            <div style={{ padding: '20px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                                                <span className="msym" style={{ fontSize: 24, color: '#d1d5db', display: 'block', marginBottom: 6 }}>group_off</span>
+                                                <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No approved partners found for this filter</p>
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto', paddingRight: 2 }}>
+                                                {filteredPartners.map(partner => {
+                                                    const meta = ROLE_META[partner.role]
+                                                    const isOn = formData.assigned_partner_id === partner.id
+                                                    const displayName = partner.organisation_name || partner.full_name
+                                                    return (
+                                                        <button key={partner.id} type="button" className="partner-btn"
+                                                            onClick={() => setFormData(p => ({ ...p, assigned_partner_id: partner.id, facility_name: displayName, facility_type: partner.role === 'recycling_partner' ? 'recycling' : 'facility' }))}
+                                                            style={isOn ? { borderColor: meta.color, background: meta.bg, borderWidth: 2, boxShadow: `0 0 0 3px ${meta.color}18` } : {}}>
+                                                            <div style={{ width: 36, height: 36, borderRadius: 10, background: isOn ? meta.color + '20' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                                <span className="msym" style={{ fontSize: 18, color: isOn ? meta.color : '#94a3b8' }}>{meta.icon}</span>
+                                                            </div>
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                                                    <p style={{ fontSize: 13, fontWeight: 700, color: isOn ? meta.color : '#181c22', fontFamily: 'Manrope,sans-serif', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</p>
+                                                                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: meta.bg, color: meta.color, fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0, border: `1px solid ${meta.border}` }}>
+                                                                        {partner.role === 'recycling_partner' ? 'Recycler' : 'Facility'}
+                                                                    </span>
+                                                                </div>
+                                                                <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>
+                                                                    {partner.full_name}{partner.district ? ` · ${partner.district}` : ''}{partner.phone ? ` · ${partner.phone}` : ''}
+                                                                </p>
+                                                            </div>
+                                                            {isOn && <span className="msym-fill" style={{ fontSize: 18, color: meta.color, flexShrink: 0 }}>check_circle</span>}
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Selected partner summary */}
+                                        {selectedPartner && (
+                                            <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 10, background: ROLE_META[selectedPartner.role].bg, border: `1px solid ${ROLE_META[selectedPartner.role].border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                <span className="msym-fill" style={{ fontSize: 16, color: ROLE_META[selectedPartner.role].color }}>check_circle</span>
+                                                <p style={{ fontSize: 12, fontWeight: 600, color: ROLE_META[selectedPartner.role].color, fontFamily: 'Manrope,sans-serif', margin: 0 }}>
+                                                    Assigned to: {selectedPartner.organisation_name || selectedPartner.full_name}
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
 
+                                    {/* Date / time / vehicle / quantity */}
                                     <div>
                                         <label className="field-label">Date *</label>
                                         <input type="date" className="form-field" min={new Date().toISOString().split('T')[0]}
@@ -495,7 +529,8 @@ export default function DEDisposalPage() {
                                     </div>
                                     <div>
                                         <label className="field-label">Time</label>
-                                        <input type="time" className="form-field" value={formData.scheduled_time} onChange={e => setFormData(p => ({ ...p, scheduled_time: e.target.value }))} />
+                                        <input type="time" className="form-field"
+                                            value={formData.scheduled_time} onChange={e => setFormData(p => ({ ...p, scheduled_time: e.target.value }))} />
                                     </div>
                                     <div>
                                         <label className="field-label">Vehicle Number</label>
@@ -507,6 +542,8 @@ export default function DEDisposalPage() {
                                         <input type="text" className="form-field" placeholder="e.g. 5 tonnes"
                                             value={formData.estimated_quantity} onChange={e => setFormData(p => ({ ...p, estimated_quantity: e.target.value }))} />
                                     </div>
+
+                                    {/* Link to collection schedule */}
                                     <div style={{ gridColumn: '1 / -1' }}>
                                         <label className="field-label">Link to Collection Schedule <span style={{ color: '#d1d5db', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— optional</span></label>
                                         <select className="select-field" value={formData.collection_schedule_id} onChange={e => setFormData(p => ({ ...p, collection_schedule_id: e.target.value }))}>
@@ -518,6 +555,8 @@ export default function DEDisposalPage() {
                                             ))}
                                         </select>
                                     </div>
+
+                                    {/* Notes */}
                                     <div style={{ gridColumn: '1 / -1' }}>
                                         <label className="field-label">Notes</label>
                                         <textarea className="form-field" rows={2} style={{ resize: 'vertical' }}
@@ -526,7 +565,7 @@ export default function DEDisposalPage() {
                                     </div>
                                 </div>
 
-                                {/* Action buttons — same pattern as schedules page */}
+                                {/* Action buttons */}
                                 <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                                     <button type="button" disabled={!!saving} onClick={() => handleSubmit(true)} className="btn-publish">
                                         {saving === 'publish'
@@ -571,16 +610,18 @@ export default function DEDisposalPage() {
                             </div>
                         ) : filteredDisposals.map(d => {
                             const wi = WASTE_TYPES.find(w => w.value === d.waste_type) || WASTE_TYPES[WASTE_TYPES.length - 1]
-                            const fi = FACILITIES.find(f => f.type === d.facility_type) || FACILITIES[0]
                             const sc = DISPOSAL_STATUS[d.status] || DISPOSAL_STATUS.scheduled
                             const isUpdating = updatingId === d.id
                             const isDraft = d.status === 'draft'
                             const isActive = ['published', 'scheduled', 'in_transit'].includes(d.status)
+                            // Find assigned partner name
+                            const assignedPartner = partners.find(p => p.id === (d as any).assigned_partner_id)
+                            const partnerName = assignedPartner ? (assignedPartner.organisation_name || assignedPartner.full_name) : d.facility_name
 
                             return (
                                 <div key={d.id} className="row">
-                                    <div style={{ width: 40, height: 40, borderRadius: 11, background: fi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                        <span className="msym" style={{ fontSize: 19, color: fi.color }}>{fi.icon}</span>
+                                    <div style={{ width: 40, height: 40, borderRadius: 11, background: wi.color + '12', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <span className="msym" style={{ fontSize: 19, color: wi.color }}>{wi.icon}</span>
                                     </div>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -589,9 +630,14 @@ export default function DEDisposalPage() {
                                                 <span style={{ width: 5, height: 5, borderRadius: '50%', background: sc.dot, display: 'inline-block' }} />
                                                 {sc.label}
                                             </span>
+                                            {assignedPartner && (
+                                                <span className="badge" style={{ background: ROLE_META[assignedPartner.role].bg, color: ROLE_META[assignedPartner.role].color }}>
+                                                    {assignedPartner.role === 'recycling_partner' ? 'Recycler' : 'Facility'}
+                                                </span>
+                                            )}
                                         </div>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 12px', fontSize: 11, color: '#717a6d' }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><span className="msym" style={{ fontSize: 12 }}>business</span>{d.facility_name}</span>
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><span className="msym" style={{ fontSize: 12 }}>business</span>{partnerName}</span>
                                             <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><span className="msym" style={{ fontSize: 12 }}>event</span>{new Date(d.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{d.scheduled_time ? ` · ${d.scheduled_time}` : ''}</span>
                                             {d.vehicle_number && <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><span className="msym" style={{ fontSize: 12 }}>local_shipping</span>{d.vehicle_number}</span>}
                                             {d.estimated_quantity && <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><span className="msym" style={{ fontSize: 12 }}>scale</span>{d.estimated_quantity}</span>}
@@ -733,7 +779,6 @@ export default function DEDisposalPage() {
             {/* ── HISTORY TAB ── */}
             {activeTab === 'history' && (
                 <div>
-                    {/* Search + date filters */}
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
                         <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 180 }}>
                             <span className="msym" style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: '#94a3b8' }}>search</span>
@@ -757,19 +802,17 @@ export default function DEDisposalPage() {
                             <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#181c22', margin: 0 }}>Past Waste Logs</h3>
                             <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>Completed disposal schedules + driver dispatch records</p>
                         </div>
-
                         {filteredHistory.length === 0 ? (
                             <div style={{ padding: '50px 24px', textAlign: 'center' }}>
                                 <span className="msym" style={{ fontSize: 32, color: '#d1d5db', display: 'block', marginBottom: 10 }}>history</span>
                                 <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#181c22', marginBottom: 5 }}>No history yet</p>
-                                <p style={{ fontSize: 12, color: '#94a3b8' }}>Completed disposals and dispatch records will appear here</p>
+                                <p style={{ fontSize: 12, color: '#94a3b8' }}>Completed disposals will appear here</p>
                             </div>
                         ) : filteredHistory.map(item => {
                             const wi = WASTE_TYPES.find(w => w.value === item.waste_type) || WASTE_TYPES[WASTE_TYPES.length - 1]
                             const sc = item.source === 'record'
                                 ? (RECORD_STATUS[item.status] || RECORD_STATUS.pending)
                                 : (DISPOSAL_STATUS[item.status] || DISPOSAL_STATUS.completed)
-
                             return (
                                 <div key={`${item.source}-${item.id}`} className="row">
                                     <div style={{ width: 40, height: 40, borderRadius: 11, background: wi.color + '12', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
