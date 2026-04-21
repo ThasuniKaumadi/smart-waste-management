@@ -393,15 +393,24 @@ export default function RegisterPage() {
             )}
 
             {/* Email + Phone */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            </div>
-            <div>
-              <label className="field-label">Phone</label>
-              <div style={{ position: 'relative' }}>
-                <span className="input-icon"><span className="material-symbols-outlined">phone</span></span>
-                <input className="form-input" placeholder="+94 77 000 0000"
-                  value={formData.phone}
-                  onChange={e => setFormData({ ...formData, phone: e.target.value })} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <div>
+                <label className="field-label">Email *</label>
+                <div style={{ position: "relative" }}>
+                  <span className="input-icon"><span className="material-symbols-outlined">mail</span></span>
+                  <input type="email" className="form-input" placeholder="your@email.com"
+                    value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })} required />
+                </div>
+              </div>
+              <div>
+                <label className="field-label">Phone</label>
+                <div style={{ position: "relative" }}>
+                  <span className="input-icon"><span className="material-symbols-outlined">phone</span></span>
+                  <input className="form-input" placeholder="+94 77 000 0000"
+                    value={formData.phone}
+                    onChange={e => setFormData({ ...formData, phone: e.target.value })} />
+                </div>
               </div>
             </div>
 
@@ -463,8 +472,8 @@ export default function RegisterPage() {
 
             {/* Address */}
             <div>
-              <label className="field-label">Address</label>
-              <input className="form-input-plain" placeholder="Your full address"
+              <label className="field-label">Street Name</label>
+              <input className="form-input-plain" placeholder="e.g. 123 Main Street"
                 value={formData.address}
                 onChange={e => setFormData({ ...formData, address: e.target.value })} />
             </div>
@@ -568,3 +577,4 @@ export default function RegisterPage() {
     </div>
   )
 }
+
