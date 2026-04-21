@@ -63,7 +63,7 @@ export default function DEAnnouncementsPage() {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
         const { error } = await supabase.from('announcements').insert({
-            title: form.title.trim(), body: form.body.trim(), priority: form.priority,
+            title: form.title.trim(), content: form.body.trim(), priority: form.priority,
             target_roles: form.target_roles.length > 0 ? form.target_roles : DISTRICT_ROLES.map(r => r.value),
             district: profile?.district, created_by: user?.id, archived: false,
         })
@@ -150,7 +150,7 @@ export default function DEAnnouncementsPage() {
                             <label className="field-label">Priority</label>
                             <select className="form-field" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
                                 <option value="normal">Normal</option>
-                                <option value="important">Important</option>
+                                <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
                                 <option value="urgent">Urgent</option>
                             </select>
                         </div>
@@ -230,3 +230,4 @@ export default function DEAnnouncementsPage() {
         </DashboardLayout>
     )
 }
+
