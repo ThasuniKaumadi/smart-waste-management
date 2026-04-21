@@ -4,40 +4,16 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
-function getNavAndMeta(role: string) {
-    if (role === 'recycling_partner') {
-        return {
-            nav: [
-                { label: 'Home', href: '/dashboard/recycling-partner', icon: 'dashboard' },
-                { label: 'New Intake', href: '/dashboard/intake/log', icon: 'add_circle' },
-                { label: 'History', href: '/dashboard/intake/history', icon: 'history' },
-                { label: 'Analytics', href: '/dashboard/intake/analytics', icon: 'bar_chart' },
-                { label: 'Profile', href: '/dashboard/recycling-partner/profile', icon: 'person' },
-            ],
-            roleLabel: 'Recycling Partner',
-            badgeColor: '#15803d',
-            badgeBg: '#f0fdf4',
-            accentFrom: '#15803d',
-            accentTo: '#166534',
-            progressBg: '#f0fdf4',
-        }
-    }
-    return {
-        nav: [
-            { label: 'Overview', href: '/dashboard/facility', icon: 'dashboard' },
-            { label: 'Disposal', href: '/dashboard/facility/disposal', icon: 'delete_sweep' },
-            { label: 'Profile', href: '/dashboard/facility/profile', icon: 'person' },
-        ],
-        roleLabel: 'Facility Operator',
-        badgeColor: '#0369a1',
-        badgeBg: '#f0f9ff',
-        accentFrom: '#0369a1',
-        accentTo: '#0284c7',
-        progressBg: '#f0f9ff',
-    }
-}
+const FACILITY_NAV = [
+    { label: 'Home', href: '/dashboard/facility', icon: 'dashboard' },
+    { label: 'New Intake', href: '/dashboard/facility/log', icon: 'add_circle' },
+    { label: 'History', href: '/dashboard/facility/history', icon: 'history' },
+    { label: 'Analytics', href: '/dashboard/facility/analytics', icon: 'bar_chart' },
+    { label: 'Disposal', href: '/dashboard/facility/disposal', icon: 'delete_sweep' },
+    { label: 'Profile', href: '/dashboard/facility/profile', icon: 'person' },
+]
 
-export default function IntakeProfilePage() {
+export default function FacilityProfilePage() {
     const [profile, setProfile] = useState<any>(null)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -63,8 +39,7 @@ export default function IntakeProfilePage() {
     }
 
     async function handleProfileSave(e: React.FormEvent) {
-        e.preventDefault()
-        setSaving(true); setMessage(null)
+        e.preventDefault(); setSaving(true); setMessage(null)
         const supabase = createClient()
         const { error } = await supabase.from('profiles').update({
             full_name: formData.full_name, phone: formData.phone || null,
@@ -87,29 +62,26 @@ export default function IntakeProfilePage() {
         else { setMessage({ type: 'success', text: 'Password changed successfully.' }); setPwData({ newPw: '', confirm: '' }) }
     }
 
-    const role = profile?.role || 'recycling_partner'
-    const { nav, roleLabel, badgeColor, badgeBg, accentFrom, accentTo, progressBg } = getNavAndMeta(role)
-
     const initials = profile?.full_name
         ? profile.full_name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
-        : role === 'recycling_partner' ? 'RP' : 'FO'
+        : 'FO'
 
     const pwScore = [pwData.newPw.length >= 8, /[A-Z]/.test(pwData.newPw), /[0-9]/.test(pwData.newPw), /[^A-Za-z0-9]/.test(pwData.newPw)].filter(Boolean).length
 
     return (
-        <DashboardLayout role={roleLabel} userName={profile?.full_name || ''} navItems={nav}>
+        <DashboardLayout role="Facility Operator" userName={profile?.full_name || ''} navItems={FACILITY_NAV}>
             <style>{`
         .msf{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;vertical-align:middle;line-height:1;}
         .profile-card{background:white;border-radius:20px;padding:32px;border:1px solid rgba(0,69,13,0.06);box-shadow:0 2px 12px rgba(0,0,0,0.06);}
         .tab-btn{padding:10px 20px;border-radius:10px;font-size:14px;font-weight:500;font-family:'Manrope',sans-serif;border:none;cursor:pointer;transition:all 0.2s;background:transparent;color:#717a6d;display:inline-flex;align-items:center;gap:6px;}
-        .tab-btn.active{background:#00450d;color:white;}
-        .tab-btn:not(.active):hover{background:#f0fdf4;color:#00450d;}
+        .tab-btn.active{background:#0369a1;color:white;}
+        .tab-btn:not(.active):hover{background:#f0f9ff;color:#0369a1;}
         .field-label{font-size:13px;font-weight:600;color:#41493e;font-family:'Manrope',sans-serif;margin-bottom:6px;display:block;letter-spacing:0.02em;}
         .field-input{width:100%;padding:12px 16px;border:1.5px solid #e4e9e0;border-radius:12px;font-size:14px;font-family:'Inter',sans-serif;color:#181c22;background:#fafbf9;outline:none;transition:border-color 0.2s,box-shadow 0.2s;box-sizing:border-box;}
-        .field-input:focus{border-color:#00450d;box-shadow:0 0 0 3px rgba(0,69,13,0.08);background:white;}
+        .field-input:focus{border-color:#0369a1;box-shadow:0 0 0 3px rgba(3,105,161,0.08);background:white;}
         .field-input:disabled{background:#f4f6f3;color:#a0a89b;cursor:not-allowed;}
-        .save-btn{background:#00450d;color:white;border:none;border-radius:12px;padding:13px 28px;font-size:14px;font-weight:600;font-family:'Manrope',sans-serif;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px;}
-        .save-btn:hover:not(:disabled){background:#005c12;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,69,13,0.25);}
+        .save-btn{background:#0369a1;color:white;border:none;border-radius:12px;padding:13px 28px;font-size:14px;font-weight:600;font-family:'Manrope',sans-serif;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px;}
+        .save-btn:hover:not(:disabled){background:#0284c7;transform:translateY(-1px);box-shadow:0 4px 12px rgba(3,105,161,0.25);}
         .save-btn:disabled{opacity:0.6;cursor:not-allowed;}
         .toast-success{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:12px;padding:14px 18px;font-size:14px;font-family:'Inter',sans-serif;display:flex;align-items:center;gap:10px;}
         .toast-error{background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:12px;padding:14px 18px;font-size:14px;font-family:'Inter',sans-serif;display:flex;align-items:center;gap:10px;}
@@ -130,18 +102,16 @@ export default function IntakeProfilePage() {
 
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 32 }}>
-                    <div style={{ width: 72, height: 72, borderRadius: '50%', background: `linear-gradient(135deg,${accentFrom},${accentTo})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 26, fontWeight: 700, fontFamily: 'Manrope', flexShrink: 0 }}>
+                    <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg,#0369a1,#0284c7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 26, fontWeight: 700, fontFamily: 'Manrope', flexShrink: 0 }}>
                         {initials}
                     </div>
                     <div>
                         <div style={{ fontSize: 22, fontWeight: 800, color: '#181c22', fontFamily: 'Manrope', lineHeight: 1.2 }}>
-                            {loading ? 'Loading…' : profile?.full_name || roleLabel}
+                            {loading ? 'Loading…' : profile?.full_name || 'Facility Operator'}
                         </div>
                         <div style={{ fontSize: 14, color: '#717a6d', fontFamily: 'Inter', marginTop: 4, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <span>{profile?.email}</span>
-                            <span style={{ background: badgeBg, color: badgeColor, borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 700, fontFamily: 'Manrope', letterSpacing: '0.05em' }}>
-                                {roleLabel.toUpperCase()}
-                            </span>
+                            <span style={{ background: '#f0f9ff', color: '#0369a1', borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 700, fontFamily: 'Manrope', letterSpacing: '0.05em' }}>FACILITY OPERATOR</span>
                         </div>
                     </div>
                 </div>
@@ -174,7 +144,7 @@ export default function IntakeProfilePage() {
                         <p className="section-title">Account Information</p>
                         <div className="acc-info-card" style={{ marginBottom: 24 }}>
                             <div className="info-row"><span className="info-label">Email Address</span><span className="info-value" style={{ fontFamily: 'monospace', fontSize: 13 }}>{profile?.email || '—'}</span></div>
-                            <div className="info-row"><span className="info-label">Role</span><span style={{ background: badgeBg, color: badgeColor, borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 700, fontFamily: 'Manrope', letterSpacing: '0.05em' }}>{roleLabel.toUpperCase()}</span></div>
+                            <div className="info-row"><span className="info-label">Role</span><span style={{ background: '#f0f9ff', color: '#0369a1', borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 700, fontFamily: 'Manrope', letterSpacing: '0.05em' }}>FACILITY OPERATOR</span></div>
                             <div className="info-row"><span className="info-label">District</span><span className="info-value">{profile?.district || '—'}</span></div>
                             <div className="info-row"><span className="info-label">Organisation</span><span className="info-value">{profile?.organisation_name || '—'}</span></div>
                             <div className="info-row"><span className="info-label">Approval Status</span><span className="badge-active">APPROVED</span></div>
@@ -196,7 +166,7 @@ export default function IntakeProfilePage() {
                             <button className="save-btn" onClick={() => setActiveTab('edit')}>
                                 <span className="msf" style={{ fontSize: 18 }}>edit</span>Edit Profile
                             </button>
-                            <button className="save-btn" onClick={() => setActiveTab('password')} style={{ background: accentFrom }}>
+                            <button className="save-btn" onClick={() => setActiveTab('password')}>
                                 <span className="msf" style={{ fontSize: 18 }}>lock_reset</span>Change Password
                             </button>
                         </div>
@@ -211,9 +181,9 @@ export default function IntakeProfilePage() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
                                 <div><label className="field-label">Full Name</label><input className="field-input" value={formData.full_name} onChange={e => setFormData(p => ({ ...p, full_name: e.target.value }))} placeholder="Your full name" required /></div>
                                 <div><label className="field-label">Email Address</label><input className="field-input" value={profile?.email || ''} disabled /></div>
-                                <div><label className="field-label">Organisation Name</label><input className="field-input" value={formData.organisation_name} onChange={e => setFormData(p => ({ ...p, organisation_name: e.target.value }))} placeholder="Your organisation" /></div>
+                                <div><label className="field-label">Organisation Name</label><input className="field-input" value={formData.organisation_name} onChange={e => setFormData(p => ({ ...p, organisation_name: e.target.value }))} placeholder="Your facility name" /></div>
                                 <div><label className="field-label">Phone Number</label><input className="field-input" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} placeholder="+94 77 123 4567" /></div>
-                                <div style={{ gridColumn: '1/-1' }}><label className="field-label">Address</label><input className="field-input" value={formData.address} onChange={e => setFormData(p => ({ ...p, address: e.target.value }))} placeholder="Facility or office address" /></div>
+                                <div style={{ gridColumn: '1/-1' }}><label className="field-label">Facility Address</label><input className="field-input" value={formData.address} onChange={e => setFormData(p => ({ ...p, address: e.target.value }))} placeholder="Facility address" /></div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                                 <button type="submit" className="save-btn" disabled={saving}>
@@ -264,13 +234,12 @@ export default function IntakeProfilePage() {
                                     )}
                                 </div>
                             </div>
-                            <button type="submit" className="save-btn" disabled={saving || pwData.newPw !== pwData.confirm || !pwData.newPw} style={{ background: accentFrom }}>
+                            <button type="submit" className="save-btn" disabled={saving || pwData.newPw !== pwData.confirm || !pwData.newPw}>
                                 <span className="msf" style={{ fontSize: 18 }}>{saving ? 'hourglass_empty' : 'lock_reset'}</span>{saving ? 'Updating…' : 'Update Password'}
                             </button>
                         </form>
                     </div>
                 )}
-
             </div>
         </DashboardLayout>
     )
