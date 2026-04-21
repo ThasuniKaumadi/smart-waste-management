@@ -3,21 +3,18 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
-import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-    ResponsiveContainer, PieChart, Pie, Cell,
-} from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 const ADMIN_NAV = [
-  { label: 'Overview',      href: '/dashboard/admin',               icon: 'dashboard'       },
-  { label: 'Users',         href: '/dashboard/admin/users',         icon: 'manage_accounts' },
-  { label: 'Billing',       href: '/dashboard/admin/billing',       icon: 'payments'        },
-  { label: 'Billing Rates', href: '/dashboard/admin/billing-rates', icon: 'tune'            },
-  { label: 'Blockchain',    href: '/dashboard/admin/blockchain',    icon: 'link'            },
-  { label: 'Performance',   href: '/dashboard/admin/performance',   icon: 'analytics'       },
-  { label: 'Disposal',      href: '/dashboard/admin/disposal',      icon: 'delete_sweep'    },
-  { label: 'Reports',       href: '/dashboard/admin/reports',       icon: 'rate_review'     },
-  { label: 'Profile',       href: '/dashboard/admin/profile',       icon: 'person'          },
+    { label: 'Home', href: '/dashboard/admin', icon: 'dashboard' },
+    { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts' },
+    { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
+    { label: 'Billing Rates', href: '/dashboard/admin/billing-rates', icon: 'tune' },
+    { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
+    { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
+    { label: 'Disposal', href: '/dashboard/admin/disposal', icon: 'delete_sweep' },
+    { label: 'Reports', href: '/dashboard/admin/reports', icon: 'rate_review' },
+    { label: 'Profile', href: '/dashboard/admin/profile', icon: 'person' },
 ]
 
 const COLORS = ['#00450d', '#1b5e20', '#2e7d32', '#1d4ed8', '#7c3aed', '#0891b2']
@@ -56,7 +53,6 @@ export default function AdminPerformancePage() {
             supabase.from('collection_events').select('*', { count: 'exact', head: true }),
             supabase.from('collection_events').select('*', { count: 'exact', head: true }).not('blockchain_tx', 'is', null),
         ])
-
         setStats({
             totalUsers: totalUsers || 0, totalRoutes: totalRoutes || 0,
             totalComplaints: totalComplaints || 0, resolvedComplaints: resolvedComplaints || 0,
@@ -88,10 +84,8 @@ export default function AdminPerformancePage() {
         setLoading(false)
     }
 
-    const resolutionRate = stats.totalComplaints > 0
-        ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100) : 0
-    const blockchainRate = stats.totalCollections > 0
-        ? Math.round((stats.blockchainRecords / stats.totalCollections) * 100) : 0
+    const resolutionRate = stats.totalComplaints > 0 ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100) : 0
+    const blockchainRate = stats.totalCollections > 0 ? Math.round((stats.blockchainRecords / stats.totalCollections) * 100) : 0
 
     return (
         <DashboardLayout
@@ -101,191 +95,163 @@ export default function AdminPerformancePage() {
             primaryAction={{ label: 'View Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' }}
         >
             <style>{`
-        .material-symbols-outlined {
-          font-family: 'Material Symbols Outlined';
-          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-          display: inline-block; vertical-align: middle; line-height: 1;
-        }
-        .font-headline { font-family: 'Manrope', sans-serif; }
-        .bento-card {
-          background: white; border-radius: 16px;
-          box-shadow: 0 10px 40px -10px rgba(24,28,34,0.08);
-          border: 1px solid rgba(0,69,13,0.04); overflow: hidden;
-          transition: all 0.3s cubic-bezier(0.05,0.7,0.1,1.0);
-        }
-        .bento-card:hover { transform: translateY(-3px); box-shadow: 0 20px 50px -15px rgba(24,28,34,0.12); }
-        .progress-bar { height: 8px; border-radius: 99px; background: #f0fdf4; overflow: hidden; }
-        .progress-fill { height: 100%; border-radius: 99px; transition: width 1s ease; }
-        @keyframes staggerIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-        .s1 { animation: staggerIn 0.5s ease 0.05s both; }
-        .s2 { animation: staggerIn 0.5s ease 0.10s both; }
-        .s3 { animation: staggerIn 0.5s ease 0.15s both; }
-        .s4 { animation: staggerIn 0.5s ease 0.20s both; }
-        .s5 { animation: staggerIn 0.5s ease 0.25s both; }
+        .msf { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
+        .card { background:white; border-radius:20px; box-shadow:0 2px 12px rgba(0,0,0,0.06); border:1px solid rgba(0,69,13,0.05); overflow:hidden; }
+        .stat-card { background:white; border-radius:20px; padding:20px; box-shadow:0 2px 12px rgba(0,0,0,0.06); border:1px solid rgba(0,69,13,0.05); transition:transform 0.2s,box-shadow 0.2s; }
+        .stat-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.09); }
+        .progress-bar  { height:8px; border-radius:99px; background:#f0fdf4; overflow:hidden; }
+        .progress-fill { height:100%; border-radius:99px; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin   { to{transform:rotate(360deg)} }
+        @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        .a1{animation:fadeUp .4s ease .04s both} .a2{animation:fadeUp .4s ease .09s both}
+        .a3{animation:fadeUp .4s ease .14s both} .a4{animation:fadeUp .4s ease .19s both}
+        .a5{animation:fadeUp .4s ease .24s both}
+        .live{animation:pulse 2s ease-in-out infinite}
       `}</style>
 
-            {/* Hero */}
-            <section className="mb-10 s1">
-                <span className="text-xs font-bold uppercase block mb-2"
-                    style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
-                    System Administration · Analytics
-                </span>
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                    <h1 className="font-headline font-extrabold tracking-tight"
-                        style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
-                        System <span style={{ color: '#1b5e20' }}>Performance</span>
-                    </h1>
-                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: '#f0fdf4' }}>
-                        <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#16a34a' }} />
-                        <span className="text-sm font-medium" style={{ color: '#14532d', fontFamily: 'Inter, sans-serif' }}>
-                            Colombo Municipal Council
-                        </span>
+            {/* ── Heading ── */}
+            <div className="a1" style={{ marginBottom: 32 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+                    <div>
+                        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: '0 0 6px' }}>
+                            📊 System Administration
+                        </p>
+                        <h1 style={{ fontFamily: 'Manrope,sans-serif', fontSize: 46, fontWeight: 800, color: '#181c22', lineHeight: 1.05, margin: '0 0 4px' }}>
+                            System <span style={{ color: '#00450d' }}>Performance</span>
+                        </h1>
+                        <p style={{ fontSize: 13, color: '#717a6d', margin: 0 }}>
+                            {new Date().toLocaleDateString('en-LK', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                            &nbsp;·&nbsp;Colombo Municipal Council
+                        </p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', borderRadius: 99, background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.12)' }}>
+                        <div className="live" style={{ width: 7, height: 7, borderRadius: '50%', background: '#16a34a' }} />
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#00450d', fontFamily: 'Manrope,sans-serif' }}>Live Analytics</span>
                     </div>
                 </div>
-            </section>
+            </div>
 
             {loading ? (
-                <div className="flex items-center justify-center py-24">
-                    <div className="text-center">
-                        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
-                            style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
-                        <p className="text-sm" style={{ color: '#717a6d' }}>Loading system data...</p>
-                    </div>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
+                    <div style={{ width: 28, height: 28, border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
                 </div>
             ) : (
                 <>
-                    {/* Row 1 — 4 primary stat cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6 s2">
+                    {/* ── Primary KPI strip ── */}
+                    <div className="a2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 20 }}>
                         {[
-                            { label: 'Total Users', value: stats.totalUsers, sub: 'Registered accounts', icon: 'group', color: '#00450d', bg: 'rgba(0,69,13,0.07)' },
-                            { label: 'Total Routes', value: stats.totalRoutes, sub: 'Collection routes', icon: 'route', color: '#1b5e20', bg: 'rgba(27,94,32,0.07)' },
-                            { label: 'Complaints', value: stats.totalComplaints, sub: `${resolutionRate}% resolved`, icon: 'feedback', color: '#b45309', bg: 'rgba(180,83,9,0.07)' },
-                            { label: 'Blockchain Records', value: stats.blockchainRecords, sub: `${blockchainRate}% on-chain`, icon: 'link', color: '#7c3aed', bg: 'rgba(124,58,237,0.07)' },
+                            { label: 'Total Users', value: stats.totalUsers, sub: 'Registered accounts', icon: 'group', color: '#15803d', bg: '#f0fdf4' },
+                            { label: 'Total Routes', value: stats.totalRoutes, sub: 'Collection routes', icon: 'route', color: '#1d4ed8', bg: '#eff6ff' },
+                            { label: 'Complaints', value: stats.totalComplaints, sub: `${resolutionRate}% resolved`, icon: 'feedback', color: '#d97706', bg: '#fffbeb' },
+                            { label: 'Blockchain Records', value: stats.blockchainRecords, sub: `${blockchainRate}% on-chain`, icon: 'link', color: '#7c3aed', bg: '#faf5ff' },
                         ].map(m => (
-                            <div key={m.label} className="bento-card p-6">
-                                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: m.bg }}>
-                                    <span className="material-symbols-outlined" style={{ color: m.color, fontSize: '20px' }}>{m.icon}</span>
+                            <div key={m.label} className="stat-card">
+                                <div style={{ width: 36, height: 36, borderRadius: 10, background: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                                    <span className="msf" style={{ color: m.color, fontSize: 20 }}>{m.icon}</span>
                                 </div>
-                                <p className="font-headline font-extrabold text-3xl tracking-tight mb-1" style={{ color: '#181c22' }}>{m.value}</p>
-                                <p className="font-headline text-xs font-bold uppercase mb-1" style={{ letterSpacing: '0.12em', color: '#94a3b8' }}>{m.label}</p>
-                                <p className="text-xs font-semibold" style={{ color: m.color }}>{m.sub}</p>
+                                <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800, fontSize: 30, color: '#181c22', margin: '0 0 2px', lineHeight: 1 }}>{m.value}</p>
+                                <p style={{ fontSize: 12, fontWeight: 600, color: '#41493e', margin: '0 0 2px', fontFamily: 'Manrope,sans-serif' }}>{m.label}</p>
+                                <p style={{ fontSize: 11, color: m.color, margin: 0, fontWeight: 500 }}>{m.sub}</p>
                             </div>
                         ))}
                     </div>
 
-                    {/* Row 2 — 4 secondary stat cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6 s3">
+                    {/* ── Secondary KPI strip ── */}
+                    <div className="a3" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
                         {[
-                            { label: 'Schedules', value: stats.totalSchedules, icon: 'calendar_month', color: '#1d4ed8' },
-                            { label: 'Waste Reports', value: stats.totalReports, icon: 'report_problem', color: '#dc2626' },
-                            { label: 'Collections', value: stats.totalCollections, icon: 'delete_sweep', color: '#00450d' },
-                            { label: 'Resolution %', value: `${resolutionRate}%`, icon: 'analytics', color: '#0891b2' },
+                            { label: 'Schedules', value: stats.totalSchedules, icon: 'calendar_month', color: '#1d4ed8', bg: '#eff6ff' },
+                            { label: 'Waste Reports', value: stats.totalReports, icon: 'report_problem', color: '#dc2626', bg: '#fef2f2' },
+                            { label: 'Collections', value: stats.totalCollections, icon: 'delete_sweep', color: '#15803d', bg: '#f0fdf4' },
+                            { label: 'Resolution %', value: `${resolutionRate}%`, icon: 'analytics', color: '#0891b2', bg: '#ecfeff' },
                         ].map(m => (
-                            <div key={m.label} className="bento-card p-5">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="material-symbols-outlined" style={{ color: m.color, fontSize: '20px' }}>{m.icon}</span>
+                            <div key={m.label} className="stat-card">
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                    <div style={{ width: 32, height: 32, borderRadius: 8, background: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <span className="msf" style={{ color: m.color, fontSize: 17 }}>{m.icon}</span>
+                                    </div>
                                 </div>
-                                <p className="font-headline font-extrabold text-2xl tracking-tight mb-0.5" style={{ color: '#181c22' }}>{m.value}</p>
-                                <p style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'Manrope, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{m.label}</p>
+                                <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800, fontSize: 26, color: '#181c22', margin: '0 0 2px', lineHeight: 1 }}>{m.value}</p>
+                                <p style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'Manrope,sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{m.label}</p>
                             </div>
                         ))}
                     </div>
 
-                    {/* Row 3 — Charts */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 s4">
+                    {/* ── Charts row ── */}
+                    <div className="a4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
 
-                        {/* Complaints by District */}
-                        <div className="bento-card p-8">
-                            <h3 className="font-headline font-bold text-xl mb-6" style={{ color: '#181c22' }}>
-                                Complaints by District
-                            </h3>
+                        <div className="card" style={{ padding: 24 }}>
+                            <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 16, color: '#181c22', margin: '0 0 20px' }}>Complaints by District</h3>
                             {districtData.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-10 text-center">
-                                    <span className="material-symbols-outlined" style={{ fontSize: '36px', color: '#c4c9c0', display: 'block', marginBottom: '8px' }}>bar_chart</span>
-                                    <p className="text-sm" style={{ color: '#94a3b8' }}>No complaint data yet</p>
-                                </div>
+                                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No complaint data yet</div>
                             ) : (
                                 <ResponsiveContainer width="100%" height={200}>
                                     <BarChart data={districtData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                                         <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'Inter' }} />
                                         <YAxis tick={{ fontSize: 10 }} />
-                                        <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter' }} />
+                                        <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter', fontSize: 12 }} />
                                         <Bar dataKey="value" fill="#00450d" radius={[6, 6, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             )}
                         </div>
 
-                        {/* Complaint Types */}
-                        <div className="bento-card p-8">
-                            <h3 className="font-headline font-bold text-xl mb-6" style={{ color: '#181c22' }}>
-                                Complaint Types
-                            </h3>
+                        <div className="card" style={{ padding: 24 }}>
+                            <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 16, color: '#181c22', margin: '0 0 20px' }}>Complaint Types</h3>
                             {complaintTypeData.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-10 text-center">
-                                    <span className="material-symbols-outlined" style={{ fontSize: '36px', color: '#c4c9c0', display: 'block', marginBottom: '8px' }}>pie_chart</span>
-                                    <p className="text-sm" style={{ color: '#94a3b8' }}>No complaint data yet</p>
-                                </div>
+                                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No complaint data yet</div>
                             ) : (
                                 <ResponsiveContainer width="100%" height={200}>
                                     <PieChart>
                                         <Pie data={complaintTypeData} cx="50%" cy="50%" outerRadius={70} dataKey="value"
-                                            label={({ name, value }) => `${name}: ${value}`}
-                                            labelLine={{ stroke: '#e4ede4' }}>
-                                            {complaintTypeData.map((_, index) => (
-                                                <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                            ))}
+                                            label={({ name, value }) => `${name}: ${value}`} labelLine={{ stroke: '#e4ede4' }}>
+                                            {complaintTypeData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                                         </Pie>
-                                        <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter' }} />
+                                        <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter', fontSize: 12 }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             )}
                         </div>
                     </div>
 
-                    {/* Row 4 — Users by role */}
-                    <div className="bento-card p-8 mb-6 s4">
-                        <h3 className="font-headline font-bold text-xl mb-6" style={{ color: '#181c22' }}>
-                            Users by Role
-                        </h3>
+                    {/* ── Users by role ── */}
+                    <div className="card a4" style={{ padding: 24, marginBottom: 20 }}>
+                        <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 16, color: '#181c22', margin: '0 0 20px' }}>Users by Role</h3>
                         {roleData.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-10 text-center">
-                                <span className="material-symbols-outlined" style={{ fontSize: '36px', color: '#c4c9c0', display: 'block', marginBottom: '8px' }}>group</span>
-                                <p className="text-sm" style={{ color: '#94a3b8' }}>No user data yet</p>
-                            </div>
+                            <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No user data yet</div>
                         ) : (
                             <ResponsiveContainer width="100%" height={220}>
                                 <BarChart data={roleData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                                     <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'Inter' }} />
                                     <YAxis tick={{ fontSize: 10 }} />
-                                    <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter' }} />
+                                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'Inter', fontSize: 12 }} />
                                     <Bar dataKey="value" fill="#1b5e20" radius={[6, 6, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
                     </div>
 
-                    {/* Row 5 — System Health */}
-                    <div className="bento-card p-8 s5">
-                        <div className="flex items-center gap-3 mb-8">
-                            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0fdf4' }}>
-                                <span className="material-symbols-outlined" style={{ color: '#00450d', fontSize: '20px' }}>monitor_heart</span>
+                    {/* ── System Health ── */}
+                    <div className="card a5" style={{ padding: 24 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span className="msf" style={{ color: '#00450d', fontSize: 18 }}>monitor_heart</span>
                             </div>
-                            <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>System Health</h3>
+                            <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 16, color: '#181c22', margin: 0 }}>System Health</h3>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
                             {[
-                                { label: 'Complaint Resolution Rate', value: resolutionRate, color: '#00450d' },
+                                { label: 'Complaint Resolution Rate', value: resolutionRate, color: '#15803d' },
                                 { label: 'Blockchain Verification Rate', value: blockchainRate, color: '#7c3aed' },
                                 { label: 'Collection Completion', value: stats.totalCollections > 0 ? Math.round(((stats.totalCollections - stats.totalCollections * 0.05) / stats.totalCollections) * 100) : 0, color: '#1b5e20' },
                                 { label: 'System Uptime', value: 99, color: '#0891b2' },
                             ].map(m => (
                                 <div key={m.label}>
-                                    <div className="flex justify-between text-sm mb-2">
-                                        <span style={{ color: '#41493e', fontWeight: 500 }}>{m.label}</span>
-                                        <span className="font-bold" style={{ color: m.color }}>{m.value}%</span>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <span style={{ fontSize: 13, color: '#41493e', fontWeight: 500 }}>{m.label}</span>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: m.color }}>{m.value}%</span>
                                     </div>
                                     <div className="progress-bar">
                                         <div className="progress-fill" style={{ width: `${m.value}%`, background: m.color }} />
