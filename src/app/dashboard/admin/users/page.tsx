@@ -198,8 +198,8 @@ export default function AdminUsersPage() {
       if (formData.role === 'supervisor') { profileInsert.assigned_wards = assignedWards.length > 0 ? assignedWards : null; profileInsert.phone = formData.phone || null }
       if (['district_engineer', 'engineer'].includes(formData.role)) profileInsert.phone = formData.phone || null
       if (formData.role === 'contractor') { profileInsert.organisation_name = formData.contractor_name || null; profileInsert.address = formData.contractor_address || null; profileInsert.phone = formData.contractor_phone || null; profileInsert.district = formData.contractor_district || null; profileInsert.business_registration_number = formData.business_registration_number || null }
-      if (formData.role === 'recycling_partner') { profileInsert.organisation_name = formData.facility_name || null; profileInsert.facility_type = facilityTypeValue || null; profileInsert.address = formData.facility_address || null; profileInsert.phone = formData.facility_phone || null; profileInsert.waste_types_accepted = wasteTypes.length > 0 ? wasteTypes : null }
-      if (formData.role === 'driver') { profileInsert.phone = formData.phone || null; profileInsert.license_number = formData.license_number || null; profileInsert.license_expiry = formData.license_expiry || null; profileInsert.contractor_id = formData.contractor_id || null; profileInsert.vehicle_registration = formData.vehicle_registration || null }
+      if (formData.role === 'recycling_partner') { profileInsert.organisation_name = formData.facility_name || null; profileInsert.address = formData.facility_address || null; profileInsert.phone = formData.facility_phone || null; profileInsert.waste_profile = wasteTypes.length > 0 ? wasteTypes.join\(', '\) : null }
+      if (formData.role === 'driver') { profileInsert.phone = formData.phone || null; profileInsert.address = [formData.license_number, formData.vehicle_registration].filter(Boolean).join(' | ') || null }
       const { error: profileError } = await supabase.from('profiles').insert(profileInsert)
       if (profileError) {
         setMessage('Error creating profile: ' + profileError.message)
@@ -624,3 +624,5 @@ export default function AdminUsersPage() {
     </DashboardLayout>
   )
 }
+
+
