@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const ADMIN_NAV = [
-    { label: 'Overview', href: '/dashboard/admin', icon: 'dashboard' },
+    { label: 'Home', href: '/dashboard/admin', icon: 'dashboard' },
     { label: 'Users', href: '/dashboard/admin/users', icon: 'manage_accounts' },
     { label: 'Billing', href: '/dashboard/admin/billing', icon: 'payments' },
     { label: 'Billing Rates', href: '/dashboard/admin/billing-rates', icon: 'tune' },
