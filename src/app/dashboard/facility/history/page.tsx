@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const FACILITY_NAV = [
-    { label: 'Overview', href: '/dashboard/facility', icon: 'dashboard' },
+    { label: 'Home', href: '/dashboard/facility', icon: 'dashboard' },
     { label: 'New Intake', href: '/dashboard/facility/log', icon: 'add_circle' },
     { label: 'History', href: '/dashboard/facility/history', icon: 'history' },
     { label: 'Analytics', href: '/dashboard/facility/analytics', icon: 'bar_chart' },
