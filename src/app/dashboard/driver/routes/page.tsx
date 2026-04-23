@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
+import { logCollectionOnChain } from '@/lib/blockchain'
 
 const DRIVER_NAV = [
   { label: 'Overview', href: '/dashboard/driver', icon: 'dashboard' },
@@ -46,6 +47,7 @@ interface Stop {
   is_commercial: boolean
   notes: string | null
   bin_count: number | null
+  blockchain_tx?: string | null
 }
 
 interface Schedule {
@@ -131,16 +133,37 @@ export default function DriverRoutesPage() {
     if (!binModal) return
     setUpdatingStop(binModal.id)
     const supabase = createClient()
+
+    // Update collection stop as completed
     await supabase.from('collection_stops').update({
       status: 'completed',
       completed_at: new Date().toISOString(),
       bin_count: binCount ? parseInt(binCount) : null,
     }).eq('id', binModal.id)
+
     setStops(prev => prev.map(s => s.id === binModal.id
       ? { ...s, status: 'completed', completed_at: new Date().toISOString(), bin_count: binCount ? parseInt(binCount) : null }
       : s
     ))
-    showToast('Stop marked as collected')
+
+    // Log on blockchain
+    try {
+      const tx = await logCollectionOnChain(
+        route?.id || binModal.id,
+        profile?.id || '',
+        'completed'
+      )
+      if (tx) {
+        await supabase.from('collection_stops').update({ blockchain_tx: tx }).eq('id', binModal.id)
+        setStops(prev => prev.map(s => s.id === binModal.id ? { ...s, blockchain_tx: tx } : s))
+        showToast('Collected & recorded on blockchain ✓')
+      } else {
+        showToast('Stop marked as collected')
+      }
+    } catch {
+      showToast('Stop marked as collected')
+    }
+
     setBinModal(null)
     setBinCount('')
     setUpdatingStop(null)
@@ -262,12 +285,18 @@ export default function DriverRoutesPage() {
                 />
                 <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Enter the number of bins collected at this stop.</p>
               </div>
+              <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="msf" style={{ fontSize: 15, color: '#00450d' }}>link</span>
+                <p style={{ fontSize: 11, color: '#41493e', margin: 0 }}>This collection will be recorded on the Polygon Amoy blockchain.</p>
+              </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={confirmCompleted}
                   disabled={!!updatingStop}
-                  style={{ flex: 2, padding: 12, borderRadius: 10, background: '#00450d', color: 'white', border: 'none', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: updatingStop ? 0.6 : 1 }}>
-                  Confirm Collection
+                  style={{ flex: 2, padding: 12, borderRadius: 10, background: '#00450d', color: 'white', border: 'none', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: updatingStop ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  {updatingStop ? (
+                    <><div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Recording…</>
+                  ) : 'Confirm Collection'}
                 </button>
                 <button
                   onClick={() => setBinModal(null)}
@@ -468,6 +497,12 @@ export default function DriverRoutesPage() {
                         <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 99, background: '#f0fdf4', color: '#00450d', fontWeight: 700, fontFamily: 'Manrope,sans-serif' }}>
                           {stop.bin_count} bins
                         </span>
+                      )}
+                      {isDone && stop.blockchain_tx && (
+                        <a href={`https://amoy.polygonscan.com/tx/${stop.blockchain_tx}`} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 10, padding: '1px 7px', borderRadius: 99, background: '#faf5ff', color: '#7c3aed', fontWeight: 700, fontFamily: 'Manrope,sans-serif', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <span className="msf" style={{ fontSize: 11 }}>link</span>Chain ↗
+                        </a>
                       )}
                       {isSkipped && stop.skip_reason && (
                         <span style={{ fontSize: 11, color: '#ba1a1a', fontStyle: 'italic' }}>
