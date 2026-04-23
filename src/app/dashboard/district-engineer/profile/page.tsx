@@ -3,24 +3,25 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
+import { CMC_DISTRICTS } from '@/lib/districts'
 
-const RESIDENT_NAV = [
-    { label: 'Home', href: '/dashboard/resident', icon: 'dashboard', section: 'Menu' },
-    { label: 'Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today', section: 'Menu' },
-    { label: 'Track Vehicle', href: '/dashboard/resident/tracking', icon: 'location_on', section: 'Menu' },
-    { label: 'Report Issue', href: '/dashboard/resident/report', icon: 'report_problem', section: 'Menu' },
-    { label: 'Feedback', href: '/dashboard/resident/feedback', icon: 'star', section: 'Menu' },
-    { label: 'My Profile', href: '/dashboard/resident/profile', icon: 'person', section: 'Menu' },
+const DE_NAV = [
+    { label: 'Home', href: '/dashboard/district-engineer', icon: 'dashboard' },
+    { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
+    { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
+    { label: 'Staff', href: '/dashboard/district-engineer/staff', icon: 'groups' },
+    { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'analytics' },
+    { label: 'Profile', href: '/dashboard/district-engineer/profile', icon: 'person' },
 ]
 
-export default function ResidentProfilePage() {
+export default function DEProfilePage() {
     const [profile, setProfile] = useState<any>(null)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
     const [activeTab, setActiveTab] = useState<'account' | 'profile' | 'password'>('account')
 
-    const [formData, setFormData] = useState({ full_name: '', phone: '', address: '' })
+    const [formData, setFormData] = useState({ full_name: '', phone: '', district: '' })
     const [pwData, setPwData] = useState({ newPw: '', confirm: '' })
     const [showPw, setShowPw] = useState({ newPw: false, confirm: false })
 
@@ -33,7 +34,7 @@ export default function ResidentProfilePage() {
         const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         if (p) {
             setProfile({ ...p, email: user.email })
-            setFormData({ full_name: p.full_name || '', phone: p.phone || '', address: p.address || '' })
+            setFormData({ full_name: p.full_name || '', phone: p.phone || '', district: p.district || '' })
         }
         setLoading(false)
     }
@@ -45,7 +46,6 @@ export default function ResidentProfilePage() {
         const { error } = await supabase.from('profiles').update({
             full_name: formData.full_name,
             phone: formData.phone || null,
-            address: formData.address || null,
         }).eq('id', profile.id)
         setSaving(false)
         if (error) setMessage({ type: 'error', text: error.message })
@@ -66,7 +66,7 @@ export default function ResidentProfilePage() {
 
     const initials = profile?.full_name
         ? profile.full_name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
-        : 'R'
+        : 'DE'
 
     const pwScore = [
         pwData.newPw.length >= 8,
@@ -76,8 +76,7 @@ export default function ResidentProfilePage() {
     ].filter(Boolean).length
 
     return (
-        <DashboardLayout role="Resident" userName={profile?.full_name || ''} navItems={RESIDENT_NAV}
-            primaryAction={{ label: 'View Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' }}>
+        <DashboardLayout role="District Engineer" userName={profile?.full_name || ''} navItems={DE_NAV}>
             <style>{`
         .ms { font-family:'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; display:inline-block; vertical-align:middle; line-height:1; }
         .profile-card { background:white; border-radius:20px; padding:32px; border:1px solid rgba(0,69,13,0.06); box-shadow:0 4px 24px rgba(0,0,0,0.05); }
@@ -88,6 +87,8 @@ export default function ResidentProfilePage() {
         .field-input { width:100%; padding:12px 16px; border:1.5px solid #e4e9e0; border-radius:12px; font-size:14px; font-family:'Inter',sans-serif; color:#181c22; background:#fafbf9; outline:none; transition:border-color 0.2s,box-shadow 0.2s; box-sizing:border-box; }
         .field-input:focus { border-color:#00450d; box-shadow:0 0 0 3px rgba(0,69,13,0.08); background:white; }
         .field-input:disabled { background:#f4f6f3; color:#a0a89b; cursor:not-allowed; }
+        .select-input { width:100%; padding:12px 16px; border:1.5px solid #e4e9e0; border-radius:12px; font-size:14px; font-family:'Inter',sans-serif; color:#181c22; background:#fafbf9; outline:none; cursor:pointer; appearance:none; box-sizing:border-box; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23717a6d'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; background-size:14px; }
+        .select-input:disabled { background:#f4f6f3; color:#a0a89b; cursor:not-allowed; }
         .save-btn { background:#00450d; color:white; border:none; border-radius:12px; padding:13px 28px; font-size:14px; font-weight:600; font-family:'Manrope',sans-serif; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:8px; }
         .save-btn:hover:not(:disabled) { background:#005c12; transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,69,13,0.25); }
         .save-btn:disabled { opacity:0.6; cursor:not-allowed; }
@@ -99,7 +100,7 @@ export default function ResidentProfilePage() {
         .info-row:last-child { border-bottom:none; }
         .info-label { font-size:13px; color:#717a6d; font-family:'Inter',sans-serif; width:160px; flex-shrink:0; }
         .info-value { font-size:14px; color:#181c22; font-family:'Inter',sans-serif; font-weight:500; }
-        .badge-resident { background:#fdf2f8; color:#ec4899; border-radius:8px; padding:4px 12px; font-size:12px; font-weight:700; font-family:'Manrope',sans-serif; letter-spacing:0.05em; }
+        .badge-de { background:#fffbeb; color:#d97706; border-radius:8px; padding:4px 12px; font-size:12px; font-weight:700; font-family:'Manrope',sans-serif; letter-spacing:0.05em; }
         .badge-active { background:#f0fdf4; color:#166534; border-radius:8px; padding:4px 12px; font-size:12px; font-weight:700; font-family:'Manrope',sans-serif; }
         .section-title { font-size:11px; font-weight:700; color:#a0a89b; letter-spacing:0.08em; text-transform:uppercase; font-family:'Manrope',sans-serif; margin-bottom:16px; }
         .strength-bar { height:4px; border-radius:99px; flex:1; background:#e4e9e0; overflow:hidden; }
@@ -113,16 +114,16 @@ export default function ResidentProfilePage() {
 
                 {/* Header */}
                 <div className="a1" style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 32 }}>
-                    <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg,#00450d,#1b5e20)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 26, fontWeight: 700, fontFamily: 'Manrope', flexShrink: 0 }}>
+                    <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg,#d97706,#b45309)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 26, fontWeight: 700, fontFamily: 'Manrope', flexShrink: 0 }}>
                         {initials}
                     </div>
                     <div>
                         <div style={{ fontSize: 22, fontWeight: 800, color: '#181c22', fontFamily: 'Manrope', lineHeight: 1.2 }}>
-                            {loading ? 'Loading…' : profile?.full_name || 'Resident'}
+                            {loading ? 'Loading…' : profile?.full_name || 'District Engineer'}
                         </div>
                         <div style={{ fontSize: 14, color: '#717a6d', fontFamily: 'Inter', marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span>{profile?.email}</span>
-                            <span className="badge-resident">RESIDENT</span>
+                            <span className="badge-de">DISTRICT ENGINEER</span>
                         </div>
                     </div>
                 </div>
@@ -160,15 +161,11 @@ export default function ResidentProfilePage() {
                             </div>
                             <div className="info-row">
                                 <span className="info-label">Role</span>
-                                <span className="badge-resident">RESIDENT</span>
+                                <span className="badge-de">DISTRICT ENGINEER</span>
                             </div>
                             <div className="info-row">
-                                <span className="info-label">District</span>
+                                <span className="info-label">Assigned District</span>
                                 <span className="info-value">{profile?.district || '—'}</span>
-                            </div>
-                            <div className="info-row">
-                                <span className="info-label">Ward</span>
-                                <span className="info-value">{profile?.ward || '—'}</span>
                             </div>
                             <div className="info-row">
                                 <span className="info-label">Approval Status</span>
@@ -187,7 +184,7 @@ export default function ResidentProfilePage() {
                         </div>
 
                         <p className="section-title">Personal Details</p>
-                        <div className="acc-info-card" style={{ marginBottom: 20 }}>
+                        <div className="acc-info-card">
                             <div className="info-row">
                                 <span className="info-label">Full Name</span>
                                 <span className="info-value">{profile?.full_name || '—'}</span>
@@ -196,18 +193,9 @@ export default function ResidentProfilePage() {
                                 <span className="info-label">Phone</span>
                                 <span className="info-value">{profile?.phone || '—'}</span>
                             </div>
-                            <div className="info-row">
-                                <span className="info-label">Address</span>
-                                <span className="info-value">{profile?.address || '—'}</span>
-                            </div>
                         </div>
 
-                        <div style={{ padding: '12px 16px', borderRadius: 10, background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)', display: 'flex', gap: 10, marginBottom: 20 }}>
-                            <span className="ms" style={{ fontSize: 16, color: '#00450d', flexShrink: 0, marginTop: 1 }}>info</span>
-                            <p style={{ fontSize: 12, color: '#41493e', lineHeight: 1.6, margin: 0, fontFamily: 'Inter' }}>District and ward are assigned by your CMC admin and cannot be self-edited. Contact your district office to request changes.</p>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 10 }}>
+                        <div style={{ marginTop: 20, display: 'flex', gap: 10 }}>
                             <button className="save-btn" onClick={() => setActiveTab('profile')}>
                                 <span className="ms" style={{ fontSize: 18 }}>edit</span>Edit Profile
                             </button>
@@ -226,7 +214,7 @@ export default function ResidentProfilePage() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
                                 <div>
                                     <label className="field-label">Full Name</label>
-                                    <input className="field-input" value={formData.full_name} onChange={e => setFormData(p => ({ ...p, full_name: e.target.value }))} placeholder="Your full name" required />
+                                    <input className="field-input" value={formData.full_name} onChange={e => setFormData(p => ({ ...p, full_name: e.target.value }))} placeholder="e.g. Kasun Perera" required />
                                 </div>
                                 <div>
                                     <label className="field-label">Email Address</label>
@@ -234,20 +222,15 @@ export default function ResidentProfilePage() {
                                 </div>
                                 <div>
                                     <label className="field-label">Phone Number</label>
-                                    <input className="field-input" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} placeholder="+94 7X XXX XXXX" />
+                                    <input className="field-input" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} placeholder="+94 77 000 0000" />
                                 </div>
                                 <div>
-                                    <label className="field-label">Home Address</label>
-                                    <input className="field-input" value={formData.address} onChange={e => setFormData(p => ({ ...p, address: e.target.value }))} placeholder="Your street address" />
-                                </div>
-                                <div>
-                                    <label className="field-label">District</label>
-                                    <input className="field-input" value={profile?.district || ''} disabled />
-                                    <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 5, fontFamily: 'Inter' }}>Assigned by CMC admin — cannot be self-edited.</p>
-                                </div>
-                                <div>
-                                    <label className="field-label">Ward</label>
-                                    <input className="field-input" value={profile?.ward || 'Not assigned'} disabled />
+                                    <label className="field-label">Assigned District</label>
+                                    <select className="select-input" value={formData.district} disabled>
+                                        <option value="">—</option>
+                                        {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                                    </select>
+                                    <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 5, fontFamily: 'Inter' }}>District is assigned by CMC admin and cannot be self-edited.</p>
                                 </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
