@@ -428,19 +428,6 @@ export default function DashboardLayout({
                     <span className={`sb-brand-text${collapsed ? ' hidden' : ''}`}>EcoLedger</span>
                 </div>
 
-                {primaryAction && (
-                    collapsed ? (
-                        <Link href={primaryAction.href} className="sb-action-icon" title={primaryAction.label}>
-                            <span className="ms">{primaryAction.icon || 'add'}</span>
-                        </Link>
-                    ) : (
-                        <Link href={primaryAction.href} className="sb-action" onClick={() => setMobileOpen(false)}>
-                            <span className="ms">{primaryAction.icon || 'add'}</span>
-                            {primaryAction.label}
-                        </Link>
-                    )
-                )}
-
                 <div className="sb-scroll">
                     {ungrouped.length > 0 && (
                         <>
