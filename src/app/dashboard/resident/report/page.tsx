@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 import { logComplaintOnChain } from '@/lib/blockchain'
+import Script from 'next/script'
 
 const RESIDENT_NAV = [
     { label: 'Home', href: '/dashboard/resident', icon: 'dashboard', section: 'Menu' },
@@ -78,6 +79,7 @@ export default function ResidentReportPage() {
     const [saving, setSaving] = useState(false)
     const [success, setSuccess] = useState(false)
     const [errorMsg, setErrorMsg] = useState('')
+    const [mapsLoaded, setMapsLoaded] = useState(false)
 
     // Form state
     const [selectedCategory, setSelectedCategory] = useState('')
@@ -107,14 +109,23 @@ export default function ResidentReportPage() {
 
     useEffect(() => { loadData() }, [])
 
+    // Init map when showMapPicker becomes true AND maps is loaded
     useEffect(() => {
-        if (showMapPicker && mapRef.current && window.google) {
-            initMapPicker()
+        if (showMapPicker && mapsLoaded) {
+            setTimeout(() => initMapPicker(), 100)
         }
-    }, [showMapPicker])
+    }, [showMapPicker, mapsLoaded])
 
     function initMapPicker() {
-        if (!mapRef.current || !window.google) return
+        if (!mapRef.current) return
+        if (!window.google) {
+            // Script not ready yet — retry
+            setTimeout(initMapPicker, 300)
+            return
+        }
+        // Don't re-init if already initialised
+        if (mapInstanceRef.current) return
+
         const center = { lat: latitude || 6.9271, lng: longitude || 79.8612 }
         const map = new window.google.maps.Map(mapRef.current, {
             center, zoom: 14,
@@ -133,7 +144,6 @@ export default function ResidentReportPage() {
             const lng = e.latLng.lng()
             setLatitude(lat)
             setLongitude(lng)
-            // Reverse geocode
             const geocoder = new window.google.maps.Geocoder()
             geocoder.geocode({ location: { lat, lng } }, (results: any, status: any) => {
                 if (status === 'OK' && results[0]) {
@@ -219,6 +229,8 @@ export default function ResidentReportPage() {
         setLocationAddress(''); setPhotoFile(null); setPhotoPreview(null)
         setLatitude(null); setLongitude(null); setLocationError('')
         setErrorMsg(''); setShowMapPicker(false)
+        mapInstanceRef.current = null
+        markerRef.current = null
     }
 
     async function handleSubmit(e: React.FormEvent) {
@@ -323,6 +335,17 @@ export default function ResidentReportPage() {
     return (
         <DashboardLayout role="Resident" userName={profile?.full_name || ''} navItems={RESIDENT_NAV}
             primaryAction={{ label: 'View Schedule', href: '/dashboard/resident/schedules', icon: 'calendar_today' }}>
+
+            {/* ── Google Maps Script ── */}
+            <Script
+                src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`}
+                strategy="lazyOnload"
+                onLoad={() => {
+                    setMapsLoaded(true)
+                    if (showMapPicker) setTimeout(() => initMapPicker(), 100)
+                }}
+            />
+
             <style>{`
         .msf{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;vertical-align:middle;line-height:1}
         .msf-fill{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;vertical-align:middle;line-height:1}
@@ -434,7 +457,13 @@ export default function ResidentReportPage() {
                                                     <button key={item.value} type="button"
                                                         className={`cat-btn ${isOn ? 'on' : ''}`}
                                                         style={isOn ? { borderColor: item.color, background: item.bg } : {}}
-                                                        onClick={() => { setSelectedCategory(isOn ? '' : item.value); setCustomCategory(''); setLocationAddress(''); setLocationError(''); setShowMapPicker(false) }}>
+                                                        onClick={() => {
+                                                            setSelectedCategory(isOn ? '' : item.value)
+                                                            setCustomCategory(''); setLocationAddress(''); setLocationError('')
+                                                            setShowMapPicker(false)
+                                                            mapInstanceRef.current = null
+                                                            markerRef.current = null
+                                                        }}>
                                                         <span className="msf" style={{ fontSize: 15, color: isOn ? item.color : '#94a3b8', flexShrink: 0 }}>{item.icon}</span>
                                                         <span style={{ fontSize: 11, fontWeight: 700, color: isOn ? item.color : '#374151', fontFamily: 'Manrope,sans-serif', lineHeight: 1.3 }}>{item.label}</span>
                                                     </button>
@@ -471,8 +500,13 @@ export default function ResidentReportPage() {
                                 {/* Map picker toggle */}
                                 <div>
                                     <button type="button" onClick={() => {
-                                        setShowMapPicker(v => !v)
-                                        setTimeout(() => { if (!showMapPicker && mapRef.current && window.google) initMapPicker() }, 100)
+                                        const next = !showMapPicker
+                                        setShowMapPicker(next)
+                                        if (next) {
+                                            mapInstanceRef.current = null
+                                            markerRef.current = null
+                                            setTimeout(() => initMapPicker(), 150)
+                                        }
                                     }}
                                         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 10, border: '1.5px solid rgba(186,26,26,0.25)', background: showMapPicker ? 'rgba(186,26,26,0.06)' : 'white', color: '#ba1a1a', fontSize: 13, fontWeight: 600, fontFamily: 'Manrope,sans-serif', cursor: 'pointer' }}>
                                         <span className="msf" style={{ fontSize: 16 }}>map</span>
@@ -480,15 +514,18 @@ export default function ResidentReportPage() {
                                     </button>
                                     {showMapPicker && (
                                         <div className="map-picker slide-in" ref={mapRef}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: 13 }}>
-                                                Loading map…
-                                            </div>
+                                            {!mapsLoaded && (
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8, color: '#94a3b8', fontSize: 13 }}>
+                                                    <div style={{ width: 16, height: 16, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                                                    Loading map…
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                     {latitude && longitude && (
                                         <p style={{ fontSize: 11, color: '#00450d', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
                                             <span className="msf" style={{ fontSize: 13 }}>location_on</span>
-                                            {latitude.toFixed(5)}, {longitude.toFixed(5)}
+                                            {latitude.toFixed(5)}, {longitude?.toFixed(5)}
                                         </p>
                                     )}
                                 </div>
