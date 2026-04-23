@@ -6,13 +6,13 @@ import DashboardLayout from '@/components/DashboardLayout'
 
 const DRIVER_NAV = [
   { label: 'Overview', href: '/dashboard/driver', icon: 'dashboard' },
-  { label: 'My Route', href: '/dashboard/driver/routes', icon: 'route' },
-  { label: 'Collections', href: '/dashboard/driver/collections', icon: 'inventory_2' },
-  { label: 'Location', href: '/dashboard/driver/location', icon: 'gps_fixed' },
-  { label: 'Incidents', href: '/dashboard/driver/incidents', icon: 'warning' },
-  { label: 'Breakdown', href: '/dashboard/driver/breakdown', icon: 'build' },
-  { label: 'Fuel Log', href: '/dashboard/driver/fuel-log', icon: 'local_gas_station' },
+  { label: 'My Routes', href: '/dashboard/driver/routes', icon: 'route' },
+  { label: 'Collections', href: '/dashboard/driver/collections', icon: 'local_shipping' },
   { label: 'Disposal', href: '/dashboard/driver/disposal', icon: 'delete_sweep' },
+  { label: 'Fuel Log', href: '/dashboard/driver/fuel-log', icon: 'local_gas_station' },
+  { label: 'Breakdown', href: '/dashboard/driver/breakdown', icon: 'car_crash' },
+  { label: 'Incidents', href: '/dashboard/driver/incidents', icon: 'warning' },
+  { label: 'Location', href: '/dashboard/driver/location', icon: 'location_on' },
 ]
 
 export default function DriverLocationPage() {
