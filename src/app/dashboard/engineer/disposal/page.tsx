@@ -4,14 +4,12 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
-const DE_NAV = [
-    { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
-    { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
-    { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
-    { label: 'Complaints', href: '/dashboard/district-engineer/complaints', icon: 'feedback' },
-    { label: 'Waste Reports', href: '/dashboard/district-engineer/waste-reports', icon: 'report' },
-    { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
-    { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+const ENGINEER_NAV = [
+    { label: 'Overview', href: '/dashboard/engineer', icon: 'dashboard' },
+    { label: 'Routes', href: '/dashboard/engineer/routes', icon: 'route' },
+    { label: 'Complaints', href: '/dashboard/engineer/complaints', icon: 'feedback' },
+    { label: 'Waste Reports', href: '/dashboard/engineer/waste-reports', icon: 'report' },
+    { label: 'Profile', href: '/dashboard/engineer/profile', icon: 'person' },
 ]
 
 function statusStyle(status: string) {
