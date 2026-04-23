@@ -127,7 +127,7 @@ export default function DEDisposalPage() {
         <DashboardLayout
             role="District Engineer"
             userName={profile?.full_name || ''}
-            navItems={DE_NAV}
+            navItems={ENGINEER_NAV}
             primaryAction={{ label: 'New Schedule', href: '/dashboard/district-engineer/schedules/new', icon: 'add' }}
         >
             <style>{`
