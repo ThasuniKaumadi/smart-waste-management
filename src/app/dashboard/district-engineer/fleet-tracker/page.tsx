@@ -5,11 +5,10 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const DE_NAV = [
-    { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
+    { label: 'Home', href: '/dashboard/district-engineer', icon: 'dashboard' },
     { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
     { label: 'History', href: '/dashboard/district-engineer/collection-history', icon: 'history' },
     { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
-    { label: 'Fleet Tracker', href: '/dashboard/district-engineer/fleet-tracker', icon: 'gps_fixed' },
     { label: 'Heatmap', href: '/dashboard/district-engineer/heatmap', icon: 'thermostat' },
     { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'report_problem' },
     { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
@@ -18,6 +17,7 @@ const DE_NAV = [
     { label: 'Compliance', href: '/dashboard/district-engineer/compliance', icon: 'verified' },
     { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
     { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+    { label: 'Profile', href: '/dashboard/district-engineer/profile', icon: 'person' },
 ]
 
 interface ActiveRoute {

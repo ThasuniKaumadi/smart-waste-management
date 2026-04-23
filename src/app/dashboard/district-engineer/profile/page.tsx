@@ -6,11 +6,18 @@ import DashboardLayout from '@/components/DashboardLayout'
 import { CMC_DISTRICTS } from '@/lib/districts'
 
 const DE_NAV = [
-    { label: 'Home', href: '/dashboard/district-engineer', icon: 'dashboard' },
-    { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
+    { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
     { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
-    { label: 'Staff', href: '/dashboard/district-engineer/staff', icon: 'groups' },
-    { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'analytics' },
+    { label: 'History', href: '/dashboard/district-engineer/collection-history', icon: 'history' },
+    { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
+    { label: 'Heatmap', href: '/dashboard/district-engineer/heatmap', icon: 'thermostat' },
+    { label: 'Reports', href: '/dashboard/district-engineer/reports', icon: 'report_problem' },
+    { label: 'Incidents', href: '/dashboard/district-engineer/incidents', icon: 'warning' },
+    { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
+    { label: 'Bin Requests', href: '/dashboard/district-engineer/bin-requests', icon: 'delete_outline' },
+    { label: 'Compliance', href: '/dashboard/district-engineer/compliance', icon: 'verified' },
+    { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
+    { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
     { label: 'Profile', href: '/dashboard/district-engineer/profile', icon: 'person' },
 ]
 

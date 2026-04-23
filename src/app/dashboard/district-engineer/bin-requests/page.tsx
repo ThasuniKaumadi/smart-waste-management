@@ -6,7 +6,7 @@ import DashboardLayout from '@/components/DashboardLayout'
 import { sendNotification } from '@/lib/notify'
 
 const DE_NAV = [
-    { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
+    { label: 'Home', href: '/dashboard/district-engineer', icon: 'dashboard' },
     { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
     { label: 'History', href: '/dashboard/district-engineer/collection-history', icon: 'history' },
     { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
@@ -16,9 +16,9 @@ const DE_NAV = [
     { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
     { label: 'Bin Requests', href: '/dashboard/district-engineer/bin-requests', icon: 'delete_outline' },
     { label: 'Compliance', href: '/dashboard/district-engineer/compliance', icon: 'verified' },
-    { label: 'Commercial', href: '/dashboard/district-engineer/commercial', icon: 'storefront' },
     { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
     { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+    { label: 'Profile', href: '/dashboard/district-engineer/profile', icon: 'person' },
 ]
 
 const STATUS_STYLE: Record<string, { color: string; bg: string; label: string }> = {

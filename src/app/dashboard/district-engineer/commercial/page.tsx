@@ -16,9 +16,9 @@ const DE_NAV = [
     { label: 'Performance', href: '/dashboard/district-engineer/performance', icon: 'analytics' },
     { label: 'Bin Requests', href: '/dashboard/district-engineer/bin-requests', icon: 'delete_outline' },
     { label: 'Compliance', href: '/dashboard/district-engineer/compliance', icon: 'verified' },
-    { label: 'Commercial', href: '/dashboard/district-engineer/commercial', icon: 'storefront' },
     { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
     { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+    { label: 'Profile', href: '/dashboard/district-engineer/profile', icon: 'person' },
 ]
 
 const WASTE_TYPES = [

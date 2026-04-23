@@ -17,6 +17,7 @@ const DE_NAV = [
     { label: 'Compliance', href: '/dashboard/district-engineer/compliance', icon: 'verified' },
     { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
     { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+    { label: 'Profile', href: '/dashboard/district-engineer/profile', icon: 'person' },
 ]
 
 const COMPLAINT_TYPES: Record<string, { label: string; icon: string; color: string; bg: string }> = {

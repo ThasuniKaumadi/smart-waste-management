@@ -6,7 +6,7 @@ import DashboardLayout from '@/components/DashboardLayout'
 import Link from 'next/link'
 
 const DE_NAV = [
-  { label: 'Overview', href: '/dashboard/district-engineer', icon: 'dashboard' },
+  { label: 'Home', href: '/dashboard/district-engineer', icon: 'dashboard' },
   { label: 'Schedules', href: '/dashboard/district-engineer/schedules', icon: 'calendar_month' },
   { label: 'History', href: '/dashboard/district-engineer/collection-history', icon: 'history' },
   { label: 'Routes', href: '/dashboard/district-engineer/routes', icon: 'route' },
@@ -18,6 +18,7 @@ const DE_NAV = [
   { label: 'Compliance', href: '/dashboard/district-engineer/compliance', icon: 'verified' },
   { label: 'Announcements', href: '/dashboard/district-engineer/announcements', icon: 'campaign' },
   { label: 'Disposal', href: '/dashboard/district-engineer/disposal', icon: 'delete_sweep' },
+  { label: 'Profile', href: '/dashboard/district-engineer/profile', icon: 'person' },
 ]
 
 function getGreeting() {
