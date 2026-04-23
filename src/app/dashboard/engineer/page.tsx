@@ -12,6 +12,7 @@ const ENGINEER_NAV = [
   { label: 'Routes', href: '/dashboard/engineer/routes', icon: 'route' },
   { label: 'Complaints', href: '/dashboard/engineer/complaints', icon: 'feedback' },
   { label: 'Waste Reports', href: '/dashboard/engineer/waste-reports', icon: 'report' },
+  { label: 'Analytics', href: '/dashboard/engineer/analytics', icon: 'analytics' },
   { label: 'Profile', href: '/dashboard/engineer/profile', icon: 'person' },
 ]
 
