@@ -65,6 +65,8 @@ interface Profile {
   id: string; full_name: string; role: string; district: string
   is_approved: boolean; created_at: string
   organisation_name?: string; phone?: string
+  address?: string; business_registration_number?: string
+  assigned_wards?: string[]; waste_profile?: string
 }
 
 function WardMultiSelect({ selected, onChange, district }: {
@@ -128,6 +130,22 @@ const EMPTY_FORM = {
   license_number: '', license_expiry: '', vehicle_registration: '',
 }
 
+// Edit data covers all role-specific fields
+const EMPTY_EDIT = {
+  role: '',
+  // person roles (DE, engineer, supervisor, driver)
+  firstName: '', lastName: '',
+  phone: '',
+  district: '',
+  assigned_wards: [] as string[],
+  // driver
+  license_number: '', vehicle_registration: '',
+  // contractor
+  organisation_name: '', address: '', business_registration_number: '',
+  // recycling_partner
+  facility_type: '', waste_types: [] as string[],
+}
+
 export default function AdminUsersPage() {
   const [profile, setProfile] = useState<any>(null)
   const [users, setUsers] = useState<Profile[]>([])
@@ -141,7 +159,7 @@ export default function AdminUsersPage() {
   const [assignedWards, setAssignedWards] = useState<string[]>([])
   const [wasteTypes, setWasteTypes] = useState<string[]>([])
   const [editingUser, setEditingUser] = useState<Profile | null>(null)
-  const [editData, setEditData] = useState({ full_name: '', district: '', phone: '', organisation_name: '', role: '' })
+  const [editData, setEditData] = useState(EMPTY_EDIT)
   const [formData, setFormData] = useState(EMPTY_FORM)
 
   useEffect(() => { loadData() }, [])
@@ -163,7 +181,39 @@ export default function AdminUsersPage() {
 
   function openEdit(user: Profile) {
     setEditingUser(user)
-    setEditData({ full_name: user.full_name || '', district: user.district || '', phone: (user as any).phone || '', organisation_name: user.organisation_name || '', role: user.role || '' })
+    const role = user.role || ''
+    const isPersonRole = ['district_engineer', 'engineer', 'supervisor', 'driver'].includes(role)
+
+    // Split full_name into first/last for person roles
+    const nameParts = (user.full_name || '').trim().split(' ')
+    const firstName = nameParts[0] || ''
+    const lastName = nameParts.slice(1).join(' ') || ''
+
+    // Parse driver licence/vehicle from address field (stored as "B1234567 | WP CAB-1234")
+    const addressParts = (user.address || '').split(' | ')
+    const license_number = role === 'driver' ? (addressParts[0] || '') : ''
+    const vehicle_registration = role === 'driver' ? (addressParts[1] || '') : ''
+
+    // Parse waste types from comma-separated waste_profile
+    const waste_types = user.waste_profile
+      ? user.waste_profile.split(',').map(s => s.trim()).filter(Boolean)
+      : []
+
+    setEditData({
+      role,
+      firstName: isPersonRole ? firstName : '',
+      lastName: isPersonRole ? lastName : '',
+      phone: (user as any).phone || '',
+      district: user.district || '',
+      assigned_wards: (user as any).assigned_wards || [],
+      license_number,
+      vehicle_registration,
+      organisation_name: user.organisation_name || '',
+      address: user.address || '',
+      business_registration_number: (user as any).business_registration_number || '',
+      facility_type: '',
+      waste_types,
+    })
   }
 
   async function handleEditUser(e: React.FormEvent) {
@@ -171,7 +221,52 @@ export default function AdminUsersPage() {
     if (!editingUser) return
     setSaving(true)
     const supabase = createClient()
-    const { error } = await supabase.from('profiles').update({ full_name: editData.full_name, district: editData.district || null, phone: editData.phone || null, organisation_name: editData.organisation_name || null, role: editData.role }).eq('id', editingUser.id)
+
+    const role = editData.role
+    const isPersonRole = ['district_engineer', 'engineer', 'supervisor', 'driver'].includes(role)
+
+    const fullName = isPersonRole
+      ? `${editData.firstName.trim()} ${editData.lastName.trim()}`.trim()
+      : role === 'contractor'
+        ? editData.organisation_name
+        : role === 'recycling_partner'
+          ? editData.organisation_name
+          : editData.firstName // fallback for resident/admin etc
+
+    const update: any = { role, full_name: fullName }
+
+    if (['district_engineer', 'supervisor'].includes(role)) {
+      update.district = editData.district || null
+    }
+    if (['district_engineer', 'engineer', 'supervisor', 'driver'].includes(role)) {
+      update.phone = editData.phone || null
+    }
+    if (role === 'supervisor') {
+      update.assigned_wards = editData.assigned_wards.length > 0 ? editData.assigned_wards : null
+    }
+    if (role === 'driver') {
+      update.address = [editData.license_number, editData.vehicle_registration].filter(Boolean).join(' | ') || null
+      update.phone = editData.phone || null
+    }
+    if (role === 'contractor') {
+      update.organisation_name = editData.organisation_name || null
+      update.address = editData.address || null
+      update.phone = editData.phone || null
+      update.district = editData.district || null
+      update.business_registration_number = editData.business_registration_number || null
+    }
+    if (role === 'recycling_partner') {
+      update.organisation_name = editData.organisation_name || null
+      update.address = editData.address || null
+      update.phone = editData.phone || null
+      update.waste_profile = editData.waste_types.length > 0 ? editData.waste_types.join(', ') : null
+    }
+    if (['resident', 'commercial_establishment', 'admin', 'facility_operator'].includes(role)) {
+      update.phone = editData.phone || null
+      update.district = editData.district || null
+    }
+
+    const { error } = await supabase.from('profiles').update(update).eq('id', editingUser.id)
     if (error) setMessage('Error: ' + error.message)
     else { setMessage('Profile updated successfully!'); setEditingUser(null); loadData() }
     setSaving(false)
@@ -238,6 +333,26 @@ export default function AdminUsersPage() {
     setWasteTypes(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])
   }
 
+  function toggleEditWasteType(val: string) {
+    setEditData(prev => ({
+      ...prev,
+      waste_types: prev.waste_types.includes(val)
+        ? prev.waste_types.filter(v => v !== val)
+        : [...prev.waste_types, val]
+    }))
+  }
+
+  // Derived booleans for edit modal
+  const editRole = editingUser?.role || ''
+  const editIsPersonRole = ['district_engineer', 'engineer', 'supervisor', 'driver'].includes(editRole)
+  const editIsDE = editRole === 'district_engineer'
+  const editIsEngineer = editRole === 'engineer'
+  const editIsSupervisor = editRole === 'supervisor'
+  const editIsDriver = editRole === 'driver'
+  const editIsContractor = editRole === 'contractor'
+  const editIsRecycler = editRole === 'recycling_partner'
+  const editIsBasic = ['resident', 'commercial_establishment', 'admin', 'facility_operator'].includes(editRole)
+
   return (
     <DashboardLayout role="Admin" userName={profile?.full_name || ''} navItems={ADMIN_NAV}
       primaryAction={{ label: 'Create Staff Account', href: '#', icon: 'person_add' }}>
@@ -268,6 +383,7 @@ export default function AdminUsersPage() {
         .filter-btn:not(.active):hover { background:#e2e8f0; }
         .action-btn { padding:6px 14px; border-radius:99px; font-size:11px; font-weight:700; font-family:'Manrope',sans-serif; cursor:pointer; transition:all 0.2s; border:1.5px solid; white-space:nowrap; }
         .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px; }
+        .edit-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
         .section-box { background:#f0fdf4; border-radius:14px; padding:18px 20px; border:1px solid rgba(0,69,13,0.1); grid-column:1 / -1; }
         .section-box-label { font-size:11px; font-weight:700; color:#15803d; font-family:'Manrope',sans-serif; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:16px; display:flex; align-items:center; gap:6px; }
         .check-pill { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:99px; border:1.5px solid #e4e9e0; font-size:12px; font-weight:600; font-family:'Manrope',sans-serif; cursor:pointer; transition:all 0.15s; background:white; color:#64748b; }
@@ -275,6 +391,7 @@ export default function AdminUsersPage() {
         .toast { border-radius:14px; padding:14px 18px; font-size:13px; font-family:'Inter',sans-serif; display:flex; align-items:center; gap:10px; margin-bottom:20px; }
         .toast-ok  { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
         .toast-err { background:#fef2f2; border:1px solid #fecaca; color:#dc2626; }
+        .edit-section-label { font-size:10px; font-weight:700; color:#00450d; font-family:'Manrope',sans-serif; text-transform:uppercase; letter-spacing:0.1em; margin:20px 0 12px; display:flex; align-items:center; gap:6px; padding-bottom:8px; border-bottom:1px solid rgba(0,69,13,0.08); }
         @keyframes fadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
         @keyframes slideDown { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
@@ -282,7 +399,7 @@ export default function AdminUsersPage() {
         .a1{animation:fadeUp .4s ease .04s both} .a2{animation:fadeUp .4s ease .09s both} .a3{animation:fadeUp .4s ease .14s both}
         .slide-down { animation:slideDown 0.3s ease both; }
         .modal-overlay { animation:fadeIn 0.2s ease; }
-        @media (max-width:768px) { .form-grid { grid-template-columns:1fr; } }
+        @media (max-width:768px) { .form-grid { grid-template-columns:1fr; } .edit-form-grid { grid-template-columns:1fr; } }
       `}</style>
 
       <div className="a1" style={{ marginBottom: 32 }}>
@@ -573,10 +690,13 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
+      {/* ── EDIT MODAL ── */}
       {editingUser && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: 'white', borderRadius: 24, padding: 32, width: '100%', maxWidth: 500, boxShadow: '0 24px 80px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <div style={{ background: 'white', borderRadius: 24, padding: 32, width: '100%', maxWidth: 580, boxShadow: '0 24px 80px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div>
                 <h2 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 20, color: '#181c22', margin: 0 }}>Edit Profile</h2>
                 <p style={{ fontSize: 13, color: '#717a6d', margin: '3px 0 0' }}>{editingUser.full_name}</p>
@@ -585,26 +705,157 @@ export default function AdminUsersPage() {
                 <span className="msf" style={{ fontSize: 18, color: '#717a6d' }}>close</span>
               </button>
             </div>
-            <form onSubmit={handleEditUser} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div><label className="field-label">Full Name</label><input className="form-field" value={editData.full_name} onChange={e => setEditData({ ...editData, full_name: e.target.value })} required /></div>
-              <div>
-                <label className="field-label">Role</label>
-                <select className="select-field" value={editData.role} onChange={e => setEditData({ ...editData, role: e.target.value })}>
-                  {ALL_ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="field-label">District</label>
-                <select className="select-field" value={editData.district} onChange={e => setEditData({ ...editData, district: e.target.value })}>
-                  <option value="">— None —</option>
-                  {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div><label className="field-label">Phone</label><input className="form-field" placeholder="+94 77 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} /></div>
-              <div><label className="field-label">Organisation Name</label><input className="form-field" placeholder="Company or org name" value={editData.organisation_name} onChange={e => setEditData({ ...editData, organisation_name: e.target.value })} /></div>
+
+            {/* Role badge */}
+            <div style={{ marginBottom: 20 }}>
+              {(() => { const rs = ROLE_STYLE[editRole] || { color: '#64748b', bg: '#f8fafc' }; return <span className="role-chip" style={{ background: rs.bg, color: rs.color, fontSize: 11 }}>{ROLE_LABELS[editRole as keyof typeof ROLE_LABELS] || editRole}</span> })()}
+            </div>
+
+            <form onSubmit={handleEditUser} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+
+              {/* ── District Engineer ── */}
+              {editIsDE && (
+                <>
+                  <div className="edit-section-label"><span className="msf" style={{ fontSize: 14 }}>engineering</span>District Engineer Details</div>
+                  <div className="edit-form-grid" style={{ marginBottom: 16 }}>
+                    <div><label className="field-label">First Name</label><input className="form-field" value={editData.firstName} onChange={e => setEditData({ ...editData, firstName: e.target.value })} required /></div>
+                    <div><label className="field-label">Last Name</label><input className="form-field" value={editData.lastName} onChange={e => setEditData({ ...editData, lastName: e.target.value })} required /></div>
+                    <div><label className="field-label">Phone</label><input className="form-field" placeholder="+94 77 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} /></div>
+                    <div>
+                      <label className="field-label">Assigned District *</label>
+                      <select className="select-field" value={editData.district} onChange={e => setEditData({ ...editData, district: e.target.value })} required>
+                        <option value="">Select district</option>
+                        {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Municipal Engineer ── */}
+              {editIsEngineer && (
+                <>
+                  <div className="edit-section-label"><span className="msf" style={{ fontSize: 14 }}>person</span>Engineer Details</div>
+                  <div className="edit-form-grid" style={{ marginBottom: 16 }}>
+                    <div><label className="field-label">First Name</label><input className="form-field" value={editData.firstName} onChange={e => setEditData({ ...editData, firstName: e.target.value })} required /></div>
+                    <div><label className="field-label">Last Name</label><input className="form-field" value={editData.lastName} onChange={e => setEditData({ ...editData, lastName: e.target.value })} required /></div>
+                    <div style={{ gridColumn: '1 / -1' }}><label className="field-label">Phone</label><input className="form-field" placeholder="+94 77 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} /></div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Supervisor ── */}
+              {editIsSupervisor && (
+                <>
+                  <div className="edit-section-label"><span className="msf" style={{ fontSize: 14 }}>supervisor_account</span>Supervisor Details</div>
+                  <div className="edit-form-grid" style={{ marginBottom: 16 }}>
+                    <div><label className="field-label">First Name</label><input className="form-field" value={editData.firstName} onChange={e => setEditData({ ...editData, firstName: e.target.value })} required /></div>
+                    <div><label className="field-label">Last Name</label><input className="form-field" value={editData.lastName} onChange={e => setEditData({ ...editData, lastName: e.target.value })} required /></div>
+                    <div><label className="field-label">Phone</label><input className="form-field" placeholder="+94 77 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} /></div>
+                    <div>
+                      <label className="field-label">District (Optional)</label>
+                      <select className="select-field" value={editData.district} onChange={e => setEditData({ ...editData, district: e.target.value, assigned_wards: [] })}>
+                        <option value="">— None —</option>
+                        {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label className="field-label">Assigned Wards (Optional)</label>
+                      <WardMultiSelect selected={editData.assigned_wards} onChange={wards => setEditData({ ...editData, assigned_wards: wards })} district={editData.district} />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Driver ── */}
+              {editIsDriver && (
+                <>
+                  <div className="edit-section-label"><span className="msf" style={{ fontSize: 14 }}>drive_eta</span>Driver Details</div>
+                  <div className="edit-form-grid" style={{ marginBottom: 16 }}>
+                    <div><label className="field-label">First Name</label><input className="form-field" value={editData.firstName} onChange={e => setEditData({ ...editData, firstName: e.target.value })} required /></div>
+                    <div><label className="field-label">Last Name</label><input className="form-field" value={editData.lastName} onChange={e => setEditData({ ...editData, lastName: e.target.value })} required /></div>
+                    <div><label className="field-label">Phone</label><input className="form-field" placeholder="+94 77 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} /></div>
+                    <div><label className="field-label">Driving Licence Number</label><input className="form-field" placeholder="e.g. B1234567" value={editData.license_number} onChange={e => setEditData({ ...editData, license_number: e.target.value })} /></div>
+                    <div><label className="field-label">Vehicle Registration</label><input className="form-field" placeholder="e.g. WP CAB-1234" value={editData.vehicle_registration} onChange={e => setEditData({ ...editData, vehicle_registration: e.target.value })} /></div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Contractor ── */}
+              {editIsContractor && (
+                <>
+                  <div className="edit-section-label"><span className="msf" style={{ fontSize: 14 }}>local_shipping</span>Contractor Details</div>
+                  <div className="edit-form-grid" style={{ marginBottom: 16 }}>
+                    <div style={{ gridColumn: '1 / -1' }}><label className="field-label">Company Name</label><input className="form-field" placeholder="e.g. Lanka Waste Services Ltd" value={editData.organisation_name} onChange={e => setEditData({ ...editData, organisation_name: e.target.value })} required /></div>
+                    <div><label className="field-label">Phone</label><input className="form-field" placeholder="+94 11 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} /></div>
+                    <div><label className="field-label">Business Registration No.</label><input className="form-field" placeholder="e.g. PV 12345" value={editData.business_registration_number} onChange={e => setEditData({ ...editData, business_registration_number: e.target.value })} /></div>
+                    <div>
+                      <label className="field-label">Operating District</label>
+                      <select className="select-field" value={editData.district} onChange={e => setEditData({ ...editData, district: e.target.value })}>
+                        <option value="">— None —</option>
+                        {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}><label className="field-label">Company Address</label><input className="form-field" placeholder="123 Main Street, Colombo 03" value={editData.address} onChange={e => setEditData({ ...editData, address: e.target.value })} /></div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Recycling Partner ── */}
+              {editIsRecycler && (
+                <>
+                  <div className="edit-section-label"><span className="msf" style={{ fontSize: 14 }}>recycling</span>Facility Details</div>
+                  <div className="edit-form-grid" style={{ marginBottom: 16 }}>
+                    <div style={{ gridColumn: '1 / -1' }}><label className="field-label">Facility / Organisation Name</label><input className="form-field" placeholder="e.g. EcoRecycle Lanka Pvt Ltd" value={editData.organisation_name} onChange={e => setEditData({ ...editData, organisation_name: e.target.value })} required /></div>
+                    <div><label className="field-label">Phone</label><input className="form-field" placeholder="+94 11 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} /></div>
+                    <div>
+                      <label className="field-label">Facility Type</label>
+                      <select className="select-field" value={editData.facility_type} onChange={e => setEditData({ ...editData, facility_type: e.target.value })}>
+                        <option value="">Select type</option>
+                        {FACILITY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}><label className="field-label">Facility Address</label><input className="form-field" placeholder="123 Industrial Zone, Colombo" value={editData.address} onChange={e => setEditData({ ...editData, address: e.target.value })} /></div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label className="field-label" style={{ marginBottom: 10 }}>Waste Types Accepted</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {WASTE_TYPES.map(t => (
+                          <div key={t.value} onClick={() => toggleEditWasteType(t.value)} className={`check-pill ${editData.waste_types.includes(t.value) ? 'selected' : ''}`}>
+                            {editData.waste_types.includes(t.value) && <svg style={{ width: 10, height: 10 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                            {t.label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Basic roles (resident, commercial, admin, facility_operator) ── */}
+              {editIsBasic && (
+                <>
+                  <div className="edit-section-label"><span className="msf" style={{ fontSize: 14 }}>person</span>Profile Details</div>
+                  <div className="edit-form-grid" style={{ marginBottom: 16 }}>
+                    <div style={{ gridColumn: '1 / -1' }}><label className="field-label">Full Name</label><input className="form-field" value={editData.firstName} onChange={e => setEditData({ ...editData, firstName: e.target.value })} required /></div>
+                    <div><label className="field-label">Phone</label><input className="form-field" placeholder="+94 77 000 0000" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} /></div>
+                    <div>
+                      <label className="field-label">District</label>
+                      <select className="select-field" value={editData.district} onChange={e => setEditData({ ...editData, district: e.target.value })}>
+                        <option value="">— None —</option>
+                        {CMC_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
                 <button type="submit" disabled={saving} className="submit-btn" style={{ flex: 1, justifyContent: 'center' }}>
-                  {saving ? 'Saving…' : 'Save Changes'}
+                  {saving ? (
+                    <><div style={{ width: 16, height: 16, border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Saving…</>
+                  ) : (
+                    <><span className="msf" style={{ fontSize: 18 }}>save</span>Save Changes</>
+                  )}
                 </button>
                 <button type="button" onClick={() => setEditingUser(null)} style={{ padding: '13px 20px', borderRadius: 12, border: '1.5px solid #e4e9e0', background: 'white', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, cursor: 'pointer', color: '#64748b' }}>Cancel</button>
               </div>
