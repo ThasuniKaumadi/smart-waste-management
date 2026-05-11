@@ -421,7 +421,6 @@ export default function ResidentReportPage() {
                 <div className="card" style={{ position: 'sticky', top: 20 }}>
                     <div style={{ padding: '20px 24px', background: '#00450d', borderRadius: '20px 20px 0 0' }}>
                         <h2 style={{ fontSize: 16, fontWeight: 700, color: 'white', fontFamily: 'Manrope,sans-serif', margin: '0 0 3px' }}>Report an Issue</h2>
-                        <p style={{ fontSize: 11, color: 'rgba(163,246,156,0.7)', margin: 0 }}>Service complaints logged on Polygon Amoy blockchain</p>
                     </div>
 
                     <form onSubmit={handleSubmit} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
