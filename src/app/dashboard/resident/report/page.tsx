@@ -575,7 +575,7 @@ export default function ResidentReportPage() {
                             <p style={{ fontSize: 11, color: '#41493e', lineHeight: 1.5, margin: 0 }}>
                                 {environmental
                                     ? 'Environmental reports are sent directly to your District Engineer for field action.'
-                                    : 'Service complaints are logged on the Polygon Amoy blockchain for full transparency.'}
+                                    : ''}
                             </p>
                         </div>
 
@@ -720,3 +720,4 @@ export default function ResidentReportPage() {
         </DashboardLayout>
     )
 }
+
