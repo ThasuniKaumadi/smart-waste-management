@@ -218,14 +218,17 @@ export default function DEOverviewPage() {
 
       {/* ── Greeting (above banner) ── */}
       <div className="a1" style={{ marginBottom: 20 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: 6 }}>
-          {dateStr}
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          <span style={{ fontSize: 14 }}>🟡</span>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: 0 }}>
+            {getGreeting()}
+          </p>
+        </div>
         <h1 style={{ fontSize: 40, fontWeight: 900, color: '#181c22', lineHeight: 1.05, fontFamily: 'Manrope,sans-serif', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
-          {getGreeting()}, {getFirstName(profile?.full_name || 'Engineer')}
+          Welcome, <span style={{ color: '#00450d' }}>{getFirstName(profile?.full_name || 'Engineer')}</span>
         </h1>
         <p style={{ fontSize: 13, color: '#717a6d', margin: 0, fontWeight: 500 }}>
-          {profile?.district} · District Engineering Console
+          {dateStr} · {profile?.district} · District Engineering Console
         </p>
       </div>
 
