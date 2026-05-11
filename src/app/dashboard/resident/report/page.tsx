@@ -570,15 +570,6 @@ export default function ResidentReportPage() {
                                 value={description} onChange={e => setDescription(e.target.value)} required />
                         </div>
 
-                        <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 10, background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)' }}>
-                            <span className="msf" style={{ color: '#00450d', fontSize: 15, flexShrink: 0 }}>info</span>
-                            <p style={{ fontSize: 11, color: '#41493e', lineHeight: 1.5, margin: 0 }}>
-                                {environmental
-                                    ? 'Environmental reports are sent directly to your District Engineer for field action.'
-                                    : ''}
-                            </p>
-                        </div>
-
                         <button type="submit" disabled={saving} className="submit-btn">
                             {saving
                                 ? <><div style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.8s linear infinite' }} />Submitting…</>
@@ -676,13 +667,6 @@ export default function ResidentReportPage() {
                                     </div>
                                 )
                             })}
-                        </div>
-                    )}
-
-                    {history.length > 0 && (
-                        <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(0,69,13,0.06)', background: '#f9f9ff', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span className="msf" style={{ color: '#7c3aed', fontSize: 14 }}>verified</span>
-                            <p style={{ fontSize: 11, color: '#717a6d', margin: 0 }}>Service complaints verified on Polygon Amoy · CMC EcoLedger 2026</p>
                         </div>
                     )}
                 </div>
