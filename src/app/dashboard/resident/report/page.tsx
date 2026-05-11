@@ -273,7 +273,6 @@ export default function ResidentReportPage() {
             } else {
                 const { data: cd, error } = await supabase.from('complaints').insert({
                     submitted_by: user.id,
-                    role: 'resident',
                     district: profile?.district,
                     complaint_type: selectedCategory,
                     custom_complaint_type: selectedCategory === 'other' ? customCategory.trim() : null,
