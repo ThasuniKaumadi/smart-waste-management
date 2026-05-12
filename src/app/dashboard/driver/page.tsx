@@ -6,6 +6,19 @@ import Link from 'next/link'
 import DashboardLayout from '@/components/DashboardLayout'
 import AnnouncementsWidget from '@/components/AnnouncementsWidget'
 
+function timeGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good Morning'
+  if (h < 17) return 'Good Afternoon'
+  return 'Good Evening'
+}
+function greetingEmoji() {
+  const h = new Date().getHours()
+  if (h < 12) return '🌤️'
+  if (h < 17) return '☀️'
+  return '🌙'
+}
+
 const DRIVER_NAV = [
   { label: 'Home', href: '/dashboard/driver', icon: 'dashboard' },
   { label: 'My Routes', href: '/dashboard/driver/routes', icon: 'route' },
@@ -154,6 +167,19 @@ export default function DriverDashboardPage() {
         .s4 { animation: staggerIn 0.5s ease 0.20s both; }
         .s5 { animation: staggerIn 0.5s ease 0.25s both; }
       `}</style>
+
+      {/* Greeting */}
+      <div style={{ marginBottom: 28 }}>
+        <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#6b7280', fontFamily: 'Manrope, sans-serif', margin: '0 0 6px' }}>
+          {greetingEmoji()} {timeGreeting()}
+        </p>
+        <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: 46, fontWeight: 800, color: '#181c22', lineHeight: 1.1, margin: '0 0 6px' }}>
+          Hello, <span style={{ color: '#00450d' }}>{profile?.full_name?.split(' ')[0] || 'Driver'}</span>
+        </h1>
+        <p style={{ fontSize: 13, color: '#6b7280', margin: 0, fontFamily: 'Inter, sans-serif' }}>
+          {new Date().toLocaleDateString('en-LK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        </p>
+      </div>
 
       {/* Hero */}
       <section className="mb-10 s1">
