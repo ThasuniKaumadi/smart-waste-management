@@ -99,8 +99,6 @@ export default function DEDisposalPage() {
     const [disposals, setDisposals] = useState<DisposalSchedule[]>([])
     const [collectionSchedules, setCollectionSchedules] = useState<any[]>([])
     const [partners, setPartners] = useState<Partner[]>([])
-    const [showForm, setShowForm] = useState(false)
-    const [saving, setSaving] = useState<null | 'publish' | 'draft'>(null)
     const [message, setMessage] = useState('')
     const [filterDisposal, setFilterDisposal] = useState('all')
     const [updatingId, setUpdatingId] = useState<string | null>(null)
@@ -203,50 +201,6 @@ export default function DEDisposalPage() {
             (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
         ))
         setLoading(false)
-    }
-
-    function resetForm() { setFormData(EMPTY_FORM); setMessage('') }
-
-    async function handleSubmit(publishNow: boolean) {
-        setMessage('')
-        if (!formData.waste_type) { setMessage('Please select a waste type'); return }
-        if (!formData.assigned_partner_id) { setMessage('Please select a recycling partner or facility operator'); return }
-        if (!formData.scheduled_date) { setMessage('Please select a date'); return }
-
-        // Auto-fill facility name from selected partner
-        const partner = partners.find(p => p.id === formData.assigned_partner_id)
-        const facilityName = partner?.organisation_name || partner?.full_name || ''
-
-        setSaving(publishNow ? 'publish' : 'draft')
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-
-        const { error } = await supabase.from('disposal_schedules').insert({
-            district: profile?.district,
-            created_by: user?.id,
-            waste_type: formData.waste_type,
-            facility_name: facilityName,
-            facility_type: partner?.role === 'recycling_partner' ? 'recycling' : 'facility',
-            scheduled_date: formData.scheduled_date,
-            scheduled_time: formData.scheduled_time || null,
-            vehicle_number: formData.vehicle_number || null,
-            estimated_quantity: formData.estimated_quantity || null,
-            notes: formData.notes || null,
-            collection_schedule_id: formData.collection_schedule_id || null,
-            assigned_partner_id: formData.assigned_partner_id,
-            status: publishNow ? 'published' : 'draft',
-            published: publishNow,
-        })
-
-        if (error) { setMessage('Error: ' + error.message); setSaving(null); return }
-
-        setMessage(publishNow
-            ? `Disposal schedule published and assigned to ${facilityName}.`
-            : 'Saved as draft.')
-        setShowForm(false)
-        resetForm()
-        await loadData()
-        setSaving(null)
     }
 
     async function publishDraft(id: string) {
@@ -394,13 +348,7 @@ export default function DEDisposalPage() {
                         </button>
                     ))}
                 </div>
-                {activeTab === 'schedule' && (
-                    <button onClick={() => { setShowForm(!showForm); resetForm() }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, background: showForm ? '#f1f5f9' : '#00450d', color: showForm ? '#64748b' : 'white', border: 'none', cursor: 'pointer', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, transition: 'all 0.2s' }}>
-                        <span className="msym" style={{ fontSize: 16 }}>{showForm ? 'close' : 'add'}</span>
-                        {showForm ? 'Cancel' : 'New Disposal'}
-                    </button>
-                )}
+                
             </div>
 
             {/* ── SCHEDULE TAB ── */}
@@ -416,174 +364,6 @@ export default function DEDisposalPage() {
                         </div>
                     )}
 
-                    {showForm && (
-                        <div className="card slide-down" style={{ marginBottom: 20 }}>
-                            {/* Form header */}
-                            <div style={{ padding: '16px 22px', borderBottom: '1px solid rgba(0,69,13,0.06)', background: '#00450d', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div>
-                                    <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 15, color: 'white', margin: '0 0 2px' }}>New Disposal Schedule</h3>
-                                    <p style={{ fontSize: 11, color: 'rgba(163,246,156,0.7)', margin: 0 }}>Assign to a registered recycling partner or facility operator</p>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 99, background: 'rgba(255,255,255,0.1)' }}>
-                                    <span className="msym" style={{ fontSize: 13, color: 'rgba(163,246,156,0.7)' }}>edit_note</span>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(163,246,156,0.9)', fontFamily: 'Manrope,sans-serif' }}>Draft</span>
-                                </div>
-                            </div>
-
-                            <div style={{ padding: 22 }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-
-                                    {/* Waste type */}
-                                    <div style={{ gridColumn: '1 / -1' }}>
-                                        <label className="field-label">Waste Type *</label>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 7 }}>
-                                            {WASTE_TYPES.map(wt => {
-                                                const isOn = formData.waste_type === wt.value
-                                                return (
-                                                    <button key={wt.value} type="button"
-                                                        onClick={() => setFormData(p => ({ ...p, waste_type: wt.value }))}
-                                                        style={{ border: `1.5px solid ${isOn ? wt.color : 'rgba(0,69,13,0.1)'}`, borderRadius: 10, padding: '9px 6px', cursor: 'pointer', background: isOn ? wt.color + '12' : 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 0.15s', boxShadow: isOn ? `0 0 0 3px ${wt.color}20` : 'none' }}>
-                                                        <span className="msym" style={{ fontSize: 18, color: isOn ? wt.color : '#94a3b8' }}>{wt.icon}</span>
-                                                        <span style={{ fontSize: 9, fontWeight: 700, color: isOn ? wt.color : '#374151', fontFamily: 'Manrope,sans-serif', textAlign: 'center', lineHeight: 1.2 }}>{wt.label}</span>
-                                                    </button>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    {/* ── PARTNER SELECTION ── */}
-                                    <div style={{ gridColumn: '1 / -1' }}>
-                                        <label className="field-label">
-                                            Assign to Registered Partner *
-                                            <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 6 }}>
-                                                — {partners.length} registered
-                                            </span>
-                                        </label>
-
-                                        {/* Role filter pills */}
-                                        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                                            {([
-                                                { key: 'all', label: `All (${partners.length})` },
-                                                { key: 'recycling_partner', label: `Recyclers (${partners.filter(p => p.role === 'recycling_partner').length})` },
-                                                { key: 'facility_operator', label: `Facilities (${partners.filter(p => p.role === 'facility_operator').length})` },
-                                            ] as const).map(f => (
-                                                <button key={f.key} type="button"
-                                                    onClick={() => setPartnerFilter(f.key)}
-                                                    className={`pill-btn ${partnerFilter === f.key ? 'on' : 'off'}`}>
-                                                    {f.label}
-                                                </button>
-                                            ))}
-                                        </div>
-
-                                        {filteredPartners.length === 0 ? (
-                                            <div style={{ padding: '20px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb', textAlign: 'center' }}>
-                                                <span className="msym" style={{ fontSize: 24, color: '#d1d5db', display: 'block', marginBottom: 6 }}>group_off</span>
-                                                <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No approved partners found for this filter</p>
-                                            </div>
-                                        ) : (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto', paddingRight: 2 }}>
-                                                {filteredPartners.map(partner => {
-                                                    const meta = ROLE_META[partner.role]
-                                                    const isOn = formData.assigned_partner_id === partner.id
-                                                    const displayName = partner.organisation_name || partner.full_name
-                                                    return (
-                                                        <button key={partner.id} type="button" className="partner-btn"
-                                                            onClick={() => setFormData(p => ({ ...p, assigned_partner_id: partner.id, facility_name: displayName, facility_type: partner.role === 'recycling_partner' ? 'recycling' : 'facility' }))}
-                                                            style={isOn ? { borderColor: meta.color, background: meta.bg, borderWidth: 2, boxShadow: `0 0 0 3px ${meta.color}18` } : {}}>
-                                                            <div style={{ width: 36, height: 36, borderRadius: 10, background: isOn ? meta.color + '20' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                                                <span className="msym" style={{ fontSize: 18, color: isOn ? meta.color : '#94a3b8' }}>{meta.icon}</span>
-                                                            </div>
-                                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                                                                    <p style={{ fontSize: 13, fontWeight: 700, color: isOn ? meta.color : '#181c22', fontFamily: 'Manrope,sans-serif', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</p>
-                                                                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: meta.bg, color: meta.color, fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0, border: `1px solid ${meta.border}` }}>
-                                                                        {partner.role === 'recycling_partner' ? 'Recycler' : 'Facility'}
-                                                                    </span>
-                                                                </div>
-                                                                <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>
-                                                                    {partner.full_name}{partner.district ? ` · ${partner.district}` : ''}{partner.phone ? ` · ${partner.phone}` : ''}
-                                                                </p>
-                                                            </div>
-                                                            {isOn && <span className="msym-fill" style={{ fontSize: 18, color: meta.color, flexShrink: 0 }}>check_circle</span>}
-                                                        </button>
-                                                    )
-                                                })}
-                                            </div>
-                                        )}
-
-                                        {/* Selected partner summary */}
-                                        {selectedPartner && (
-                                            <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 10, background: ROLE_META[selectedPartner.role].bg, border: `1px solid ${ROLE_META[selectedPartner.role].border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                <span className="msym-fill" style={{ fontSize: 16, color: ROLE_META[selectedPartner.role].color }}>check_circle</span>
-                                                <p style={{ fontSize: 12, fontWeight: 600, color: ROLE_META[selectedPartner.role].color, fontFamily: 'Manrope,sans-serif', margin: 0 }}>
-                                                    Assigned to: {selectedPartner.organisation_name || selectedPartner.full_name}
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Date / time / vehicle / quantity */}
-                                    <div>
-                                        <label className="field-label">Date *</label>
-                                        <input type="date" className="form-field" min={new Date().toISOString().split('T')[0]}
-                                            value={formData.scheduled_date} onChange={e => setFormData(p => ({ ...p, scheduled_date: e.target.value }))} />
-                                    </div>
-                                    <div>
-                                        <label className="field-label">Time</label>
-                                        <input type="time" className="form-field"
-                                            value={formData.scheduled_time} onChange={e => setFormData(p => ({ ...p, scheduled_time: e.target.value }))} />
-                                    </div>
-                                    <div>
-                                        <label className="field-label">Vehicle Number</label>
-                                        <input type="text" className="form-field" placeholder="e.g. WP CAB 1234"
-                                            value={formData.vehicle_number} onChange={e => setFormData(p => ({ ...p, vehicle_number: e.target.value }))} />
-                                    </div>
-                                    <div>
-                                        <label className="field-label">Estimated Quantity</label>
-                                        <input type="text" className="form-field" placeholder="e.g. 5 tonnes"
-                                            value={formData.estimated_quantity} onChange={e => setFormData(p => ({ ...p, estimated_quantity: e.target.value }))} />
-                                    </div>
-
-                                    {/* Link to collection schedule */}
-                                    <div style={{ gridColumn: '1 / -1' }}>
-                                        <label className="field-label">Link to Collection Schedule <span style={{ color: '#d1d5db', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— optional</span></label>
-                                        <select className="select-field" value={formData.collection_schedule_id} onChange={e => setFormData(p => ({ ...p, collection_schedule_id: e.target.value }))}>
-                                            <option value="">— Not linked —</option>
-                                            {collectionSchedules.map(s => (
-                                                <option key={s.id} value={s.id}>
-                                                    {new Date(s.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {s.custom_waste_type || s.waste_type?.replace('_', ' ')} · {s.wards?.join(', ') || s.ward || 'District-wide'}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Notes */}
-                                    <div style={{ gridColumn: '1 / -1' }}>
-                                        <label className="field-label">Notes</label>
-                                        <textarea className="form-field" rows={2} style={{ resize: 'vertical' }}
-                                            placeholder="Special handling instructions…"
-                                            value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} />
-                                    </div>
-                                </div>
-
-                                {/* Action buttons */}
-                                <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                                    <button type="button" disabled={!!saving} onClick={() => handleSubmit(true)} className="btn-publish">
-                                        {saving === 'publish'
-                                            ? <><div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Publishing…</>
-                                            : <><span className="msym" style={{ fontSize: 16 }}>publish</span>Create and Publish</>}
-                                    </button>
-                                    <button type="button" disabled={!!saving} onClick={() => handleSubmit(false)} className="btn-draft">
-                                        {saving === 'draft'
-                                            ? <><div style={{ width: 14, height: 14, border: '2px solid rgba(0,69,13,0.3)', borderTopColor: '#00450d', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Saving…</>
-                                            : <><span className="msym" style={{ fontSize: 16 }}>save</span>Save as Draft</>}
-                                    </button>
-                                    <button type="button" disabled={!!saving} onClick={() => { setShowForm(false); resetForm() }} className="btn-discard">
-                                        <span className="msym" style={{ fontSize: 15 }}>delete_outline</span>Discard
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
                     )}
 
                     {/* Schedule list */}
