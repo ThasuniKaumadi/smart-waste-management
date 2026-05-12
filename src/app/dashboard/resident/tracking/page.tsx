@@ -100,15 +100,12 @@ export default function ResidentTrackingPage() {
       mapInstance.current = null
       markersRef.current.forEach(m => { try { m.setMap(null) } catch { } })
       markersRef.current = []
-      const s = document.getElementById('google-maps-script')
-      if (s) s.remove()
-      try { delete (window as any).google } catch { }
     }
   }, [])
 
   // Init map once script loaded
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || mapInstance.current || !document.getElementById('google-maps-script')) return
+    if (!mapLoaded || !mapRef.current || mapInstance.current) return
     try {
       mapInstance.current = new window.google.maps.Map(mapRef.current, {
         center: COLOMBO_CENTER,
