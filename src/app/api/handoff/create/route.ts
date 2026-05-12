@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
         .single()
 
     if (existing) {
-        return NextResponse.json({ handoff: existing })
+        return NextResponse.json({ handoff: existing, code: existing.handoff_code })
     }
 
     // Generate unique code
@@ -59,5 +59,5 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    return NextResponse.json({ handoff: data })
+    return NextResponse.json({ handoff: data, code: data.handoff_code })
 }
