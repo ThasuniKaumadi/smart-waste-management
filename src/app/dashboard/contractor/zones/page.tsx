@@ -13,7 +13,6 @@ const CONTRACTOR_NAV = [
   { label: 'Breakdowns', href: '/dashboard/contractor/breakdowns', icon: 'car_crash' },
   { label: 'Incidents', href: '/dashboard/contractor/incidents', icon: 'warning' },
   { label: 'Messages', href: '/dashboard/contractor/messages', icon: 'chat' },
-  { label: 'Zones', href: '/dashboard/contractor/zones', icon: 'map' },
   { label: 'Staff', href: '/dashboard/contractor/staff', icon: 'badge' },
 ]
 
@@ -345,7 +344,6 @@ export default function ContractorZonesPage() {
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {[
-                                    { label: 'Zones', value: stats.totalZones, icon: 'location_on' },
                                     { label: 'Routes', value: stats.totalRoutes, icon: 'route' },
                                     { label: 'Schedules', value: stats.totalSchedules, icon: 'calendar_month' },
                                     { label: 'Districts', value: Object.keys(zonesByDistrict).length, icon: 'corporate_fare' },
@@ -829,4 +827,5 @@ export default function ContractorZonesPage() {
         </DashboardLayout>
     )
 }
+
 
