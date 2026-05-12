@@ -14,7 +14,6 @@ const ADMIN_NAV = [
   { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
   { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
   { label: 'Disposal', href: '/dashboard/admin/disposal', icon: 'delete_sweep' },
-  { label: 'Reports', href: '/dashboard/admin/reports', icon: 'rate_review' },
   { label: 'Profile', href: '/dashboard/admin/profile', icon: 'person' },
 ]
 
@@ -24,7 +23,6 @@ const QUICK_ACTIONS = [
   { label: 'Performance', desc: 'Analytics and system-wide charts', icon: 'analytics', href: '/dashboard/admin/performance', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
   { label: 'Billing', desc: 'Commercial invoices and payments', icon: 'payments', href: '/dashboard/admin/billing', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
   { label: 'Billing Rates', desc: 'Set Tier A/B pricing rules', icon: 'tune', href: '/dashboard/admin/billing-rates', color: '#0e7490', bg: '#ecfeff', border: '#a5f3fc' },
-  { label: 'Reports', desc: 'Waste reports and complaints', icon: 'rate_review', href: '/dashboard/admin/reports', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
 ]
 
 export default function AdminDashboardPage() {
