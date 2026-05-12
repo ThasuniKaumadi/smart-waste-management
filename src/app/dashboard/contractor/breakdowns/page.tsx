@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -219,7 +219,7 @@ export default function ContractorBreakdownsPage() {
                 {/* Header */}
                 <div className="a1" style={{ marginBottom: '28px' }}>
                     <p style={{ fontSize: '11px', color: '#717a6d', fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', margin: '0 0 6px' }}>
-                        🚨 FLEET MANAGEMENT
+                        ðŸš¨ FLEET MANAGEMENT
                     </p>
                     <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '36px', fontWeight: 800, color: '#181c22', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
                         Vehicle <span style={{ color: '#00450d' }}>Breakdowns</span>
@@ -419,7 +419,7 @@ export default function ContractorBreakdownsPage() {
                                             background: 'rgba(0,69,13,0.02)',
                                         }}>
                                             <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#2d3d2d', marginBottom: '8px', fontFamily: 'Manrope, sans-serif' }}>
-                                                Resolution Notes <span style={{ color: '#b0b8aa', fontWeight: 500 }}>· optional</span>
+                                                Resolution Notes <span style={{ color: '#b0b8aa', fontWeight: 500 }}>Â· optional</span>
                                             </label>
                                             <textarea
                                                 className="resolve-input"
@@ -462,5 +462,6 @@ export default function ContractorBreakdownsPage() {
         </DashboardLayout>
     )
 }
+
 
 
