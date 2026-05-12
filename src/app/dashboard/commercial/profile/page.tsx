@@ -5,12 +5,13 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const COMMERCIAL_NAV = [
-    { label: 'Overview', href: '/dashboard/commercial', icon: 'dashboard' },
+    { label: 'Home', href: '/dashboard/commercial', icon: 'dashboard' },
     { label: 'Schedule', href: '/dashboard/commercial/schedule', icon: 'calendar_month' },
     { label: 'Track Vehicle', href: '/dashboard/commercial/track', icon: 'location_on' },
     { label: 'Bins', href: '/dashboard/commercial/bins', icon: 'delete' },
     { label: 'Collection History', href: '/dashboard/commercial/collection-history', icon: 'history' },
     { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
+    { label: 'Report Issue', href: '/dashboard/commercial/report', icon: 'report' },
     { label: 'Rate Service', href: '/dashboard/commercial/feedback', icon: 'star' },
     { label: 'Profile', href: '/dashboard/commercial/profile', icon: 'manage_accounts' },
 ]
