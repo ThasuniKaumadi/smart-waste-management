@@ -21,7 +21,9 @@ const DE_NAV = [
 ]
 
 const PRIORITY_STYLE: Record<string, { color: string; bg: string; label: string }> = {
+    low: { color: '#64748b', bg: '#f8fafc', label: 'Low' },
     normal: { color: '#00450d', bg: '#f0fdf4', label: 'Normal' },
+    high: { color: '#d97706', bg: '#fefce8', label: 'High' },
     important: { color: '#d97706', bg: '#fefce8', label: 'Important' },
     urgent: { color: '#ba1a1a', bg: '#fef2f2', label: 'Urgent' },
 }
@@ -41,6 +43,7 @@ export default function DEAnnouncementsPage() {
     const [message, setMessage] = useState('')
     const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active')
     const [expanded, setExpanded] = useState<string | null>(null)
+    const [editTarget, setEditTarget] = useState<any>(null)
     const [form, setForm] = useState({ title: '', body: '', priority: 'normal', target_roles: [] as string[] })
 
     useEffect(() => { loadData() }, [])
@@ -58,22 +61,27 @@ export default function DEAnnouncementsPage() {
         setLoading(false)
     }
 
-    async function createAnnouncement() {
+    async function saveAnnouncement() {
         if (!form.title.trim() || !form.body.trim()) { setMessage('Title and body are required.'); return }
         setSubmitting(true); setMessage('')
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
-        const { error } = await supabase.from('announcements').insert({
-            title: form.title.trim(), content: form.body.trim(), priority: form.priority,
+        const payload = {
+            title: form.title.trim(),
+            content: form.body.trim(),
+            priority: form.priority,
             target_roles: form.target_roles.length > 0 ? form.target_roles : DISTRICT_ROLES.map(r => r.value),
-            district: profile?.district, created_by: user?.id, archived: false,
-        })
-        if (error) { setMessage('Error: ' + error.message) }
-        else {
-            setMessage('Announcement published to your district!')
-            setShowForm(false)
-            setForm({ title: '', body: '', priority: 'normal', target_roles: [] })
-            loadData()
+        }
+        if (editTarget) {
+            const { error } = await supabase.from('announcements').update(payload).eq('id', editTarget.id)
+            if (error) { setMessage('Error: ' + error.message) }
+            else { setMessage('Announcement updated!'); closeForm(); loadData() }
+        } else {
+            const { error } = await supabase.from('announcements').insert({
+                ...payload, district: profile?.district, created_by: user?.id, archived: false,
+            })
+            if (error) { setMessage('Error: ' + error.message) }
+            else { setMessage('Announcement published to your district!'); closeForm(); loadData() }
         }
         setSubmitting(false)
     }
@@ -85,7 +93,24 @@ export default function DEAnnouncementsPage() {
     }
 
     function toggleRole(role: string) {
-        setForm(f => ({ ...f, target_roles: f.target_roles.includes(role) ? f.target_roles.filter(r => r !== role) : [...f.target_roles, role] }))
+        setForm(f => ({
+            ...f,
+            target_roles: f.target_roles.includes(role)
+                ? f.target_roles.filter(r => r !== role)
+                : [...f.target_roles, role]
+        }))
+    }
+
+    function openEdit(ann: any) {
+        setEditTarget(ann)
+        setForm({ title: ann.title, body: ann.content, priority: ann.priority, target_roles: ann.target_roles || [] })
+        setShowForm(true)
+    }
+
+    function closeForm() {
+        setShowForm(false)
+        setEditTarget(null)
+        setForm({ title: '', body: '', priority: 'normal', target_roles: [] })
     }
 
     const filtered = announcements.filter(a => activeTab === 'active' ? !a.archived : a.archived)
@@ -117,7 +142,7 @@ export default function DEAnnouncementsPage() {
                     <h1 className="font-headline font-extrabold tracking-tight" style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
                         <span style={{ color: '#1b5e20' }}>Announcements</span>
                     </h1>
-                    <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+                    <button className="btn-primary" onClick={() => { setShowForm(!showForm); if (showForm) closeForm() }}>
                         <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{showForm ? 'close' : 'add'}</span>
                         {showForm ? 'Cancel' : 'New Announcement'}
                     </button>
@@ -135,7 +160,9 @@ export default function DEAnnouncementsPage() {
             {showForm && (
                 <div className="bento-card mb-8 s2">
                     <div className="px-8 py-6" style={{ borderBottom: '1px solid rgba(0,69,13,0.06)' }}>
-                        <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>Create District Announcement</h3>
+                        <h3 className="font-headline font-bold text-xl" style={{ color: '#181c22' }}>
+                            {editTarget ? 'Edit Announcement' : 'Create District Announcement'}
+                        </h3>
                         <p className="text-sm mt-1" style={{ color: '#717a6d' }}>Visible to operational staff in {profile?.district}</p>
                     </div>
                     <div className="p-8 space-y-5">
@@ -150,8 +177,9 @@ export default function DEAnnouncementsPage() {
                         <div>
                             <label className="field-label">Priority</label>
                             <select className="form-field" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
+                                <option value="low">Low</option>
                                 <option value="normal">Normal</option>
-                                <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
+                                <option value="high">High</option>
                                 <option value="urgent">Urgent</option>
                             </select>
                         </div>
@@ -170,10 +198,13 @@ export default function DEAnnouncementsPage() {
                             </div>
                         </div>
                         <div className="flex gap-3">
-                            <button className="btn-primary" onClick={createAnnouncement} disabled={submitting}>
-                                {submitting ? <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'white', borderTopColor: 'transparent' }} /> : <><span className="material-symbols-outlined" style={{ fontSize: '18px' }}>campaign</span>Publish</>}
+                            <button className="btn-primary" onClick={saveAnnouncement} disabled={submitting}>
+                                {submitting
+                                    ? <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'white', borderTopColor: 'transparent' }} />
+                                    : <><span className="material-symbols-outlined" style={{ fontSize: '18px' }}>campaign</span>{editTarget ? 'Save Changes' : 'Publish'}</>
+                                }
                             </button>
-                            <button onClick={() => setShowForm(false)} style={{ padding: '12px 24px', borderRadius: '10px', border: '1.5px solid #e5e7eb', background: 'white', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: '#64748b' }}>Cancel</button>
+                            <button onClick={closeForm} style={{ padding: '12px 24px', borderRadius: '10px', border: '1.5px solid #e5e7eb', background: 'white', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: '#64748b' }}>Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -186,7 +217,9 @@ export default function DEAnnouncementsPage() {
 
             <div className="bento-card s3">
                 {loading ? (
-                    <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} /></div>
+                    <div className="flex items-center justify-center py-16">
+                        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#00450d', borderTopColor: 'transparent' }} />
+                    </div>
                 ) : filtered.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                         <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#f0fdf4' }}>
@@ -198,7 +231,7 @@ export default function DEAnnouncementsPage() {
                 ) : filtered.map(ann => {
                     const ps = PRIORITY_STYLE[ann.priority] || PRIORITY_STYLE.normal
                     const isExpanded = expanded === ann.id
-                    const isOwn = ann.district === profile?.district
+                    const isOwn = ann.created_by === profile?.id
                     return (
                         <div key={ann.id} className="ann-row" onClick={() => setExpanded(isExpanded ? null : ann.id)}>
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
@@ -208,18 +241,31 @@ export default function DEAnnouncementsPage() {
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                                         <p style={{ fontSize: '14px', fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', margin: 0 }}>{ann.title}</p>
-                                        {ann.priority !== 'normal' && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: ps.bg, color: ps.color, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'Manrope,sans-serif' }}>{ps.label}</span>}
-                                        {!isOwn && <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#eff6ff', color: '#1d4ed8', fontFamily: 'Manrope,sans-serif' }}>System-wide</span>}
+                                        {ann.priority !== 'normal' && (
+                                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: ps.bg, color: ps.color, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'Manrope,sans-serif' }}>{ps.label}</span>
+                                        )}
+                                        {!isOwn && (
+                                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#eff6ff', color: '#1d4ed8', fontFamily: 'Manrope,sans-serif' }}>System-wide</span>
+                                        )}
                                     </div>
-                                    {isExpanded ? <p style={{ fontSize: '13px', color: '#41493e', lineHeight: 1.6, marginBottom: '6px' }}>{ann.body}</p> : <p style={{ fontSize: '13px', color: '#717a6d', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ann.body}</p>}
+                                    {isExpanded
+                                        ? <p style={{ fontSize: '13px', color: '#41493e', lineHeight: 1.6, marginBottom: '6px' }}>{ann.content}</p>
+                                        : <p style={{ fontSize: '13px', color: '#717a6d', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ann.content}</p>
+                                    }
                                     <p style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0 0' }}>{new Date(ann.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                     {isOwn && (
-                                        <button onClick={() => toggleArchive(ann.id, ann.archived)}
-                                            style={{ padding: '5px 12px', borderRadius: '99px', fontSize: '11px', fontWeight: 700, fontFamily: 'Manrope,sans-serif', cursor: 'pointer', border: '1.5px solid', background: 'white', borderColor: ann.archived ? 'rgba(0,69,13,0.2)' : 'rgba(100,116,139,0.2)', color: ann.archived ? '#00450d' : '#64748b' }}>
-                                            {ann.archived ? 'Restore' : 'Archive'}
-                                        </button>
+                                        <>
+                                            <button onClick={() => openEdit(ann)}
+                                                style={{ padding: '5px 12px', borderRadius: '99px', fontSize: '11px', fontWeight: 700, fontFamily: 'Manrope,sans-serif', cursor: 'pointer', border: '1.5px solid rgba(0,69,13,0.2)', background: 'white', color: '#00450d' }}>
+                                                Edit
+                                            </button>
+                                            <button onClick={() => toggleArchive(ann.id, ann.archived)}
+                                                style={{ padding: '5px 12px', borderRadius: '99px', fontSize: '11px', fontWeight: 700, fontFamily: 'Manrope,sans-serif', cursor: 'pointer', border: '1.5px solid', background: 'white', borderColor: ann.archived ? 'rgba(0,69,13,0.2)' : 'rgba(100,116,139,0.2)', color: ann.archived ? '#00450d' : '#64748b' }}>
+                                                {ann.archived ? 'Restore' : 'Archive'}
+                                            </button>
+                                        </>
                                     )}
                                     <span className="material-symbols-outlined" style={{ color: '#94a3b8', fontSize: '18px' }}>{isExpanded ? 'expand_less' : 'expand_more'}</span>
                                 </div>
@@ -231,4 +277,3 @@ export default function DEAnnouncementsPage() {
         </DashboardLayout>
     )
 }
-
