@@ -79,6 +79,7 @@ export default function DriverRoutesPage() {
   const [toast, setToast] = useState('')
   const [selectedStop, setSelectedStop] = useState<Stop | null>(null)
   const [mapRef, setMapRef] = useState<google.maps.Map | null>(null)
+  const [pendingGeocode, setPendingGeocode] = useState<Stop[]>([])
 
   const { isLoaded: mapsLoaded } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
@@ -139,34 +140,44 @@ export default function DriverRoutesPage() {
     }
     setLoading(false)
 
-    // Geocode any stops missing coordinates
+    // Queue stops missing coordinates for geocoding after Maps JS API loads
     const missing = loadedStops.filter(s => !s.latitude || !s.longitude)
     if (missing.length > 0) {
-      geocodeStops(missing, supabase)
+      setPendingGeocode(missing)
     }
   }
 
-  async function geocodeStops(missing: Stop[], supabase: any) {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-    if (!apiKey) return
+  // Run geocoding once Maps JS API is ready (uses Geocoder class, works with referrer-restricted keys)
+  useEffect(() => {
+    if (!mapsLoaded || pendingGeocode.length === 0) return
+    const supabase = createClient()
+    geocodeStops(pendingGeocode, supabase)
+    setPendingGeocode([])
+  }, [mapsLoaded, pendingGeocode])
 
+  async function geocodeStops(missing: Stop[], supabase: any) {
+    // Uses Maps JS API Geocoder — works with HTTP referrer-restricted keys
+    const geocoder = new google.maps.Geocoder()
     const updated: Stop[] = []
+
     for (const stop of missing) {
       const query = [stop.road_name, stop.address, 'Colombo, Sri Lanka'].filter(Boolean).join(', ')
       try {
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`
-        )
-        const data = await res.json()
-        if (data.status === 'OK' && data.results?.[0]) {
-          const { lat, lng } = data.results[0].geometry.location
-          // Save back to DB
+        const results = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
+          geocoder.geocode({ address: query }, (res, status) => {
+            if (status === 'OK' && res) resolve(res)
+            else reject(status)
+          })
+        })
+        if (results[0]) {
+          const lat = results[0].geometry.location.lat()
+          const lng = results[0].geometry.location.lng()
           await supabase.from('collection_stops')
             .update({ latitude: lat, longitude: lng })
             .eq('id', stop.id)
           updated.push({ ...stop, latitude: lat, longitude: lng })
         }
-      } catch { /* skip if geocoding fails */ }
+      } catch { /* skip stop if geocoding fails */ }
     }
 
     if (updated.length > 0) {
