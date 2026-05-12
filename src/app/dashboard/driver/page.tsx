@@ -184,10 +184,6 @@ export default function DriverDashboardPage() {
       {/* Hero */}
       <section className="mb-10 s1">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <h1 className="font-headline font-extrabold tracking-tight"
-            style={{ fontSize: '48px', color: '#181c22', lineHeight: 1.1 }}>
-            Route <span style={{ color: '#1b5e20' }}>Intelligence</span>
-          </h1>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: '#f0fdf4' }}>
               <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#16a34a' }} />
