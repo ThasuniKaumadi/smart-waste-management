@@ -12,14 +12,12 @@ const SUPERVISOR_NAV = [
   { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard', section: 'Menu' },
   { label: 'Schedules', href: '/dashboard/supervisor/schedules', icon: 'calendar_month', section: 'Menu' },
   { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route', section: 'Menu' },
-  { label: 'Drivers', href: '/dashboard/supervisor/drivers', icon: 'people', section: 'Menu' },
   { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed', section: 'Menu' },
   { label: 'Alerts', href: '/dashboard/supervisor/alerts', icon: 'notifications_active', section: 'Menu' },
   { label: 'Complaints', href: '/dashboard/supervisor/complaints', icon: 'feedback', section: 'Menu' },
   { label: 'Compliance', href: '/dashboard/supervisor/schedule-compliance', icon: 'fact_check', section: 'Menu' },
   { label: 'Waste Reports', href: '/dashboard/supervisor/waste-reports', icon: 'report', section: 'Menu' },
   { label: 'Ward Heatmap', href: '/dashboard/supervisor/heatmap', icon: 'map', section: 'Menu' },
-  { label: 'Shift Report', href: '/dashboard/supervisor/shift-report', icon: 'picture_as_pdf', section: 'Menu' },
   { label: 'Announcements', href: '/dashboard/supervisor/announcements', icon: 'campaign', section: 'Menu' },
   { label: 'Profile', href: '/dashboard/supervisor/profile', icon: 'person', section: 'Menu' },
 ]
@@ -666,7 +664,6 @@ export default function SupervisorDashboard() {
                     { icon: 'route', label: 'View Routes', sub: 'Monitor collection routes', href: '/dashboard/supervisor/routes', color: '#1d4ed8', bg: 'rgba(29,78,216,0.06)' },
                     { icon: 'map', label: 'Ward Heatmap', sub: 'Performance by ward', href: '/dashboard/supervisor/heatmap', color: '#00450d', bg: 'rgba(0,69,13,0.06)' },
                     { icon: 'fact_check', label: 'Compliance', sub: 'Schedule compliance view', href: '/dashboard/supervisor/schedule-compliance', color: '#7c3aed', bg: 'rgba(124,58,237,0.06)' },
-                    { icon: 'picture_as_pdf', label: 'Shift Report', sub: 'Export daily PDF report', href: '/dashboard/supervisor/shift-report', color: '#d97706', bg: 'rgba(217,119,6,0.06)' },
                   ].map(action => (
                     <Link key={action.label} href={action.href} style={{ textDecoration: 'none' }}>
                       <div className="action-card" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.05)' }}>
