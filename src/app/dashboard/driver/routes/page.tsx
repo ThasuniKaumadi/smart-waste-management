@@ -317,23 +317,22 @@ export default function DriverRoutesPage() {
             </div>
           </div>
 
-          {/* Start banner */}
-          {isPending && (
-            <div className="a2" style={{ marginBottom: 20, padding: 20, borderRadius: 16, background: '#fefce8', border: '1.5px solid rgba(217,119,6,0.2)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <span className="msf" style={{ fontSize: 22, color: '#d97706' }}>play_circle</span>
+          {/* Manual start button — always show when active too */}
+          {(isPending || isActive) && !handoffCode && (
+            <div className="a2" style={{ marginBottom: 20 }}>
+              {isPending && (
+                <button onClick={startRoute} disabled={starting} className="start-btn">
+                  {starting
+                    ? <><div style={{ width: 18, height: 18, border: '2.5px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Starting…</>
+                    : <><span className="msf" style={{ fontSize: 22 }}>play_arrow</span>Start Route</>}
+                </button>
+              )}
+              {isActive && (
+                <div style={{ padding: '12px 16px', borderRadius: 12, background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="msf-fill" style={{ fontSize: 18, color: '#00450d' }}>play_circle</span>
+                  <p style={{ fontSize: 13, color: '#00450d', fontWeight: 600, fontFamily: 'Manrope,sans-serif', margin: 0 }}>Route is active — mark streets as collected</p>
                 </div>
-                <div>
-                  <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#92400e', margin: '0 0 2px' }}>Route not started yet</p>
-                  <p style={{ fontSize: 12, color: '#b45309', margin: 0 }}>Tap below when you are ready to begin collections</p>
-                </div>
-              </div>
-              <button onClick={startRoute} disabled={starting} className="start-btn">
-                {starting
-                  ? <><div style={{ width: 18, height: 18, border: '2.5px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Starting…</>
-                  : <><span className="msf" style={{ fontSize: 22 }}>play_arrow</span>Start Route</>}
-              </button>
+              )}
             </div>
           )}
 
