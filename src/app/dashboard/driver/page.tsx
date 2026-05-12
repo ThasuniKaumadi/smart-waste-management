@@ -64,9 +64,17 @@ export default function DriverDashboardPage() {
     })
 
     const today = new Date().toISOString().split('T')[0]
-    const { data: routes } = await supabase
-      .from('routes').select('*').eq('driver_id', user.id)
-      .gte('created_at', today).order('created_at', { ascending: false }).limit(3)
+    const { data: assignments } = await supabase
+      .from('driver_assignments')
+      .select('route_id')
+      .eq('driver_id', user.id)
+      .gte('assigned_date', today)
+      .limit(3)
+
+    const routeIds = (assignments || []).map(a => a.route_id).filter(Boolean)
+    const { data: routes } = routeIds.length > 0
+      ? await supabase.from('routes').select('*').in('id', routeIds)
+      : { data: [] }
     setTodayRoutes(routes || [])
 
     const { data: collections } = await supabase

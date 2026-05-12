@@ -93,14 +93,36 @@ export default function DriverRoutesPage() {
 
     const today = new Date().toISOString().split('T')[0]
 
-    const { data: routeData } = await supabase
-      .from('routes')
-      .select('*')
+    // First try: find route via driver_assignments join
+    const { data: assignment } = await supabase
+      .from('driver_assignments')
+      .select('route_id, shift, assigned_date')
       .eq('driver_id', user.id)
-      .gte('date', today)
-      .order('date', { ascending: true })
+      .gte('assigned_date', today)
+      .order('assigned_date', { ascending: true })
       .limit(1)
       .single()
+
+    let routeData = null
+    if (assignment?.route_id) {
+      const { data: r } = await supabase
+        .from('routes')
+        .select('*')
+        .eq('id', assignment.route_id)
+        .single()
+      routeData = r
+    } else {
+      // Fallback: direct driver_id on routes (for future routes created with driver_id set)
+      const { data: r } = await supabase
+        .from('routes')
+        .select('*')
+        .eq('driver_id', user.id)
+        .gte('date', today)
+        .order('date', { ascending: true })
+        .limit(1)
+        .single()
+      routeData = r
+    }
 
     if (!routeData) { setLoading(false); return }
     setRoute(routeData)
