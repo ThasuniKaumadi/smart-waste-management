@@ -97,26 +97,28 @@ export default function DriverRoutesPage() {
     setProfile(p)
     const today = new Date().toISOString().split('T')[0]
 
-    // Try driver_assignments first
-    const { data: assignment } = await supabase
+    // Load all assigned routes
+    const { data: assignments } = await supabase
       .from('driver_assignments').select('route_id').eq('driver_id', user.id)
-      .gte('assigned_date', today).order('assigned_date', { ascending: true }).limit(1).maybeSingle()
+      .gte('assigned_date', today).order('assigned_date', { ascending: true })
 
-    let routeData: Route | null = null
-    if (assignment?.route_id) {
-      const { data: r } = await supabase.from('routes').select('*').eq('id', assignment.route_id).single()
-      routeData = r
-    } else {
-      const { data: rows } = await supabase.from('routes').select('*').eq('driver_id', user.id)
-        .gte('date', today).order('date', { ascending: true }).limit(1)
-      routeData = rows?.[0] || null
+    const routeIds = (assignments || []).map((a: any) => a.route_id)
+    const { data: directRoutes } = await supabase.from('routes').select('*')
+      .eq('driver_id', user.id).gte('date', today).order('date', { ascending: true })
+
+    let allRoutes: Route[] = [...(directRoutes || [])]
+    if (routeIds.length > 0) {
+      const { data: assignedRoutes } = await supabase.from('routes').select('*').in('id', routeIds)
+      allRoutes = [...allRoutes, ...(assignedRoutes || [])]
     }
+    const seen = new Set()
+    const deduped = allRoutes.filter((r: Route) => seen.has(r.id) ? false : seen.add(r.id))
+    setRoutes(deduped)
+    const first = deduped[0] || null
+    setSelectedRoute(first)
 
-    if (!routeData) { setLoading(false); return }
-    setSelectedRoute(routeData)
-
-    if (routeData.schedule_id) {
-      const { data: s } = await supabase.from('schedules').select('*').eq('id', routeData.schedule_id).single()
+    if (first?.schedule_id) {
+      const { data: s } = await supabase.from('schedules').select('*').eq('id', first.schedule_id).single()
       setSchedule(s)
     }
     setLoading(false)
@@ -594,6 +596,9 @@ export default function DriverRoutesPage() {
     </DashboardLayout>
   )
 }
+
+
+
 
 
 
