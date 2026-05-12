@@ -363,7 +363,6 @@ export default function DEDisposalPage() {
                             </button>
                         </div>
                     )}
-
                     )}
 
                     {/* Schedule list */}
