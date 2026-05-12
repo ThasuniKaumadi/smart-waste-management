@@ -52,8 +52,8 @@ export default function ResidentTrackingPage() {
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
 
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-    const { data: locs } = await supabase.from('vehicle_locations').select('*').gte('updated_at', twoHoursAgo)
+    const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
+    const { data: locs } = await supabase.from('vehicle_locations').select('*').gte('updated_at', eightHoursAgo)
     setVehicles(locs || [])
 
     if (p?.district) {

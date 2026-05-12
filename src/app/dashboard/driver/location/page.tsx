@@ -73,7 +73,7 @@ export default function DriverLocationPage() {
       route_id: activeRoute.id,
       latitude: lat,
       longitude: lng,
-      speed_kmh: speed ? Math.round(speed * 3.6) : 0,
+      speed: speed ? Math.round(speed * 3.6) : 0,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'driver_id' })
     // Call alert monitor at most once every 2 minutes
