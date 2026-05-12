@@ -48,6 +48,8 @@ interface Stop {
   notes: string | null
   bin_count: number | null
   blockchain_tx?: string | null
+  latitude: number | null
+  longitude: number | null
 }
 
 interface Schedule {
@@ -61,12 +63,29 @@ interface Schedule {
   notes: string | null
 }
 
+function openNavigation(stop: Stop) {
+  const label = encodeURIComponent(stop.road_name || stop.address || 'Collection Stop')
+  if (stop.latitude && stop.longitude) {
+    window.open(
+      `https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}&travelmode=driving`,
+      '_blank'
+    )
+  } else if (stop.address || stop.road_name) {
+    const addr = encodeURIComponent(stop.address || stop.road_name)
+    window.open(
+      `https://www.google.com/maps/dir/?api=1&destination=${addr}&travelmode=driving`,
+      '_blank'
+    )
+  }
+}
+
 export default function DriverRoutesPage() {
   const [profile, setProfile] = useState<any>(null)
   const [route, setRoute] = useState<Route | null>(null)
   const [stops, setStops] = useState<Stop[]>([])
   const [schedule, setSchedule] = useState<Schedule | null>(null)
   const [loading, setLoading] = useState(true)
+  const [starting, setStarting] = useState(false)
   const [updatingStop, setUpdatingStop] = useState<string | null>(null)
   const [skipModal, setSkipModal] = useState<Stop | null>(null)
   const [skipReason, setSkipReason] = useState('')
@@ -93,7 +112,7 @@ export default function DriverRoutesPage() {
 
     const today = new Date().toISOString().split('T')[0]
 
-    // First try: find route via driver_assignments join
+    // Try driver_assignments join first
     const { data: assignment } = await supabase
       .from('driver_assignments')
       .select('route_id, shift, assigned_date')
@@ -103,7 +122,7 @@ export default function DriverRoutesPage() {
       .limit(1)
       .single()
 
-    let routeData = null
+    let routeData: Route | null = null
     if (assignment?.route_id) {
       const { data: r } = await supabase
         .from('routes')
@@ -112,7 +131,7 @@ export default function DriverRoutesPage() {
         .single()
       routeData = r
     } else {
-      // Fallback: direct driver_id on routes (for future routes created with driver_id set)
+      // Fallback: direct driver_id on routes
       const { data: r } = await supabase
         .from('routes')
         .select('*')
@@ -146,6 +165,16 @@ export default function DriverRoutesPage() {
     setLoading(false)
   }
 
+  async function startRoute() {
+    if (!route) return
+    setStarting(true)
+    const supabase = createClient()
+    await supabase.from('routes').update({ status: 'active' }).eq('id', route.id)
+    setRoute(prev => prev ? { ...prev, status: 'active' } : prev)
+    showToast('Route started! Navigate to your first stop.')
+    setStarting(false)
+  }
+
   async function markCompleted(stop: Stop) {
     setBinModal(stop)
     setBinCount('')
@@ -156,7 +185,6 @@ export default function DriverRoutesPage() {
     setUpdatingStop(binModal.id)
     const supabase = createClient()
 
-    // Update collection stop as completed
     await supabase.from('collection_stops').update({
       status: 'completed',
       completed_at: new Date().toISOString(),
@@ -168,7 +196,6 @@ export default function DriverRoutesPage() {
       : s
     ))
 
-    // Log on blockchain
     try {
       const tx = await logCollectionOnChain(
         route?.id || binModal.id,
@@ -244,6 +271,10 @@ export default function DriverRoutesPage() {
     ? schedule.custom_waste_type
     : schedule?.waste_type?.replace('_', ' ') || 'Mixed waste'
 
+  const isActive = route?.status === 'active'
+  const isPending = route?.status === 'pending'
+  const isCompleted = route?.status === 'completed'
+
   return (
     <DashboardLayout role="Driver" userName={profile?.full_name || ''} navItems={DRIVER_NAV}>
       <style>{`
@@ -259,9 +290,14 @@ export default function DriverRoutesPage() {
         .btn-done:disabled { opacity:0.6; cursor:not-allowed; }
         .btn-skip { display:flex; align-items:center; gap:5px; padding:7px 12px; border-radius:99px; background:white; color:#ba1a1a; border:1.5px solid rgba(186,26,26,0.2); cursor:pointer; font-size:11px; font-weight:700; font-family:'Manrope',sans-serif; transition:all 0.2s; white-space:nowrap; }
         .btn-skip:hover { background:#fef2f2; }
+        .btn-nav { display:flex; align-items:center; gap:5px; padding:7px 12px; border-radius:99px; background:#eff6ff; color:#1d4ed8; border:1.5px solid rgba(29,78,216,0.15); cursor:pointer; font-size:11px; font-weight:700; font-family:'Manrope',sans-serif; transition:all 0.2s; white-space:nowrap; }
+        .btn-nav:hover { background:#dbeafe; }
         .badge { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; font-family:'Manrope',sans-serif; white-space:nowrap; }
         .progress-track { height:8px; background:#f0fdf4; border-radius:99px; overflow:hidden; }
         .progress-fill { height:100%; border-radius:99px; background:#00450d; transition:width 0.5s ease; }
+        .start-btn { width:100%; display:flex; align-items:center; justify-content:center; gap:10px; padding:18px; border-radius:16px; background:#00450d; color:white; border:none; cursor:pointer; font-family:'Manrope',sans-serif; font-weight:800; font-size:17px; transition:all 0.2s; box-shadow:0 4px 20px rgba(0,69,13,0.3); }
+        .start-btn:hover { background:#1b5e20; box-shadow:0 6px 24px rgba(0,69,13,0.35); transform:translateY(-1px); }
+        .start-btn:disabled { opacity:0.6; cursor:not-allowed; transform:none; }
         .dispatch-btn { width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border-radius:12px; background:#00450d; color:white; border:none; cursor:pointer; font-family:'Manrope',sans-serif; font-weight:700; font-size:15px; transition:all 0.2s; }
         .dispatch-btn:hover { background:#1b5e20; box-shadow:0 4px 16px rgba(0,69,13,0.25); }
         .dispatch-btn:disabled { opacity:0.6; cursor:not-allowed; }
@@ -272,6 +308,9 @@ export default function DriverRoutesPage() {
         @keyframes spin { to{transform:rotate(360deg)} }
         .modal-input { width:100%; padding:11px 14px; border:1.5px solid #e5e7eb; border-radius:10px; font-size:14px; font-family:'Inter',sans-serif; outline:none; box-sizing:border-box; color:#181c22; transition:border 0.2s; }
         .modal-input:focus { border-color:#00450d; box-shadow:0 0 0 3px rgba(0,69,13,0.07); }
+        .status-active { background:#f0fdf4; color:#00450d; }
+        .status-pending { background:#fefce8; color:#92400e; }
+        .status-completed { background:#eff6ff; color:#1d4ed8; }
       `}</style>
 
       {toast && (
@@ -296,15 +335,8 @@ export default function DriverRoutesPage() {
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6b7280', fontFamily: 'Manrope,sans-serif', marginBottom: 7 }}>
                   Bins Collected <span style={{ color: '#d1d5db', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— optional</span>
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="e.g. 3"
-                  value={binCount}
-                  onChange={e => setBinCount(e.target.value)}
-                  className="modal-input"
-                  autoFocus
-                />
+                <input type="number" min="0" placeholder="e.g. 3" value={binCount}
+                  onChange={e => setBinCount(e.target.value)} className="modal-input" autoFocus />
                 <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>Enter the number of bins collected at this stop.</p>
               </div>
               <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f0fdf4', border: '1px solid rgba(0,69,13,0.1)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -312,16 +344,13 @@ export default function DriverRoutesPage() {
                 <p style={{ fontSize: 11, color: '#41493e', margin: 0 }}>This collection will be recorded on the Polygon Amoy blockchain.</p>
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={confirmCompleted}
-                  disabled={!!updatingStop}
+                <button onClick={confirmCompleted} disabled={!!updatingStop}
                   style={{ flex: 2, padding: 12, borderRadius: 10, background: '#00450d', color: 'white', border: 'none', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: updatingStop ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  {updatingStop ? (
-                    <><div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Recording…</>
-                  ) : 'Confirm Collection'}
+                  {updatingStop
+                    ? <><div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Recording…</>
+                    : 'Confirm Collection'}
                 </button>
-                <button
-                  onClick={() => setBinModal(null)}
+                <button onClick={() => setBinModal(null)}
                   style={{ flex: 1, padding: 12, borderRadius: 10, border: '1.5px solid #e5e7eb', background: 'white', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, cursor: 'pointer', color: '#64748b' }}>
                   Cancel
                 </button>
@@ -399,9 +428,21 @@ export default function DriverRoutesPage() {
           <div className="a2" style={{ background: '#00450d', borderRadius: 20, padding: 24, color: 'white', marginBottom: 20, position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(163,246,156,0.07)' }} />
             <div style={{ position: 'relative', zIndex: 1 }}>
-              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(163,246,156,0.7)', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: 8 }}>
-                {new Date(route.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </p>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(163,246,156,0.7)', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: 0 }}>
+                  {new Date(route.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </p>
+                {/* Status badge */}
+                <span style={{
+                  padding: '4px 12px', borderRadius: 99, fontSize: 11, fontWeight: 700, fontFamily: 'Manrope,sans-serif',
+                  background: isActive ? 'rgba(163,246,156,0.2)' : isCompleted ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.1)',
+                  color: isActive ? '#a3f69c' : 'rgba(255,255,255,0.7)',
+                  textTransform: 'uppercase', letterSpacing: '0.08em'
+                }}>
+                  {isActive ? '● Active' : isCompleted ? '✓ Completed' : '○ Not Started'}
+                </span>
+              </div>
+
               <h2 style={{ fontSize: 24, fontWeight: 900, fontFamily: 'Manrope,sans-serif', margin: '0 0 12px' }}>{route.route_name}</h2>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
@@ -455,6 +496,27 @@ export default function DriverRoutesPage() {
             </div>
           </div>
 
+          {/* START ROUTE BANNER */}
+          {isPending && (
+            <div className="a2" style={{ marginBottom: 20, padding: 20, borderRadius: 16, background: '#fefce8', border: '1.5px solid rgba(217,119,6,0.2)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span className="msf" style={{ fontSize: 22, color: '#d97706' }}>play_circle</span>
+                </div>
+                <div>
+                  <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, color: '#92400e', margin: '0 0 2px' }}>Route not started yet</p>
+                  <p style={{ fontSize: 12, color: '#b45309', margin: 0 }}>Tap below when you are ready to begin collections</p>
+                </div>
+              </div>
+              <button onClick={startRoute} disabled={starting} className="start-btn">
+                {starting
+                  ? <><div style={{ width: 18, height: 18, border: '2.5px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Starting…</>
+                  : <><span className="msf" style={{ fontSize: 22 }}>play_arrow</span>Start Route</>
+                }
+              </button>
+            </div>
+          )}
+
           {/* Stats row */}
           <div className="a2" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
             {[
@@ -480,7 +542,14 @@ export default function DriverRoutesPage() {
           <div className="a3 card" style={{ marginBottom: 20 }}>
             <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 15, color: '#181c22', margin: 0 }}>Collection Stops</h3>
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>{stops.length} stops</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>{stops.length} stops</span>
+                {isPending && (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', background: '#fefce8', padding: '2px 8px', borderRadius: 99, fontFamily: 'Manrope,sans-serif' }}>
+                    Start route to begin
+                  </span>
+                )}
+              </div>
             </div>
 
             {stops.length === 0 ? (
@@ -491,6 +560,8 @@ export default function DriverRoutesPage() {
             ) : stops.map((stop, idx) => {
               const isDone = stop.status === 'completed'
               const isSkipped = stop.status === 'skipped'
+              const hasCoords = !!(stop.latitude && stop.longitude) || !!(stop.address || stop.road_name)
+
               return (
                 <div key={stop.id} className={`stop-row ${isDone ? 'completed' : ''} ${isSkipped ? 'skipped' : ''}`}>
                   <div style={{ width: 28, height: 28, borderRadius: '50%', background: isDone ? '#f0fdf4' : isSkipped ? '#fef2f2' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -534,23 +605,40 @@ export default function DriverRoutesPage() {
                     </div>
                   </div>
 
-                  {!isDone && !isSkipped && route.status !== 'completed' && (
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => markCompleted(stop)} disabled={updatingStop === stop.id} className="btn-done">
-                        <span className="msf" style={{ fontSize: 13 }}>check</span>Done
+                  {/* Action buttons — only when route is active */}
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    {/* Navigate button always visible if we have location info */}
+                    {hasCoords && !isDone && !isSkipped && (
+                      <button onClick={() => openNavigation(stop)} className="btn-nav" title="Open in Google Maps">
+                        <span className="msf" style={{ fontSize: 13 }}>navigation</span>
+                        Nav
                       </button>
-                      <button onClick={() => setSkipModal(stop)} disabled={!!updatingStop} className="btn-skip">
-                        <span className="msf" style={{ fontSize: 13 }}>close</span>Skip
-                      </button>
-                    </div>
-                  )}
+                    )}
+                    {/* Done/Skip only when route is active */}
+                    {isActive && !isDone && !isSkipped && (
+                      <>
+                        <button onClick={() => markCompleted(stop)} disabled={updatingStop === stop.id} className="btn-done">
+                          <span className="msf" style={{ fontSize: 13 }}>check</span>Done
+                        </button>
+                        <button onClick={() => setSkipModal(stop)} disabled={!!updatingStop} className="btn-skip">
+                          <span className="msf" style={{ fontSize: 13 }}>close</span>Skip
+                        </button>
+                      </>
+                    )}
+                    {/* Locked state when pending */}
+                    {isPending && !isDone && !isSkipped && (
+                      <span style={{ fontSize: 11, color: '#d1d5db', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'Manrope,sans-serif' }}>
+                        <span className="msf" style={{ fontSize: 14 }}>lock</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               )
             })}
           </div>
 
           {/* Dispatch button */}
-          {route.status !== 'completed' && pending === 0 && stops.length > 0 && !handoffCode && (
+          {isActive && pending === 0 && stops.length > 0 && !handoffCode && (
             <div className="a3">
               <button onClick={dispatchRoute} disabled={dispatching} className="dispatch-btn">
                 {dispatching
