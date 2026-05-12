@@ -33,7 +33,7 @@ export default function BlockchainViewerPage() {
         const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         setProfile(p)
       }
-      const { data } = await supabase.from('collection_events').select('*').not('blockchain_tx', 'is', null).order('created_at', { ascending: false })
+      const { data } = await supabase.from('collection_stops').select('*').not('blockchain_tx', 'is', null).order('created_at', { ascending: false })
       setCollections(data || [])
       setLoading(false)
     }
