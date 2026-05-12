@@ -7,11 +7,12 @@ import DashboardLayout from '@/components/DashboardLayout'
 import AnnouncementsWidget from '@/components/AnnouncementsWidget'
 
 const CONTRACTOR_NAV = [
-  { label: 'Overview', href: '/dashboard/contractor', icon: 'dashboard' },
+  { label: 'Home', href: '/dashboard/contractor', icon: 'dashboard' },
   { label: 'Routes', href: '/dashboard/contractor/routes', icon: 'route' },
   { label: 'Schedules', href: '/dashboard/contractor/schedules', icon: 'calendar_month' },
   { label: 'Fleet', href: '/dashboard/contractor/fleet', icon: 'local_shipping' },
   { label: 'Contracts', href: '/dashboard/contractor/contracts', icon: 'description' },
+  { label: 'Breakdowns', href: '/dashboard/contractor/breakdowns', icon: 'car_crash' },
   { label: 'Incidents', href: '/dashboard/contractor/incidents', icon: 'warning' },
   { label: 'Messages', href: '/dashboard/contractor/messages', icon: 'chat' },
   { label: 'Zones', href: '/dashboard/contractor/zones', icon: 'map' },
@@ -424,3 +425,4 @@ export default function ContractorDashboardPage() {
     </DashboardLayout>
   )
 }
+
