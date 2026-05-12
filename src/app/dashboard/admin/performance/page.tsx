@@ -13,7 +13,6 @@ const ADMIN_NAV = [
     { label: 'Blockchain', href: '/dashboard/admin/blockchain', icon: 'link' },
     { label: 'Performance', href: '/dashboard/admin/performance', icon: 'analytics' },
     { label: 'Disposal', href: '/dashboard/admin/disposal', icon: 'delete_sweep' },
-    { label: 'Reports', href: '/dashboard/admin/reports', icon: 'rate_review' },
     { label: 'Profile', href: '/dashboard/admin/profile', icon: 'person' },
 ]
 
