@@ -32,64 +32,40 @@ const ACTIONS = [
   { label: 'My Profile', desc: 'Update your details', icon: 'person', href: '/dashboard/resident/profile', color: '#0e7490', bg: '#ecfeff', border: '#a5f3fc' },
 ]
 
-// Recycling centres near Colombo CMC districts
 const RECYCLING_CENTERS = [
-  {
-    name: 'Orugodawatte Waste Recycling Centre',
-    district: 'Colombo North – District 1',
-    address: 'Orugodawatte Road, Colombo 10',
-    types: ['Paper', 'Plastic', 'Metal'],
-    hours: 'Mon–Sat · 7:00 AM – 5:00 PM',
-    phone: '+94 11 269 1234',
-    tip: 'Largest CMC facility. Accepts bulk recyclables from households.',
-    color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', icon: 'recycling',
-  },
-  {
-    name: 'Bloemendhal E-Waste Drop Point',
-    district: 'Colombo North – District 2',
-    address: 'Bloemendhal Road, Colombo 13',
-    types: ['Electronics', 'Batteries', 'Cables'],
-    hours: 'Mon–Fri · 8:00 AM – 4:00 PM',
-    phone: '+94 11 243 5678',
-    tip: 'Bring old phones, laptops and appliances. Staff will issue a receipt.',
-    color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff', icon: 'computer',
-  },
-  {
-    name: 'Wellawatte Community Composting Hub',
-    district: 'Colombo South – District 3',
-    address: 'Galle Road, Wellawatte, Colombo 6',
-    types: ['Organic', 'Garden Waste', 'Food Scraps'],
-    hours: 'Daily · 6:00 AM – 6:00 PM',
-    phone: '+94 11 258 9012',
-    tip: 'Free compost bags available on collection days for registered residents.',
-    color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: 'compost',
-  },
-  {
-    name: 'Narahenpita Material Recovery Facility',
-    district: 'Colombo Central – District 4',
-    address: 'Narahenpita Road, Colombo 5',
-    types: ['Paper', 'Glass', 'Plastic', 'Metal'],
-    hours: 'Mon–Sat · 7:30 AM – 4:30 PM',
-    phone: '+94 11 267 3456',
-    tip: 'Sort your recyclables before drop-off to speed up processing.',
-    color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', icon: 'delete_sweep',
-  },
-  {
-    name: 'Dehiwala Municipal Recycling Point',
-    district: 'Dehiwala–Mount Lavinia',
-    address: 'Station Road, Dehiwala',
-    types: ['Plastic', 'Paper', 'Cardboard'],
-    hours: 'Tue, Thu, Sat · 8:00 AM – 1:00 PM',
-    phone: '+94 11 271 2222',
-    tip: 'Open three days a week only. Call ahead before visiting.',
-    color: '#0e7490', bg: '#ecfeff', border: '#a5f3fc', icon: 'store',
-  },
+  { name: 'Orugodawatte Waste Recycling Centre', district: 'Colombo North – District 1', address: 'Orugodawatte Road, Colombo 10', types: ['Paper', 'Plastic', 'Metal'], hours: 'Mon–Sat · 7:00 AM – 5:00 PM', phone: '+94 11 269 1234', tip: 'Largest CMC facility. Accepts bulk recyclables from households.', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', icon: 'recycling' },
+  { name: 'Bloemendhal E-Waste Drop Point', district: 'Colombo North – District 2', address: 'Bloemendhal Road, Colombo 13', types: ['Electronics', 'Batteries', 'Cables'], hours: 'Mon–Fri · 8:00 AM – 4:00 PM', phone: '+94 11 243 5678', tip: 'Bring old phones, laptops and appliances. Staff will issue a receipt.', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff', icon: 'computer' },
+  { name: 'Wellawatte Community Composting Hub', district: 'Colombo South – District 3', address: 'Galle Road, Wellawatte, Colombo 6', types: ['Organic', 'Garden Waste', 'Food Scraps'], hours: 'Daily · 6:00 AM – 6:00 PM', phone: '+94 11 258 9012', tip: 'Free compost bags available on collection days for registered residents.', color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: 'compost' },
+  { name: 'Narahenpita Material Recovery Facility', district: 'Colombo Central – District 4', address: 'Narahenpita Road, Colombo 5', types: ['Paper', 'Glass', 'Plastic', 'Metal'], hours: 'Mon–Sat · 7:30 AM – 4:30 PM', phone: '+94 11 267 3456', tip: 'Sort your recyclables before drop-off to speed up processing.', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', icon: 'delete_sweep' },
+  { name: 'Dehiwala Municipal Recycling Point', district: 'Dehiwala–Mount Lavinia', address: 'Station Road, Dehiwala', types: ['Plastic', 'Paper', 'Cardboard'], hours: 'Tue, Thu, Sat · 8:00 AM – 1:00 PM', phone: '+94 11 271 2222', tip: 'Open three days a week only. Call ahead before visiting.', color: '#0e7490', bg: '#ecfeff', border: '#a5f3fc', icon: 'store' },
 ]
 
 interface Schedule {
   id: string; waste_type: string; collection_day: string
   collection_time: string; frequency: string; notes: string
   scheduled_date: string; wards: string[]; ward: string
+}
+
+interface ActiveTruck {
+  driver_id: string
+  route_id: string
+  latitude: number
+  longitude: number
+  updated_at: string
+  district: string | null
+  ward: string | null
+  // joined
+  route_name?: string
+  plate_number?: string
+  completed_stops?: number
+  total_stops?: number
+}
+
+function timeAgo(iso: string) {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (diff < 60) return `${diff}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  return `${Math.floor(diff / 3600)}h ago`
 }
 
 function RecyclingSlideshow() {
@@ -99,37 +75,31 @@ function RecyclingSlideshow() {
 
   function goTo(idx: number) {
     if (animating || idx === current) return
-    setAnimating(true)
-    setCurrent(idx)
-    setTimeout(() => setAnimating(false), 400)
+    setAnimating(true); setCurrent(idx); setTimeout(() => setAnimating(false), 400)
   }
-
   function next() { goTo((current + 1) % RECYCLING_CENTERS.length) }
   function prev() { goTo((current - 1 + RECYCLING_CENTERS.length) % RECYCLING_CENTERS.length) }
 
   useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setCurrent(c => (c + 1) % RECYCLING_CENTERS.length)
-    }, 5000)
+    timerRef.current = setInterval(() => setCurrent(c => (c + 1) % RECYCLING_CENTERS.length), 5000)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [])
 
   function resetTimer() {
     if (timerRef.current) clearInterval(timerRef.current)
-    timerRef.current = setInterval(() => {
-      setCurrent(c => (c + 1) % RECYCLING_CENTERS.length)
-    }, 5000)
+    timerRef.current = setInterval(() => setCurrent(c => (c + 1) % RECYCLING_CENTERS.length), 5000)
   }
 
   const center = RECYCLING_CENTERS[current]
+  const msf = { fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24", display: 'inline-block' as const }
+  const msfFill = { fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24", display: 'inline-block' as const }
 
   return (
     <div style={{ background: 'white', borderRadius: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid rgba(0,69,13,0.05)', overflow: 'hidden' }}>
-      {/* Header */}
       <div style={{ padding: '14px 18px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(0,69,13,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24", fontSize: 16, color: '#00450d', display: 'inline-block' }}>recycling</span>
+            <span style={{ ...msf, fontSize: 16, color: '#00450d' }}>recycling</span>
           </div>
           <div>
             <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22', lineHeight: 1.2, margin: 0 }}>Recycling Centres Nearby</p>
@@ -137,66 +107,45 @@ function RecyclingSlideshow() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button onClick={() => { prev(); resetTimer() }}
-            style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
-            <span style={{ fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24", fontSize: 16, color: '#64748b', display: 'inline-block' }}>chevron_left</span>
+          <button onClick={() => { prev(); resetTimer() }} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <span style={{ ...msf, fontSize: 16, color: '#64748b' }}>chevron_left</span>
           </button>
-          <button onClick={() => { next(); resetTimer() }}
-            style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
-            <span style={{ fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24", fontSize: 16, color: '#64748b', display: 'inline-block' }}>chevron_right</span>
+          <button onClick={() => { next(); resetTimer() }} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <span style={{ ...msf, fontSize: 16, color: '#64748b' }}>chevron_right</span>
           </button>
         </div>
       </div>
-
-      {/* Card content */}
       <div style={{ padding: '16px 18px', opacity: animating ? 0 : 1, transition: 'opacity 0.3s ease' }}>
-        {/* Top accent + icon */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
           <div style={{ width: 44, height: 44, borderRadius: 12, background: center.bg, border: `1px solid ${center.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <span style={{ fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24", fontSize: 22, color: center.color, display: 'inline-block' }}>{center.icon}</span>
+            <span style={{ ...msfFill, fontSize: 22, color: center.color }}>{center.icon}</span>
           </div>
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: '#181c22', fontFamily: 'Manrope,sans-serif', marginBottom: 2, lineHeight: 1.3 }}>{center.name}</p>
             <p style={{ fontSize: 11, color: center.color, fontWeight: 600, margin: 0 }}>{center.district}</p>
           </div>
         </div>
-
-        {/* Address */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 8 }}>
-          <span style={{ fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24", fontSize: 14, color: '#94a3b8', display: 'inline-block', marginTop: 1 }}>location_on</span>
+          <span style={{ ...msf, fontSize: 14, color: '#94a3b8', marginTop: 1 }}>location_on</span>
           <p style={{ fontSize: 12, color: '#64748b', margin: 0, lineHeight: 1.4 }}>{center.address}</p>
         </div>
-
-        {/* Hours */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-          <span style={{ fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24", fontSize: 14, color: '#94a3b8', display: 'inline-block' }}>schedule</span>
+          <span style={{ ...msf, fontSize: 14, color: '#94a3b8' }}>schedule</span>
           <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>{center.hours}</p>
         </div>
-
-        {/* Accepted types */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
           {center.types.map(t => (
-            <span key={t} style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: center.bg, color: center.color, border: `1px solid ${center.border}`, fontFamily: 'Manrope,sans-serif', letterSpacing: '0.04em' }}>
-              {t}
-            </span>
+            <span key={t} style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: center.bg, color: center.color, border: `1px solid ${center.border}`, fontFamily: 'Manrope,sans-serif' }}>{t}</span>
           ))}
         </div>
-
-        {/* Tip */}
         <div style={{ borderRadius: 10, padding: '9px 12px', background: '#f8fafc', border: '1px solid #f1f5f9', display: 'flex', gap: 8, marginBottom: 12 }}>
-          <span style={{ fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24", fontSize: 14, color: '#f59e0b', display: 'inline-block', flexShrink: 0, marginTop: 1 }}>lightbulb</span>
+          <span style={{ ...msfFill, fontSize: 14, color: '#f59e0b', flexShrink: 0, marginTop: 1 }}>lightbulb</span>
           <p style={{ fontSize: 11, color: '#475569', lineHeight: 1.5, margin: 0 }}>{center.tip}</p>
         </div>
-
-        {/* Phone */}
-        <a href={`tel:${center.phone}`}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: center.color, fontWeight: 700, textDecoration: 'none', fontFamily: 'Manrope,sans-serif' }}>
-          <span style={{ fontFamily: 'Material Symbols Outlined', fontVariationSettings: "'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24", fontSize: 14, display: 'inline-block' }}>call</span>
-          {center.phone}
+        <a href={`tel:${center.phone}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: center.color, fontWeight: 700, textDecoration: 'none', fontFamily: 'Manrope,sans-serif' }}>
+          <span style={{ ...msf, fontSize: 14 }}>call</span>{center.phone}
         </a>
       </div>
-
-      {/* Dots */}
       <div style={{ padding: '10px 18px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
         {RECYCLING_CENTERS.map((_, i) => (
           <button key={i} onClick={() => { goTo(i); resetTimer() }}
@@ -216,6 +165,7 @@ export default function ResidentDashboardPage() {
   const [confirmStatuses, setConfirmStatuses] = useState<Record<string, 'confirmed' | 'unable'>>({})
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
+  const [activeTrucks, setActiveTrucks] = useState<ActiveTruck[]>([])
 
   useEffect(() => { loadData() }, [])
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3000) }
@@ -226,6 +176,7 @@ export default function ResidentDashboardPage() {
     if (!user) return
     const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     setProfile(p)
+
     if (p?.district) {
       const today = new Date().toISOString().split('T')[0]
       const { data: raw } = await supabase.from('schedules').select('*')
@@ -238,13 +189,49 @@ export default function ResidentDashboardPage() {
         filtered = ws.length > 0 ? [...ws, ...dw] : dw.length > 0 ? dw : filtered
       }
       setSchedules(filtered)
+
       if (filtered.length > 0) {
         const { data: confs } = await supabase.from('waste_confirmations').select('schedule_id,status').eq('user_id', user.id)
         const map: Record<string, 'confirmed' | 'unable'> = {}
           ; (confs || []).forEach((c: any) => { map[c.schedule_id] = c.status })
         setConfirmStatuses(map)
       }
+
+      // Load active trucks in resident's district
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+      const { data: locs } = await supabase
+        .from('vehicle_locations')
+        .select('*')
+        .eq('district', p.district)
+        .gte('updated_at', twoHoursAgo)
+
+      if (locs && locs.length > 0) {
+        // Enrich with route + stop progress
+        const enriched = await Promise.all(locs.map(async (loc: any) => {
+          const [{ data: route }, { count: total }, { count: completed }] = await Promise.all([
+            supabase.from('routes').select('route_name, vehicle_id').eq('id', loc.route_id).single(),
+            supabase.from('collection_stops').select('*', { count: 'exact', head: true }).eq('route_id', loc.route_id),
+            supabase.from('collection_stops').select('*', { count: 'exact', head: true }).eq('route_id', loc.route_id).eq('status', 'completed'),
+          ])
+          let plate = null
+          if (route?.vehicle_id) {
+            const { data: v } = await supabase.from('vehicles').select('plate_number').eq('id', route.vehicle_id).single()
+            plate = v?.plate_number
+          }
+          return {
+            ...loc,
+            route_name: route?.route_name || 'Active Route',
+            plate_number: plate,
+            total_stops: total || 0,
+            completed_stops: completed || 0,
+          } as ActiveTruck
+        }))
+        setActiveTrucks(enriched)
+      } else {
+        setActiveTrucks([])
+      }
     }
+
     const { data: comp } = await supabase.from('complaints').select('*').eq('submitted_by', user.id).order('created_at', { ascending: false }).limit(3)
     setComplaints(comp || [])
     const { data: rep } = await supabase.from('waste_reports').select('*').eq('submitted_by', user.id).order('created_at', { ascending: false }).limit(3)
@@ -302,8 +289,10 @@ export default function ResidentDashboardPage() {
         .activity-row:last-child{border-bottom:none}
         .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:99px;font-size:9px;font-weight:700;font-family:'Manrope',sans-serif;letter-spacing:0.06em;text-transform:uppercase;border:1px solid transparent}
         .hero{background:linear-gradient(135deg,#00450d 0%,#1b5e20 60%,#2e7d32 100%);border-radius:20px;padding:22px 28px;margin-bottom:24px;position:relative;overflow:hidden}
-        .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 80% 50%,rgba(255,255,255,0.07) 0%,transparent 60%);pointer-events:none}
-        .hero::after{content:'';position:absolute;right:-40px;top:-40px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,0.04);pointer-events:none}
+        .truck-row{padding:14px 18px;border-bottom:1px solid rgba(0,69,13,0.04);display:flex;align-items:center;gap:14px}
+        .truck-row:last-child{border-bottom:none}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        .live-dot{animation:pulse 1.5s ease infinite}
         .toast-msg{animation:slideUp .3s ease}
         @keyframes slideUp{from{transform:translateY(12px) translateX(-50%);opacity:0}to{transform:translateY(0) translateX(-50%);opacity:1}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -339,6 +328,84 @@ export default function ResidentDashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 28, alignItems: 'start' }}>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+            {/* ── ACTIVE TRUCKS STATUS ── */}
+            <div className="a2">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#94a3b8', fontFamily: 'Manrope,sans-serif', margin: 0 }}>Collection Activity</p>
+                  {activeTrucks.length > 0 && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)' }}>
+                      <span className="live-dot" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#16a34a' }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', fontFamily: 'Manrope,sans-serif' }}>LIVE</span>
+                    </span>
+                  )}
+                </div>
+                <Link href="/dashboard/resident/tracking" style={{ fontSize: 11, fontWeight: 700, color: '#00450d', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Manrope,sans-serif' }}>
+                  Full Map <span className="msf" style={{ fontSize: 13 }}>chevron_right</span>
+                </Link>
+              </div>
+
+              {activeTrucks.length === 0 ? (
+                <div style={{ borderRadius: 16, padding: '16px 20px', background: 'white', border: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.04)' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span className="msf" style={{ fontSize: 22, color: '#94a3b8' }}>local_shipping</span>
+                  </div>
+                  <div>
+                    <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22', margin: '0 0 2px' }}>No active trucks right now</p>
+                    <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
+                      {todayScheds.length > 0 ? 'Collection is scheduled today — trucks will appear when drivers start routes.' : 'Check back on your next collection day.'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="card">
+                  {activeTrucks.map((truck, i) => {
+                    const progress = truck.total_stops! > 0 ? Math.round((truck.completed_stops! / truck.total_stops!) * 100) : 0
+                    const stopsLeft = (truck.total_stops || 0) - (truck.completed_stops || 0)
+                    return (
+                      <div key={truck.driver_id} className="truck-row">
+                        <div style={{ position: 'relative', flexShrink: 0 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(0,69,13,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span className="msf" style={{ fontSize: 22, color: '#00450d' }}>local_shipping</span>
+                          </div>
+                          <span className="live-dot" style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: '#16a34a', border: '2px solid white', display: 'inline-block' }} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 13, color: '#181c22', margin: 0 }}>
+                              {truck.plate_number || `Truck ${i + 1}`}
+                            </p>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', background: 'rgba(22,163,74,0.08)', padding: '1px 7px', borderRadius: 99, fontFamily: 'Manrope,sans-serif' }}>ACTIVE</span>
+                          </div>
+                          <p style={{ fontSize: 11, color: '#717a6d', margin: '0 0 6px', fontFamily: 'Manrope,sans-serif' }}>
+                            {truck.route_name} · {truck.ward || profile?.ward || 'Your area'} · {timeAgo(truck.updated_at)}
+                          </p>
+                          {/* Progress bar */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ flex: 1, height: 5, background: '#f0fdf4', borderRadius: 99, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', borderRadius: 99, background: '#00450d', width: `${progress}%`, transition: 'width 0.5s ease' }} />
+                            </div>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#00450d', fontFamily: 'Manrope,sans-serif', whiteSpace: 'nowrap' }}>
+                              {truck.completed_stops}/{truck.total_stops} stops
+                            </span>
+                          </div>
+                          {stopsLeft > 0 && (
+                            <p style={{ fontSize: 10, color: '#94a3b8', margin: '3px 0 0', fontFamily: 'Manrope,sans-serif' }}>
+                              {stopsLeft} stop{stopsLeft !== 1 ? 's' : ''} remaining in route
+                            </p>
+                          )}
+                        </div>
+                        <Link href="/dashboard/resident/tracking"
+                          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, padding: '7px 12px', borderRadius: 99, background: '#f0fdf4', color: '#00450d', textDecoration: 'none', fontSize: 11, fontWeight: 700, fontFamily: 'Manrope,sans-serif', border: '1px solid rgba(0,69,13,0.15)' }}>
+                          <span className="msf" style={{ fontSize: 14 }}>map</span>Map
+                        </Link>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* Next collection */}
             <div className="a2">
@@ -521,19 +588,18 @@ export default function ResidentDashboardPage() {
 
           {/* RIGHT sidebar */}
           <div style={{ position: 'sticky', top: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-            {/* Stats hero */}
             <div className="hero a1">
               <div style={{ position: 'relative', zIndex: 1 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {[
                     { value: schedules.length, label: 'Upcoming Collections', icon: 'calendar_month' },
-                    { value: complaints.length + reports.length, label: 'My Reports', icon: 'report_problem' },
+                    { value: activeTrucks.length, label: activeTrucks.length === 1 ? 'Active Truck' : 'Active Trucks', icon: 'local_shipping', live: activeTrucks.length > 0 },
                     { value: [...complaints, ...reports].filter((r: any) => r.status === 'resolved').length, label: 'Resolved', icon: 'task_alt' },
                   ].map((s, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
                         <span className="msf" style={{ fontSize: 18, color: 'rgba(255,255,255,0.8)' }}>{s.icon}</span>
+                        {(s as any).live && <span className="live-dot" style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#4ade80', border: '1.5px solid rgba(0,69,13,0.8)', display: 'inline-block' }} />}
                       </div>
                       <div>
                         <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800, fontSize: 22, color: 'white', lineHeight: 1, margin: '0 0 2px' }}>{s.value}</p>
@@ -544,12 +610,7 @@ export default function ResidentDashboardPage() {
                 </div>
               </div>
             </div>
-
-            {/* Recycling Centre Slideshow */}
-            <div className="a1">
-              <RecyclingSlideshow />
-            </div>
-
+            <div className="a1"><RecyclingSlideshow /></div>
           </div>
         </div>
       )}

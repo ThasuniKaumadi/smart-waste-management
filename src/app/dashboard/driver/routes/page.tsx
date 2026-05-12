@@ -80,6 +80,7 @@ export default function DriverRoutesPage() {
   const [selectedStop, setSelectedStop] = useState<Stop | null>(null)
   const [mapRef, setMapRef] = useState<google.maps.Map | null>(null)
   const [pendingGeocode, setPendingGeocode] = useState<Stop[]>([])
+  const locationIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const { isLoaded: mapsLoaded } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
@@ -99,6 +100,55 @@ export default function DriverRoutesPage() {
     withCoords.forEach(s => bounds.extend({ lat: s.latitude!, lng: s.longitude! }))
     mapRef.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 })
   }, [mapRef, stops, mapsLoaded])
+
+  // Broadcast driver location every 30s when route is active
+  useEffect(() => {
+    if (!route || route.status !== 'active') {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current)
+        locationIntervalRef.current = null
+      }
+      return
+    }
+
+    async function broadcastLocation() {
+      if (!navigator.geolocation) return
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        await supabase.from('vehicle_locations').upsert({
+          driver_id: user.id,
+          route_id: route!.id,
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          district: profile?.district || null,
+          ward: profile?.ward || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'driver_id' })
+      }, () => {/* silently ignore geolocation errors */ })
+    }
+
+    broadcastLocation() // immediate first ping
+    locationIntervalRef.current = setInterval(broadcastLocation, 30000)
+
+    return () => {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current)
+        locationIntervalRef.current = null
+      }
+    }
+  }, [route?.status, profile])
+
+  // Clear location from DB when route completed
+  useEffect(() => {
+    if (route?.status === 'completed') {
+      const supabase = createClient()
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) supabase.from('vehicle_locations').delete().eq('driver_id', user.id)
+      })
+    }
+  }, [route?.status])
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3500) }
 
