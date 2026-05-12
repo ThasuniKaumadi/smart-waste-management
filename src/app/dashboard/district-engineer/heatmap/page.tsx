@@ -87,6 +87,8 @@ export default function DECollectionMapPage() {
     const [selectedRoute, setSelectedRoute] = useState<RouteData | null>(null)
     const [mapLoaded, setMapLoaded] = useState(false)
     const [lastRefresh, setLastRefresh] = useState(new Date())
+    const [vehicleLocations, setVehicleLocations] = useState<any[]>([])
+    const vehicleMarkersRef = useRef<any[]>([])
     const mapRef = useRef<HTMLDivElement>(null)
     const mapInstanceRef = useRef<any>(null)
     const markersRef = useRef<any[]>([])
@@ -143,6 +145,12 @@ export default function DECollectionMapPage() {
             }
         })
         setRoutes(mapped)
+        const { data: liveLocations } = await supabase
+            .from('vehicle_locations')
+            .select('*, driver:profiles!driver_id(full_name)')
+            .order('updated_at', { ascending: false })
+        setVehicleLocations(liveLocations || [])
+        if (mapInstanceRef.current) updateVehicleMarkers(liveLocations || [])
         setLoading(false)
 
         // Update map markers if map is loaded
@@ -186,6 +194,7 @@ export default function DECollectionMapPage() {
         })
         infoWindowRef.current = new window.google.maps.InfoWindow()
         if (routes.length > 0) updateMarkers(routes)
+        if (vehicleLocations.length > 0) updateVehicleMarkers(vehicleLocations)
     }, [mapLoaded, profile])
 
     function getMarkerColor(route: RouteData): string {
@@ -275,9 +284,44 @@ export default function DECollectionMapPage() {
         })
     }
 
+    function updateVehicleMarkers(locations: any[]) {
+        if (!mapInstanceRef.current || !window.google?.maps) return
+        vehicleMarkersRef.current.forEach(m => m.setMap(null))
+        vehicleMarkersRef.current = []
+
+        locations.forEach(loc => {
+            const marker = new window.google.maps.Marker({
+                position: { lat: loc.latitude, lng: loc.longitude },
+                map: mapInstanceRef.current,
+                title: loc.driver?.full_name || 'Driver',
+                icon: {
+                    url: 'https://maps.google.com/mapfiles/kml/shapes/cabs.png',
+                    scaledSize: new window.google.maps.Size(32, 32),
+                },
+                zIndex: 999,
+            })
+
+            const age = Math.round((Date.now() - new Date(loc.updated_at).getTime()) / 60000)
+            const infoContent = `
+            <div style="font-family:'Manrope',sans-serif;padding:4px;min-width:180px">
+                <p style="font-weight:700;font-size:13px;margin:0 0 4px">${loc.driver?.full_name || 'Driver'}</p>
+                <p style="font-size:11px;color:#64748b;margin:0 0 2px">📍 ${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}</p>
+                ${loc.speed ? `<p style="font-size:11px;color:#64748b;margin:0 0 2px">🚛 ${loc.speed} km/h</p>` : ''}
+                <p style="font-size:10px;color:#94a3b8;margin:4px 0 0">Updated ${age < 1 ? 'just now' : age + ' min ago'}</p>
+            </div>
+        `
+            marker.addListener('click', () => {
+                infoWindowRef.current.setContent(infoContent)
+                infoWindowRef.current.open(mapInstanceRef.current, marker)
+            })
+            vehicleMarkersRef.current.push(marker)
+        })
+    }
+
     // Update markers when routes change
     useEffect(() => {
         if (mapInstanceRef.current && routes.length > 0) updateMarkers(routes)
+        if (vehicleLocations.length > 0) updateVehicleMarkers(vehicleLocations)
     }, [routes])
 
     const activeRoutes = routes.filter(r => r.status !== 'completed')
@@ -329,12 +373,13 @@ export default function DECollectionMapPage() {
             </div>
 
             {/* Stats row */}
-            <div className="a2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+            <div className="a2" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: 20 }}>
                 {[
                     { label: 'Total Routes', value: routes.length, color: '#00450d', bg: '#f0fdf4', icon: 'route' },
                     { label: 'In Progress', value: inProgress.length, color: '#1d4ed8', bg: '#eff6ff', icon: 'directions_car' },
                     { label: 'Unassigned', value: unassigned.length, color: '#d97706', bg: '#fefce8', icon: 'warning' },
                     { label: 'Completed', value: completedRoutes.length, color: '#00450d', bg: '#f0fdf4', icon: 'check_circle' },
+                    { label: 'Live Drivers', value: vehicleLocations.length, color: '#1d4ed8', bg: '#eff6ff', icon: 'gps_fixed' },
                 ].map(m => (
                     <div key={m.label} className="card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 36, height: 36, borderRadius: 10, background: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
