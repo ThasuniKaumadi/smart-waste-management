@@ -173,8 +173,11 @@ export default function CommercialTrackPage() {
         scriptRef.current = true
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
         if (!apiKey) { setMapError(true); return }
-        window.initMap = () => initMap(vehicleLocation, collectionStops)
+        window.initMap = () => setMapLoaded(true)
+        const existing = document.getElementById('gmap-commercial')
+        if (existing) { setMapLoaded(true); return }
         const script = document.createElement('script')
+        script.id = 'gmap-commercial'
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`
         script.async = true; script.defer = true
         script.onerror = () => setMapError(true)
