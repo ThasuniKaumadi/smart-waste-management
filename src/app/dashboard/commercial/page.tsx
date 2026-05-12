@@ -206,21 +206,6 @@ export default function CommercialDashboardPage() {
                 .a5 { animation: fadeUp 0.5s ease 0.25s both; }
             `}</style>
 
-      {/* Header */}
-      <div className="mb-8 a1">
-        <p className="text-xs font-bold uppercase mb-1"
-          style={{ letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope, sans-serif' }}>
-          Commercial Portal · ClearPath
-        </p>
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <h1 style={{ fontSize: '42px', fontWeight: 900, color: '#181c22', lineHeight: 1.1, fontFamily: 'Manrope, sans-serif' }}>
-            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'},{' '}
-            <span style={{ color: '#00450d' }}>{firstName}</span>
-          </h1>
-          <p className="text-sm" style={{ color: '#94a3b8' }}>{TODAY}</p>
-        </div>
-      </div>
-
       {loading ? (
         <div className="flex items-center justify-center py-32">
           <div className="w-8 h-8 border-2 rounded-full animate-spin"
