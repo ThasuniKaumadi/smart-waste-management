@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
+import DashboardLayout from '@/components/DashboardLayout'
 
 const DRIVER_NAV = [
     { label: 'Home', href: '/dashboard/driver', icon: 'dashboard' },
@@ -58,35 +59,14 @@ export default function DriverIncidentsPage() {
     }
 
     return (
-        <div style={{ minHeight: '100vh', background: '#f4f6f3', fontFamily: "'Inter',sans-serif" }}>
+        <DashboardLayout role="Driver" userName={profile?.full_name} navItems={DRIVER_NAV}>
             <style>{`
         .material-symbols-outlined{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;display:inline-block;vertical-align:middle;line-height:1;}
         .bento-card{background:white;border-radius:16px;box-shadow:0 10px 40px -10px rgba(24,28,34,0.08);border:1px solid rgba(0,69,13,0.04);overflow:hidden;}
         .status-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;font-family:'Manrope',sans-serif;letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap;}
         .incident-row{padding:16px 24px;border-bottom:1px solid rgba(0,69,13,0.04);display:flex;align-items:center;gap:16px;cursor:pointer;transition:background 0.15s;}
         .incident-row:hover{background:#f9fafb;} .incident-row:last-child{border-bottom:none;}
-        .nav-link{transition:color 0.2s,background 0.2s;text-decoration:none;}
-        .nav-link:hover{background:rgba(0,69,13,0.07);color:#00450d;}
       `}</style>
-
-            <nav style={{ background: 'white', borderBottom: '1px solid rgba(0,0,0,0.06)', padding: '0 32px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40, boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                    <Link href="/dashboard/driver" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '22px', color: '#00450d' }}>eco</span>
-                        <span style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800, fontSize: '16px', color: '#00450d' }}>EcoLedger</span>
-                    </Link>
-                    <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.1)' }} />
-                    <Link href="/dashboard/driver" className="nav-link" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px', borderRadius: '8px', color: '#717a6d', fontSize: '13px', fontWeight: 500 }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_back</span>Driver Dashboard
-                    </Link>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: 0 }}>{profile?.full_name}</p>
-                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'linear-gradient(135deg,#00450d,#1b5e20)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '13px', fontWeight: 700 }}>
-                        {profile?.full_name?.charAt(0) || 'D'}
-                    </div>
-                </div>
-            </nav>
 
             <main style={{ maxWidth: '860px', margin: '0 auto', padding: '32px 24px' }}>
                 <div style={{ marginBottom: '28px' }}>
@@ -180,6 +160,6 @@ export default function DriverIncidentsPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </DashboardLayout>
     )
 }

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { sendNotification } from '@/lib/notify'
+import DashboardLayout from '@/components/DashboardLayout'
 
 const DRIVER_NAV = [
     { label: 'Home', href: '/dashboard/driver', icon: 'dashboard' },
@@ -146,7 +147,7 @@ export default function BreakdownPage() {
     }
 
     return (
-        <div style={{ minHeight: '100vh', background: '#f4f6f3', fontFamily: "'Inter', sans-serif" }}>
+        <DashboardLayout role="Driver" userName={profile?.full_name} navItems={DRIVER_NAV}>
             <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Manrope:wght@400;600;700;800&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
@@ -155,8 +156,6 @@ export default function BreakdownPage() {
           font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
           display: inline-block; vertical-align: middle; line-height: 1;
         }
-        .nav-link { transition: color 0.2s, background 0.2s; text-decoration: none; }
-        .nav-link:hover { background: rgba(0,69,13,0.07); color: #00450d; }
         .breakdown-type-card {
           border: 1.5px solid #e4ede4; border-radius: 12px; padding: 14px 10px;
           cursor: pointer; transition: all 0.2s ease; background: #f9fbf9;
@@ -220,41 +219,6 @@ export default function BreakdownPage() {
                     {toast}
                 </div>
             )}
-
-            {/* Nav */}
-            <nav style={{
-                background: 'white', borderBottom: '1px solid rgba(0,0,0,0.06)',
-                padding: '0 32px', height: '64px', display: 'flex', alignItems: 'center',
-                justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40,
-                boxShadow: '0 1px 8px rgba(0,0,0,0.04)',
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                    <Link href="/dashboard/driver" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '22px', color: '#00450d' }}>eco</span>
-                        <span style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: '16px', color: '#00450d', letterSpacing: '-0.02em' }}>EcoLedger</span>
-                    </Link>
-                    <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.1)' }} />
-                    <Link href="/dashboard/driver" className="nav-link" style={{
-                        display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px',
-                        borderRadius: '8px', color: '#717a6d', fontSize: '13px', fontWeight: 500,
-                    }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_back</span>
-                        Driver Dashboard
-                    </Link>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22', margin: 0 }}>{profile?.full_name}</p>
-                        <p style={{ fontSize: '11px', color: '#717a6d', margin: 0 }}>Driver</p>
-                    </div>
-                    <div style={{
-                        width: '34px', height: '34px', borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #00450d, #1b5e20)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: 'white', fontSize: '13px', fontWeight: 700,
-                    }}>{profile?.full_name?.charAt(0) || 'D'}</div>
-                </div>
-            </nav>
 
             <main style={{ maxWidth: '860px', margin: '0 auto', padding: '32px 24px' }}>
 
@@ -499,6 +463,6 @@ export default function BreakdownPage() {
                     </div>
                 )}
             </main>
-        </div>
+        </DashboardLayout>
     )
 }
