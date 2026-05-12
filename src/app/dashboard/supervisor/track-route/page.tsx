@@ -70,17 +70,18 @@ export default function SupervisorTrackRoutePage() {
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
         if (!apiKey) { setMapsError(true); setMapReady(true); return }
         if (typeof window === 'undefined') return
-        if ((window as any).google?.maps) { initMap(); return }
+        if ((window as any).google?.maps) { setTimeout(() => initMap(), 100); return }
         const script = document.createElement('script')
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry`
         script.async = true; script.defer = true
-        script.onload = () => initMap()
+        script.onload = () => script.onload = () => setTimeout(() => initMap(), 100)
         script.onerror = () => { setMapsError(true); setMapReady(true) }
         document.head.appendChild(script)
     }, [])
 
     function initMap() {
-        if (!mapRef.current || mapInstanceRef.current) return
+        if (!mapRef.current) { setTimeout(() => initMap(), 200); return }
+        if (mapInstanceRef.current) return
         mapInstanceRef.current = new (window as any).google.maps.Map(mapRef.current, {
             center: { lat: 6.9271, lng: 79.8612 }, zoom: 13,
             styles: [{ featureType: 'poi', stylers: [{ visibility: 'off' }] }],
