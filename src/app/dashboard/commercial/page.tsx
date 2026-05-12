@@ -5,6 +5,19 @@ import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import DashboardLayout from '@/components/DashboardLayout'
 
+function timeGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good Morning'
+  if (h < 17) return 'Good Afternoon'
+  return 'Good Evening'
+}
+function greetingEmoji() {
+  const h = new Date().getHours()
+  if (h < 12) return '🌤️'
+  if (h < 17) return '☀️'
+  return '🌙'
+}
+
 const COMMERCIAL_NAV = [
   { label: 'Home', href: '/dashboard/commercial', icon: 'dashboard' },
   { label: 'Schedule', href: '/dashboard/commercial/schedule', icon: 'calendar_month' },
@@ -111,6 +124,19 @@ export default function CommercialDashboardPage() {
       navItems={COMMERCIAL_NAV}
       primaryAction={{ label: 'Track Vehicle', href: '/dashboard/commercial/track', icon: 'location_on' }}
     >
+      {/* Greeting */}
+      <div className="a1" style={{ marginBottom: 28 }}>
+        <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#6b7280', fontFamily: 'Manrope, sans-serif', margin: '0 0 6px' }}>
+          {greetingEmoji()} {timeGreeting()}
+        </p>
+        <h1 style={{ fontFamily: 'Manrope, sans-serif', fontSize: 46, fontWeight: 800, color: '#181c22', lineHeight: 1.1, margin: '0 0 6px' }}>
+          Welcome, <span style={{ color: '#00450d' }}>{profile?.organisation_name?.split(' ')[0] || profile?.full_name?.split(' ')[0] || 'Business'}</span>
+        </h1>
+        <p style={{ fontSize: 13, color: '#6b7280', margin: 0, fontFamily: 'Inter, sans-serif' }}>
+          {new Date().toLocaleDateString('en-LK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          {profile?.district && ` · ${profile.district}`}
+        </p>
+      </div>
       <style>{`
                 .material-symbols-outlined {
                     font-family: 'Material Symbols Outlined';
