@@ -190,14 +190,21 @@ export default function DriverRoutesPage() {
     }
     setLoading(false)
 
-    // Queue stops missing coordinates for geocoding after Maps JS API loads
+    // Geocode stops missing coordinates
     const missing = loadedStops.filter(s => !s.latitude || !s.longitude)
     if (missing.length > 0) {
-      setPendingGeocode(missing)
+      const supabase2 = createClient()
+      if (mapsLoaded) {
+        // Maps already loaded — geocode immediately
+        geocodeStops(missing, supabase2)
+      } else {
+        // Maps not yet loaded — queue for when it loads
+        setPendingGeocode(missing)
+      }
     }
   }
 
-  // Run geocoding once Maps JS API is ready (uses Geocoder class, works with referrer-restricted keys)
+  // Run geocoding once Maps JS API is ready (for queued stops)
   useEffect(() => {
     if (!mapsLoaded || pendingGeocode.length === 0) return
     const supabase = createClient()
