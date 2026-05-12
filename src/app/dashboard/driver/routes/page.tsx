@@ -30,7 +30,8 @@ interface Schedule {
 
 export default function DriverRoutesPage() {
   const [profile, setProfile] = useState<any>(null)
-  const [route, setRoute] = useState<Route | null>(null)
+  const [routes, setRoutes] = useState<Route[]>([])
+  const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   const [schedule, setSchedule] = useState<Schedule | null>(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
@@ -38,7 +39,7 @@ export default function DriverRoutesPage() {
   const [handoffCode, setHandoffCode] = useState<string | null>(null)
   const [toast, setToast] = useState('')
   const [blockchainTx, setBlockchainTx] = useState<string | null>(null)
-  const [streetStatuses, setStreetStatuses] = useState<Record<string, 'pending' | 'collected' | 'skipped'>>({})
+  const [streetStatuses, setStreetStatuses] = useState<Record<string, Record<string, 'pending' | 'collected' | 'skipped'>>>({})
   const [noteModal, setNoteModal] = useState<string | null>(null) // street name
   const [noteText, setNoteText] = useState('')
   const [streetNotes, setStreetNotes] = useState<Record<string, string>>({})
@@ -53,7 +54,7 @@ export default function DriverRoutesPage() {
 
   // Broadcast location every 30s when active
   useEffect(() => {
-    if (!route || route.status !== 'active') {
+    if (!selectedRoute || selectedRoute.status !== 'active') {
       if (locationIntervalRef.current) { clearInterval(locationIntervalRef.current); locationIntervalRef.current = null }
       return
     }
@@ -64,7 +65,7 @@ export default function DriverRoutesPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
         await supabase.from('vehicle_locations').upsert({
-          driver_id: user.id, route_id: route!.id,
+          driver_id: user.id, route_id: selectedRoute!.id,
           latitude: pos.coords.latitude, longitude: pos.coords.longitude,
           district: profile?.district || null, ward: profile?.ward || null,
           updated_at: new Date().toISOString(),
@@ -74,17 +75,17 @@ export default function DriverRoutesPage() {
     broadcastLocation()
     locationIntervalRef.current = setInterval(broadcastLocation, 30000)
     return () => { if (locationIntervalRef.current) { clearInterval(locationIntervalRef.current); locationIntervalRef.current = null } }
-  }, [route?.status, profile])
+  }, [selectedRoute?.status, profile])
 
   // Clear location when completed
   useEffect(() => {
-    if (route?.status === 'completed') {
+    if (selectedRoute?.status === 'completed') {
       const supabase = createClient()
       supabase.auth.getUser().then(({ data: { user } }) => {
         if (user) supabase.from('vehicle_locations').delete().eq('driver_id', user.id)
       })
     }
-  }, [route?.status])
+  }, [selectedRoute?.status])
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3500) }
 
@@ -112,7 +113,7 @@ export default function DriverRoutesPage() {
     }
 
     if (!routeData) { setLoading(false); return }
-    setRoute(routeData)
+    setSelectedRoute(routeData)
 
     if (routeData.schedule_id) {
       const { data: s } = await supabase.from('schedules').select('*').eq('id', routeData.schedule_id).single()
@@ -123,14 +124,14 @@ export default function DriverRoutesPage() {
 
   function getStreets(): string[] {
     if (!schedule?.streets) return []
-    const ward = route?.ward
+    const ward = selectedRoute?.ward
     if (ward && schedule.streets[ward]) return schedule.streets[ward]
     return Object.values(schedule.streets).flat()
   }
 
   const streets = getStreets()
-  const collectedCount = Object.values(streetStatuses).filter(s => s === 'collected').length
-  const skippedCount = Object.values(streetStatuses).filter(s => s === 'skipped').length
+  const collectedCount = Object.values(streetStatuses[selectedRoute?.id || ''] || {}).filter(s => s === 'collected').length
+  const skippedCount = Object.values(streetStatuses[selectedRoute?.id || ''] || {}).filter(s => s === 'skipped').length
   const pendingCount = streets.length - collectedCount - skippedCount
   const allDone = streets.length > 0 && pendingCount === 0
   const progress = streets.length > 0 ? Math.round((collectedCount / streets.length) * 100) : 0
@@ -139,40 +140,40 @@ export default function DriverRoutesPage() {
     ? schedule.custom_waste_type
     : schedule?.waste_type?.replace('_', ' ') || 'Mixed waste'
 
-  const isActive = route?.status === 'active'
-  const isPending = route?.status === 'pending'
-  const isCompleted = route?.status === 'completed'
+  const isActive = selectedRoute?.status === 'active'
+  const isPending = selectedRoute?.status === 'pending'
+  const isCompleted = selectedRoute?.status === 'completed'
 
   async function startRoute() {
-    if (!route) return
+    if (!selectedRoute) return
     setStarting(true)
     const supabase = createClient()
-    await supabase.from('routes').update({ status: 'active' }).eq('id', route.id)
-    setRoute(prev => prev ? { ...prev, status: 'active' } : prev)
+    await supabase.from('routes').update({ status: 'active' }).eq('id', selectedRoute!.id)
+    setSelectedRoute(prev => prev ? { ...prev, status: 'active' } : prev)
     showToast('Route started! Begin collections along your streets.')
     setStarting(false)
   }
 
   function markStreet(street: string, status: 'collected' | 'skipped') {
-    setStreetStatuses(prev => ({ ...prev, [street]: status }))
+    setStreetStatuses(prev => ({ ...prev, [selectedRoute!.id]: { ...prev[selectedRoute!.id], [street]: status } }))
     if (status === 'collected') showToast(`✓ ${street} marked as collected`)
     else showToast(`Skipped: ${street}`)
   }
 
   async function dispatchRoute() {
-    if (!route) return
+    if (!selectedRoute) return
     setDispatching(true)
     try {
       // Log to blockchain
-      const tx = await logCollectionOnChain(route.id, profile?.id || '', 'completed')
+      const tx = await logCollectionOnChain(selectedRoute!.id, profile?.id || '', 'completed')
       if (tx) {
         setBlockchainTx(tx)
         const supabase = createClient()
         // Save a single collection_stop record as the route-level log
         await supabase.from('collection_stops').insert({
-          route_id: route.id,
-          address: route.route_name,
-          road_name: route.route_name,
+          route_id: selectedRoute!.id,
+          address: selectedRoute!.route_name,
+          road_name: selectedRoute!.route_name,
           stop_order: 1,
           status: 'completed',
           completed_at: new Date().toISOString(),
@@ -184,14 +185,14 @@ export default function DriverRoutesPage() {
       // Generate handoff code
       const res = await fetch('/api/handoff/create', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ route_id: route.id, driver_id: profile?.id }),
+        body: JSON.stringify({ route_id: selectedRoute!.id, driver_id: profile?.id }),
       })
       const data = await res.json()
       if (res.ok && data.code) {
         setHandoffCode(data.code)
         const supabase = createClient()
-        await supabase.from('routes').update({ status: 'completed' }).eq('id', route.id)
-        setRoute(prev => prev ? { ...prev, status: 'completed' } : prev)
+        await supabase.from('routes').update({ status: 'completed' }).eq('id', selectedRoute!.id)
+        setSelectedRoute(prev => prev ? { ...prev, status: 'completed' } : prev)
         showToast(tx ? 'Route dispatched & recorded on blockchain ✓' : 'Route dispatched!')
       } else {
         showToast('Error creating handoff code')
@@ -275,7 +276,7 @@ export default function DriverRoutesPage() {
         <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
           <div style={{ width: 28, height: 28, border: '2px solid #00450d', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
         </div>
-      ) : !route ? (
+      ) : !selectedRoute ? (
         <div className="card a2" style={{ padding: '60px 24px', textAlign: 'center' }}>
           <span className="msf" style={{ fontSize: 40, color: '#d1d5db', display: 'block', marginBottom: 12 }}>route</span>
           <p style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 17, color: '#181c22', marginBottom: 6 }}>No route assigned today</p>
@@ -283,25 +284,52 @@ export default function DriverRoutesPage() {
         </div>
       ) : (
         <>
+          {/* Route selector tabs */}
+          {routes.length > 1 && (
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", marginBottom: 20, paddingBottom: 4 }}>
+              {routes.map(r => (
+                <button key={r.id}
+                  onClick={() => {
+                    setSelectedRoute(r)
+                    if (r.schedule_id) {
+                      const supabase = createClient()
+                      supabase.from("schedules").select("*").eq("id", r.schedule_id).single().then(({ data }) => setSchedule(data))
+                    } else { setSchedule(null) }
+                  }}
+                  style={{
+                    padding: "10px 18px", borderRadius: 12, whiteSpace: "nowrap", cursor: "pointer",
+                    background: selectedRoute?.id === r.id ? "#00450d" : "white",
+                    color: selectedRoute?.id === r.id ? "white" : "#181c22",
+                    border: "1.5px solid rgba(0,69,13,0.15)",
+                    fontFamily: "Manrope,sans-serif", fontWeight: 700, fontSize: 13,
+                    flexShrink: 0
+                  }}>
+                  {r.route_name}
+                  <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7, textTransform: "capitalize" }}>{r.status}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Route summary card */}
           <div className="a2" style={{ background: '#00450d', borderRadius: 20, padding: 24, color: 'white', marginBottom: 20, position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(163,246,156,0.07)' }} />
             <div style={{ position: 'relative', zIndex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
                 <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(163,246,156,0.7)', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', margin: 0 }}>
-                  {new Date(route.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  {new Date(selectedRoute!.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
                 </p>
                 <span style={{ padding: '4px 12px', borderRadius: 99, fontSize: 11, fontWeight: 700, fontFamily: 'Manrope,sans-serif', background: isActive ? 'rgba(163,246,156,0.2)' : isCompleted ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.1)', color: isActive ? '#a3f69c' : 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   {isActive ? '● Active' : isCompleted ? '✓ Completed' : '○ Not Started'}
                 </span>
               </div>
-              <h2 style={{ fontSize: 24, fontWeight: 900, fontFamily: 'Manrope,sans-serif', margin: '0 0 12px' }}>{route.route_name}</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 900, fontFamily: 'Manrope,sans-serif', margin: '0 0 12px' }}>{selectedRoute!.route_name}</h2>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: streets.length > 0 ? 16 : 0 }}>
-                {route.ward && <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}><span className="msf" style={{ fontSize: 14 }}>location_on</span>{route.ward}</span>}
+                {selectedRoute!.ward && <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}><span className="msf" style={{ fontSize: 14 }}>location_on</span>{selectedRoute!.ward}</span>}
                 {schedule && <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 5, textTransform: 'capitalize' }}><span className="msf" style={{ fontSize: 14 }}>delete</span>{wasteLabel}</span>}
                 {schedule?.collection_time && <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}><span className="msf" style={{ fontSize: 14 }}>schedule</span>{schedule.collection_time}</span>}
-                {route.shift && <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif' }}>{route.shift === 'night' ? '🌙' : '☀️'} {route.shift}</span>}
-                {route.vehicle_number && <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}><span className="msf" style={{ fontSize: 14 }}>local_shipping</span>{route.vehicle_number}</span>}
+                {selectedRoute!.shift && <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif' }}>{selectedRoute!.shift === 'night' ? '🌙' : '☀️'} {selectedRoute!.shift}</span>}
+                {selectedRoute!.vehicle_number && <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: 'Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}><span className="msf" style={{ fontSize: 14 }}>local_shipping</span>{selectedRoute!.vehicle_number}</span>}
               </div>
               {streets.length > 0 && isActive && (
                 <>
@@ -373,7 +401,7 @@ export default function DriverRoutesPage() {
                 zoom={14}
               >
                 {streets.map((street, idx) => {
-                  const status = streetStatuses[street] || 'pending'
+                  const status = (streetStatuses[selectedRoute!.id] || {})[street] || 'pending'
                   return (
                     <Marker
                       key={street}
@@ -397,7 +425,7 @@ export default function DriverRoutesPage() {
                             <p style={{ fontSize: 12, color: '#555', margin: '0 0 8px' }}>{street}</p>
                             {status === 'pending' && isActive && (
                               <button
-                                onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(street + ', ' + (route?.ward || '') + ', Colombo, Sri Lanka')}&travelmode=driving`, '_blank')}
+                                onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(street + ', ' + (selectedRoute?.ward || '') + ', Colombo, Sri Lanka')}&travelmode=driving`, '_blank')}
                                 style={{ padding: '5px 12px', background: '#1565c0', color: 'white', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                                 Navigate Here
                               </button>
@@ -440,7 +468,7 @@ export default function DriverRoutesPage() {
               </div>
             ) : (
               streets.map((street, idx) => {
-                const status = streetStatuses[street] || 'pending'
+                const status = (streetStatuses[selectedRoute!.id] || {})[street] || 'pending'
                 const isDone = status === 'collected'
                 const isSkipped = status === 'skipped'
                 const note = streetNotes[street]
@@ -469,7 +497,7 @@ export default function DriverRoutesPage() {
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       {/* Navigate */}
                       {!isDone && !isSkipped && (
-                        <button onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(street + ', ' + (route.ward || '') + ', Colombo, Sri Lanka')}&travelmode=driving`, '_blank')}
+                        <button onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(street + ', ' + (selectedRoute!.ward || '') + ', Colombo, Sri Lanka')}&travelmode=driving`, '_blank')}
                           className="btn-nav" title="Open Google Maps">
                           <span className="msf" style={{ fontSize: 13 }}>navigation</span>Nav
                         </button>
@@ -489,7 +517,7 @@ export default function DriverRoutesPage() {
 
                       {/* Undo */}
                       {isActive && (isDone || isSkipped) && (
-                        <button onClick={() => setStreetStatuses(prev => { const n = { ...prev }; delete n[street]; return n })} className="btn-undo">
+                        <button onClick={() => setStreetStatuses(prev => { const r = { ...prev[selectedRoute!.id] }; delete r[street]; return { ...prev, [selectedRoute!.id]: r } })} className="btn-undo">
                           <span className="msf" style={{ fontSize: 12 }}>undo</span>Undo
                         </button>
                       )}
@@ -566,3 +594,10 @@ export default function DriverRoutesPage() {
     </DashboardLayout>
   )
 }
+
+
+
+
+
+
+
