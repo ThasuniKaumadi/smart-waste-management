@@ -9,7 +9,7 @@ import DashboardLayout from '@/components/DashboardLayout'
 import AnnouncementsWidget from '@/components/AnnouncementsWidget'
 
 const SUPERVISOR_NAV = [
-  { label: 'Overview', href: '/dashboard/supervisor', icon: 'dashboard', section: 'Menu' },
+  { label: 'Home', href: '/dashboard/supervisor', icon: 'dashboard', section: 'Menu' },
   { label: 'Schedules', href: '/dashboard/supervisor/schedules', icon: 'calendar_month', section: 'Menu' },
   { label: 'Routes', href: '/dashboard/supervisor/routes', icon: 'route', section: 'Menu' },
   { label: 'Track Route', href: '/dashboard/supervisor/track-route', icon: 'gps_fixed', section: 'Menu' },
