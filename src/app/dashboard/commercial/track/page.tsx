@@ -81,7 +81,7 @@ export default function CommercialTrackPage() {
         const uid = userId || user?.id
 
         const { data: loc } = await supabase.from('vehicle_locations').select('*')
-            .eq('route_id', route.id).order('updated_at', { ascending: false }).limit(1).maybeSingle()
+            .eq('driver_id', route.driver_id).order('updated_at', { ascending: false }).limit(1).maybeSingle()
         setVehicleLocation(loc)
         if (loc) setLastUpdated(new Date(loc.updated_at))
 
@@ -92,7 +92,7 @@ export default function CommercialTrackPage() {
         if (intervalRef.current) clearInterval(intervalRef.current)
         intervalRef.current = setInterval(async () => {
             const { data: fresh } = await supabase.from('vehicle_locations').select('*')
-                .eq('route_id', route.id).order('updated_at', { ascending: false }).limit(1).maybeSingle()
+                .eq('driver_id', route.driver_id).order('updated_at', { ascending: false }).limit(1).maybeSingle()
             if (fresh) {
                 setVehicleLocation(fresh)
                 setLastUpdated(new Date(fresh.updated_at))
