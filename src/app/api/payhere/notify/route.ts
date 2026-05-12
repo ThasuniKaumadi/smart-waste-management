@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     // status_code 2 = success
     if (status_code === '2') {
         await supabase
-            .from('billing_records')
+            .from('invoices')
             .update({
                 status: 'paid',
                 payhere_payment_id: payment_id,
@@ -43,12 +43,12 @@ export async function POST(req: NextRequest) {
             .eq('payhere_order_id', order_id)
     } else if (status_code === '-1') {
         await supabase
-            .from('billing_records')
+            .from('invoices')
             .update({ status: 'cancelled' })
             .eq('payhere_order_id', order_id)
     } else if (status_code === '-2') {
         await supabase
-            .from('billing_records')
+            .from('invoices')
             .update({ status: 'failed' })
             .eq('payhere_order_id', order_id)
     }
