@@ -5,12 +5,13 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const COMMERCIAL_NAV = [
-    { label: 'Overview', href: '/dashboard/commercial', icon: 'dashboard' },
+    { label: 'Home', href: '/dashboard/commercial', icon: 'dashboard' },
     { label: 'Schedule', href: '/dashboard/commercial/schedule', icon: 'calendar_month' },
     { label: 'Track Vehicle', href: '/dashboard/commercial/track', icon: 'location_on' },
     { label: 'Bins', href: '/dashboard/commercial/bins', icon: 'delete' },
     { label: 'Collection History', href: '/dashboard/commercial/collection-history', icon: 'history' },
     { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
+    { label: 'Report Issue', href: '/dashboard/commercial/report', icon: 'report' },
     { label: 'Rate Service', href: '/dashboard/commercial/feedback', icon: 'star' },
     { label: 'Profile', href: '/dashboard/commercial/profile', icon: 'manage_accounts' },
 ]
@@ -358,10 +359,16 @@ export default function CommercialSchedulePage() {
                                                 </span>
                                             </div>
                                         ) : (
-                                            <button onClick={() => confirmHandover(nextSchedule.id, 'confirmed')} disabled={confirmingId === nextSchedule.id}
-                                                className="confirm-btn" style={{ background: 'white', color: '#00450d' }}>
-                                                <span className="msf" style={{ fontSize: 14 }}>thumb_up</span>I'll have waste ready
-                                            </button>
+                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                <button onClick={() => confirmHandover(nextSchedule.id, 'confirmed')} disabled={confirmingId === nextSchedule.id}
+                                                    className="confirm-btn" style={{ background: 'white', color: '#00450d', border: '1.5px solid rgba(0,69,13,0.3)' }}>
+                                                    <span className="msf" style={{ fontSize: 14 }}>thumb_up</span>I'll have my waste ready
+                                                </button>
+                                                <button onClick={() => confirmHandover(nextSchedule.id, 'unable')} disabled={confirmingId === nextSchedule.id}
+                                                    className="confirm-btn" style={{ background: 'white', color: '#ba1a1a', border: '1.5px solid rgba(186,26,26,0.2)' }}>
+                                                    <span className="msf" style={{ fontSize: 14 }}>cancel</span>Unable to hand over
+                                                </button>
+                                            </div>
                                         )}
                                     </>
                                 ) : (
