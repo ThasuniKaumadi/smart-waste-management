@@ -5,6 +5,17 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 
+const DRIVER_NAV = [
+    { label: 'Home', href: '/dashboard/driver', icon: 'dashboard' },
+    { label: 'My Routes', href: '/dashboard/driver/routes', icon: 'route' },
+    { label: 'Collections', href: '/dashboard/driver/collections', icon: 'local_shipping' },
+    { label: 'Disposal', href: '/dashboard/driver/disposal', icon: 'delete_sweep' },
+    { label: 'Fuel Log', href: '/dashboard/driver/fuel-log', icon: 'local_gas_station' },
+    { label: 'Breakdown', href: '/dashboard/driver/breakdown', icon: 'car_crash' },
+    { label: 'Incidents', href: '/dashboard/driver/incidents', icon: 'warning' },
+    { label: 'Location', href: '/dashboard/driver/location', icon: 'location_on' },
+]
+
 interface FuelLog {
     id: string
     vehicle_number: string

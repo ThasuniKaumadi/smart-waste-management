@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const DRIVER_NAV = [
-  { label: 'Overview', href: '/dashboard/driver', icon: 'dashboard' },
+  { label: 'Home', href: '/dashboard/driver', icon: 'dashboard' },
   { label: 'My Routes', href: '/dashboard/driver/routes', icon: 'route' },
   { label: 'Collections', href: '/dashboard/driver/collections', icon: 'local_shipping' },
   { label: 'Disposal', href: '/dashboard/driver/disposal', icon: 'delete_sweep' },

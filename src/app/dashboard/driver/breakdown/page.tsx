@@ -6,6 +6,17 @@ import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { sendNotification } from '@/lib/notify'
 
+const DRIVER_NAV = [
+    { label: 'Home', href: '/dashboard/driver', icon: 'dashboard' },
+    { label: 'My Routes', href: '/dashboard/driver/routes', icon: 'route' },
+    { label: 'Collections', href: '/dashboard/driver/collections', icon: 'local_shipping' },
+    { label: 'Disposal', href: '/dashboard/driver/disposal', icon: 'delete_sweep' },
+    { label: 'Fuel Log', href: '/dashboard/driver/fuel-log', icon: 'local_gas_station' },
+    { label: 'Breakdown', href: '/dashboard/driver/breakdown', icon: 'car_crash' },
+    { label: 'Incidents', href: '/dashboard/driver/incidents', icon: 'warning' },
+    { label: 'Location', href: '/dashboard/driver/location', icon: 'location_on' },
+]
+
 const BREAKDOWN_TYPES = [
     { value: 'flat_tire', label: 'Flat Tire', icon: 'tire_repair' },
     { value: 'engine_failure', label: 'Engine Failure', icon: 'build' },
