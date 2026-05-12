@@ -124,7 +124,6 @@ export default function ContractorSchedulesPage() {
         const { data: driversData } = await supabase
             .from('profiles')
             .select('id, full_name')
-            .eq('contractor_id', user.id)
             .eq('role', 'driver')
             .order('full_name')
         setDrivers(driversData || [])
