@@ -68,11 +68,15 @@ export default function SupervisorTrackRoutePage() {
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
         if (!apiKey) { setMapsError(true); setMapReady(true); return }
         if (typeof window === 'undefined') return
-        if ((window as any).google?.maps) { setTimeout(() => initMap(), 100); return }
+        if ((window as any).google?.maps) {
+            setTimeout(() => initMap(), 300)
+            return
+        }
         const script = document.createElement('script')
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry`
-        script.async = true; script.defer = true
-        script.onload = () => script.onload = () => setTimeout(() => initMap(), 100)
+        script.async = true
+        script.defer = true
+        script.onload = () => setTimeout(() => initMap(), 300)
         script.onerror = () => { setMapsError(true); setMapReady(true) }
         document.head.appendChild(script)
     }, [])
