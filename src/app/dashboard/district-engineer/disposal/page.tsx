@@ -132,7 +132,7 @@ export default function DEDisposalPage() {
             supabase.from('schedules').select('id, waste_type, custom_waste_type, scheduled_date, wards, ward').eq('district', district).eq('status', 'published').order('scheduled_date', { ascending: false }).limit(20),
             // Fetch all approved recycling partners and facility operators
             supabase.from('profiles').select('id, full_name, organisation_name, role, district, phone').in('role', ['recycling_partner', 'facility_operator']).eq('is_approved', true).order('organisation_name'),
-            supabase.from('disposal_records').select('*').eq('district', district).order('created_at', { ascending: false }),
+            supabase.from('disposal_schedules').select('*').eq('district', district).order('created_at', { ascending: false }),
             supabase.from('disposal_discrepancies').select('*').order('flagged_at', { ascending: false }),
         ])
 
