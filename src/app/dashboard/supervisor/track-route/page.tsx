@@ -20,7 +20,11 @@ const SUPERVISOR_NAV = [
 
 interface Route {
     id: string; route_name: string; ward: string; district: string
-    vehicle_number: string; status: string; shift: string; date: string
+    vehicle_number: string
+    status: string
+    shift: string
+    date: string
+    driver_id: string | null
     driver: { full_name: string } | null
 }
 interface Stop {
@@ -113,13 +117,8 @@ export default function SupervisorTrackRoutePage() {
         const { data: stopsData } = await supabase.from('collection_stops').select('*')
             .eq('route_id', routeId).order('stop_order', { ascending: true })
         setStops(stopsData || [])
-        // Get the driver_id for this route first, then find their location
         const selectedR = routes.find(r => r.id === routeId)
-        const { data: assignment } = await supabase
-            .from('driver_assignments').select('driver_id')
-            .eq('route_id', routeId).limit(1).maybeSingle()
-
-        const driverId = assignment?.driver_id
+        const driverId = selectedR?.driver_id || null
         const { data: locData } = driverId
             ? await supabase.from('vehicle_locations').select('*')
                 .eq('driver_id', driverId).order('updated_at', { ascending: false }).limit(1).maybeSingle()
