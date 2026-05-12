@@ -5,12 +5,13 @@ import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 
 const COMMERCIAL_NAV = [
-    { label: 'Overview', href: '/dashboard/commercial', icon: 'dashboard' },
+    { label: 'Home', href: '/dashboard/commercial', icon: 'dashboard' },
     { label: 'Schedule', href: '/dashboard/commercial/schedule', icon: 'calendar_month' },
     { label: 'Track Vehicle', href: '/dashboard/commercial/track', icon: 'location_on' },
     { label: 'Bins', href: '/dashboard/commercial/bins', icon: 'delete' },
     { label: 'Collection History', href: '/dashboard/commercial/collection-history', icon: 'history' },
     { label: 'Billing', href: '/dashboard/commercial/billing', icon: 'payments' },
+    { label: 'Report Issue', href: '/dashboard/commercial/report', icon: 'report' },
     { label: 'Rate Service', href: '/dashboard/commercial/feedback', icon: 'star' },
     { label: 'Profile', href: '/dashboard/commercial/profile', icon: 'manage_accounts' },
 ]
@@ -226,7 +227,7 @@ export default function CommercialTrackPage() {
             {/* Header */}
             <div className="a1" style={{ marginBottom: '20px' }}>
                 <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.2em', color: '#717a6d', fontFamily: 'Manrope,sans-serif', textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Live Tracking · ClearPath
+                    Live Tracking
                 </p>
                 <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                     <h1 style={{ fontSize: '42px', fontWeight: 900, color: '#181c22', lineHeight: 1.1, fontFamily: 'Manrope,sans-serif' }}>
