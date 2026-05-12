@@ -150,7 +150,6 @@ function CancelModal({ schedule, wasteLabel, onConfirm, onClose, saving }: {
       onClick={onClose}>
       <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 460, overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.2)' }}
         onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div style={{ padding: '22px 26px 18px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -164,8 +163,6 @@ function CancelModal({ schedule, wasteLabel, onConfirm, onClose, saving }: {
             </div>
           </div>
         </div>
-
-        {/* Body */}
         <div style={{ padding: '20px 26px' }}>
           <div style={{ padding: '12px 14px', borderRadius: 10, background: '#fef2f2', border: '1px solid rgba(186,26,26,0.15)', marginBottom: 18, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
             <span className="msym" style={{ color: '#ba1a1a', fontSize: 16, flexShrink: 0, marginTop: 1 }}>info</span>
@@ -173,13 +170,10 @@ function CancelModal({ schedule, wasteLabel, onConfirm, onClose, saving }: {
               This schedule will be marked as cancelled. Residents and commercial establishments will be notified and will see the cancellation on their schedule view.
             </p>
           </div>
-
           <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6b7280', fontFamily: 'Manrope,sans-serif', marginBottom: 7 }}>
             Cancellation Note <span style={{ color: '#d1d5db', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— optional</span>
           </label>
-          <textarea
-            value={note}
-            onChange={e => setNote(e.target.value)}
+          <textarea value={note} onChange={e => setNote(e.target.value)}
             placeholder="e.g. Vehicle unavailable due to maintenance. Collection rescheduled for next week."
             rows={3}
             style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontSize: 13, color: '#181c22', fontFamily: 'Inter,sans-serif', background: '#fafafa', outline: 'none', resize: 'vertical', boxSizing: 'border-box', transition: 'all 0.2s', lineHeight: 1.5 }}
@@ -187,8 +181,6 @@ function CancelModal({ schedule, wasteLabel, onConfirm, onClose, saving }: {
             onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none' }}
           />
         </div>
-
-        {/* Actions */}
         <div style={{ padding: '0 26px 22px', display: 'flex', gap: 10 }}>
           <button onClick={() => onConfirm(note)} disabled={saving}
             style={{ flex: 1, background: '#ba1a1a', color: 'white', border: 'none', borderRadius: 10, padding: '12px', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: saving ? 0.7 : 1, transition: 'all 0.2s' }}>
@@ -209,9 +201,10 @@ function CancelModal({ schedule, wasteLabel, onConfirm, onClose, saving }: {
 export default function DESchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState<null | 'draft' | 'publish'>(null)
+  const [saving, setSaving] = useState<null | 'draft' | 'publish' | 'update'>(null)
   const [cancellingSaving, setCancellingSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
   const [profile, setProfile] = useState<any>(null)
   const [message, setMessage] = useState('')
   const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active')
@@ -278,16 +271,78 @@ export default function DESchedulesPage() {
   function resetForm() {
     setSelectedWards([]); setWardStreets({})
     setFormData({ waste_type: '', custom_waste_type: '', collection_day: '', collection_time: '08:00', frequency: '', scheduled_date: '', notes: '', supervisor_id: '' })
-    setMessage('')
+    setMessage(''); setEditingSchedule(null)
   }
 
   function discard() { resetForm(); setShowForm(false) }
+
+  function openEdit(schedule: Schedule) {
+    // Pre-fill form with existing schedule data
+    const scheduleWards = schedule.wards?.length > 0 ? schedule.wards : schedule.ward ? [schedule.ward] : []
+    setSelectedWards(scheduleWards)
+
+    // Convert streets Record<string, string[]> back to Record<string, string> for the input fields
+    const streetsAsString: Record<string, string> = {}
+    if (schedule.streets) {
+      Object.entries(schedule.streets).forEach(([ward, streetArr]) => {
+        streetsAsString[ward] = Array.isArray(streetArr) ? streetArr.join(', ') : ''
+      })
+    }
+    setWardStreets(streetsAsString)
+
+    setFormData({
+      waste_type: schedule.waste_type || '',
+      custom_waste_type: schedule.custom_waste_type || '',
+      collection_day: schedule.collection_day || '',
+      collection_time: schedule.collection_time || '08:00',
+      frequency: schedule.frequency || '',
+      scheduled_date: schedule.scheduled_date || '',
+      notes: schedule.notes || '',
+      supervisor_id: schedule.supervisor_id || '',
+    })
+    setEditingSchedule(schedule)
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   async function handleSubmit(publishNow: boolean) {
     if (!formData.waste_type) { setMessage('Please select a waste type'); return }
     if (formData.waste_type === 'other' && !formData.custom_waste_type.trim()) { setMessage('Please describe the waste type'); return }
     if (!formData.collection_day) { setMessage('Please select a collection day'); return }
     if (!formData.scheduled_date) { setMessage('Please select a scheduled date'); return }
+
+    // EDIT mode
+    if (editingSchedule) {
+      setSaving('update'); setMessage('')
+      const supabase = createClient()
+      const streetsJson = parseStreetsForSave(selectedWards, wardStreets)
+      const { error } = await supabase.from('schedules').update({
+        wards: selectedWards.length > 0 ? selectedWards : null,
+        ward: selectedWards.length === 1 ? selectedWards[0] : null,
+        streets: Object.keys(streetsJson).length > 0 ? streetsJson : {},
+        waste_type: formData.waste_type,
+        custom_waste_type: formData.waste_type === 'other' ? formData.custom_waste_type.trim() : null,
+        collection_day: formData.collection_day, collection_time: formData.collection_time,
+        frequency: formData.frequency || null, scheduled_date: formData.scheduled_date,
+        notes: formData.notes, supervisor_id: formData.supervisor_id || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', editingSchedule.id)
+      if (error) { setMessage('Error: ' + error.message); setSaving(null); return }
+
+      // Notify if it was already published
+      if (editingSchedule.status === 'published') {
+        const wasteLabel = formData.waste_type === 'other' ? formData.custom_waste_type : WASTE_TYPES.find(w => w.value === formData.waste_type)?.label || formData.waste_type
+        const dateStr = new Date(formData.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+        const wardStr = selectedWards.length > 0 ? selectedWards.join(', ') : profile?.district
+        await sendNotification({ roles: ['resident', 'supervisor', 'contractor'], title: `📅 Schedule Updated — ${wasteLabel}`, body: `${wasteLabel} collection on ${formData.collection_day} ${dateStr} at ${formData.collection_time} has been updated. Area: ${wardStr}`, type: 'schedule_published', url: '/dashboard/resident/schedules' })
+      }
+
+      setMessage('Schedule updated successfully.')
+      setShowForm(false); resetForm(); loadData(); setSaving(null)
+      return
+    }
+
+    // CREATE mode
     setSaving(publishNow ? 'publish' : 'draft'); setMessage('')
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -319,24 +374,12 @@ export default function DESchedulesPage() {
   async function cancelSchedule(schedule: Schedule, note: string) {
     setCancellingSaving(true)
     const supabase = createClient()
-    await supabase.from('schedules').update({
-      published: false,
-      status: 'cancelled',
-      cancellation_note: note.trim() || null,
-    }).eq('id', schedule.id)
-    // Notify residents and commercial
+    await supabase.from('schedules').update({ published: false, status: 'cancelled', cancellation_note: note.trim() || null }).eq('id', schedule.id)
     const wasteLabel = getWasteLabel(schedule)
     const dateStr = new Date(schedule.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-    const body = note.trim()
-      ? `${wasteLabel} collection on ${dateStr} has been cancelled. Note: ${note.trim()}`
-      : `${wasteLabel} collection on ${dateStr} has been cancelled.`
-    await sendNotification({
-      roles: ['resident', 'supervisor', 'contractor'],
-      title: `❌ Collection Cancelled — ${wasteLabel}`,
-      body, type: 'schedule_cancelled', url: '/dashboard/resident/schedules',
-    })
-    setCancellingSaving(false)
-    setCancelTarget(null)
+    const body = note.trim() ? `${wasteLabel} collection on ${dateStr} has been cancelled. Note: ${note.trim()}` : `${wasteLabel} collection on ${dateStr} has been cancelled.`
+    await sendNotification({ roles: ['resident', 'supervisor', 'contractor'], title: `❌ Collection Cancelled — ${wasteLabel}`, body, type: 'schedule_cancelled', url: '/dashboard/resident/schedules' })
+    setCancellingSaving(false); setCancelTarget(null)
     setMessage('Schedule cancelled. Residents and commercial establishments have been notified.')
     loadData()
   }
@@ -442,13 +485,9 @@ export default function DESchedulesPage() {
 
       {/* Cancel modal */}
       {cancelTarget && (
-        <CancelModal
-          schedule={cancelTarget}
-          wasteLabel={getWasteLabel(cancelTarget)}
+        <CancelModal schedule={cancelTarget} wasteLabel={getWasteLabel(cancelTarget)}
           onConfirm={(note) => cancelSchedule(cancelTarget, note)}
-          onClose={() => setCancelTarget(null)}
-          saving={cancellingSaving}
-        />
+          onClose={() => setCancelTarget(null)} saving={cancellingSaving} />
       )}
 
       {/* ── Header ── */}
@@ -461,7 +500,7 @@ export default function DESchedulesPage() {
             </h1>
             <p style={{ fontSize: 13, color: '#717a6d', marginTop: 6 }}>{profile?.district} · Waste collection timetables</p>
           </div>
-          <button onClick={() => { setShowForm(!showForm); if (showForm) resetForm() }}
+          <button onClick={() => { if (showForm) { resetForm(); setShowForm(false) } else { setEditingSchedule(null); setShowForm(true) } }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 12, background: showForm ? '#f1f5f9' : '#00450d', color: showForm ? '#64748b' : 'white', border: 'none', cursor: 'pointer', fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 14, transition: 'all 0.2s' }}>
             <span className="msym" style={{ fontSize: 18 }}>{showForm ? 'close' : 'add'}</span>
             {showForm ? 'Cancel' : 'New Schedule'}
@@ -499,20 +538,29 @@ export default function DESchedulesPage() {
         </div>
       )}
 
-      {/* ── Create form ── */}
+      {/* ── Create / Edit form ── */}
       {showForm && (
         <div className="card mb-8 slide-down">
           <div style={{ padding: '20px 28px 16px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 17, color: '#181c22', margin: '0 0 3px' }}>New Schedule</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 3 }}>
+                {editingSchedule && (
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="msym" style={{ fontSize: 15, color: '#1d4ed8' }}>edit</span>
+                  </div>
+                )}
+                <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 17, color: '#181c22', margin: 0 }}>
+                  {editingSchedule ? 'Edit Schedule' : 'New Schedule'}
+                </h3>
+              </div>
               <p style={{ fontSize: 12, color: '#717a6d', margin: 0 }}>
                 <span style={{ fontWeight: 600, color: '#00450d' }}>{profile?.district}</span>
                 {selectedWards.length > 0 && <> · <span style={{ color: '#374151' }}>{selectedWards.join(', ')}</span></>}
               </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 99, background: '#fefce8', border: '1px solid rgba(217,119,6,0.2)' }}>
-              <span className="msym" style={{ fontSize: 13, color: '#d97706' }}>edit_note</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706', fontFamily: 'Manrope,sans-serif' }}>Draft</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 99, background: editingSchedule ? '#eff6ff' : '#fefce8', border: `1px solid ${editingSchedule ? 'rgba(29,78,216,0.2)' : 'rgba(217,119,6,0.2)'}` }}>
+              <span className="msym" style={{ fontSize: 13, color: editingSchedule ? '#1d4ed8' : '#d97706' }}>{editingSchedule ? 'edit' : 'edit_note'}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: editingSchedule ? '#1d4ed8' : '#d97706', fontFamily: 'Manrope,sans-serif' }}>{editingSchedule ? 'Editing' : 'Draft'}</span>
             </div>
           </div>
           <div style={{ padding: '24px 28px' }}>
@@ -595,15 +643,30 @@ export default function DESchedulesPage() {
               <p style={{ fontSize: 12, color: '#374151', margin: 0 }}>{visibilityNote()}</p>
             </div>
             <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button type="button" disabled={!!saving} onClick={() => handleSubmit(true)} className="btn-publish">
-                {saving === 'publish' ? <><svg style={{ width: 16, height: 16, animation: 'spin .8s linear infinite' }} fill="none" viewBox="0 0 24 24"><circle style={{ opacity: .25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path style={{ opacity: .75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Publishing…</> : <><span className="msym" style={{ fontSize: 18 }}>publish</span>Create and Publish</>}
-              </button>
-              <button type="button" disabled={!!saving} onClick={() => handleSubmit(false)} className="btn-draft">
-                {saving === 'draft' ? <><svg style={{ width: 16, height: 16, animation: 'spin .8s linear infinite' }} fill="none" viewBox="0 0 24 24"><circle style={{ opacity: .25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path style={{ opacity: .75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Saving…</> : <><span className="msym" style={{ fontSize: 18 }}>save</span>Save as Draft</>}
-              </button>
-              <button type="button" disabled={!!saving} onClick={discard} className="btn-discard">
-                <span className="msym" style={{ fontSize: 16 }}>delete_outline</span>Discard
-              </button>
+              {editingSchedule ? (
+                // Edit mode buttons
+                <>
+                  <button type="button" disabled={!!saving} onClick={() => handleSubmit(false)} className="btn-publish">
+                    {saving === 'update' ? <><svg style={{ width: 16, height: 16, animation: 'spin .8s linear infinite' }} fill="none" viewBox="0 0 24 24"><circle style={{ opacity: .25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path style={{ opacity: .75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Saving…</> : <><span className="msym" style={{ fontSize: 18 }}>save</span>Save Changes</>}
+                  </button>
+                  <button type="button" disabled={!!saving} onClick={discard} className="btn-discard">
+                    <span className="msym" style={{ fontSize: 16 }}>close</span>Discard Changes
+                  </button>
+                </>
+              ) : (
+                // Create mode buttons
+                <>
+                  <button type="button" disabled={!!saving} onClick={() => handleSubmit(true)} className="btn-publish">
+                    {saving === 'publish' ? <><svg style={{ width: 16, height: 16, animation: 'spin .8s linear infinite' }} fill="none" viewBox="0 0 24 24"><circle style={{ opacity: .25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path style={{ opacity: .75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Publishing…</> : <><span className="msym" style={{ fontSize: 18 }}>publish</span>Create and Publish</>}
+                  </button>
+                  <button type="button" disabled={!!saving} onClick={() => handleSubmit(false)} className="btn-draft">
+                    {saving === 'draft' ? <><svg style={{ width: 16, height: 16, animation: 'spin .8s linear infinite' }} fill="none" viewBox="0 0 24 24"><circle style={{ opacity: .25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path style={{ opacity: .75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Saving…</> : <><span className="msym" style={{ fontSize: 18 }}>save</span>Save as Draft</>}
+                  </button>
+                  <button type="button" disabled={!!saving} onClick={discard} className="btn-discard">
+                    <span className="msym" style={{ fontSize: 16 }}>delete_outline</span>Discard
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -684,24 +747,19 @@ export default function DESchedulesPage() {
               return (
                 <div key={schedule.id} className={`sched-card ${isArchived ? 'archived' : ''} ${isCancelled ? 'cancelled' : ''}`}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                    {/* Icon */}
                     <div style={{ width: 42, height: 42, borderRadius: 12, background: isCancelled ? '#fef2f2' : waste.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                       <span className="msym-fill" style={{ color: isCancelled ? '#ba1a1a' : waste.color, fontSize: 20 }}>
                         {isCancelled ? 'cancel' : waste.icon}
                       </span>
                     </div>
 
-                    {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                         <span style={{ fontSize: 15, fontWeight: 700, color: isCancelled ? '#94a3b8' : '#181c22', fontFamily: 'Manrope,sans-serif', textDecoration: isCancelled ? 'line-through' : 'none' }}>{wasteLabel}</span>
-
-                        {/* Status badge */}
                         {isArchived && <span className="badge" style={{ background: '#f1f5f9', color: '#64748b' }}><span className="msym" style={{ fontSize: 11 }}>archive</span>Archived</span>}
                         {isCancelled && <span className="badge" style={{ background: '#fef2f2', color: '#ba1a1a' }}><span className="msym-fill" style={{ fontSize: 11 }}>cancel</span>Cancelled</span>}
                         {isPublished && <span className="badge" style={{ background: '#f0fdf4', color: '#00450d' }}><span className="msym-fill" style={{ fontSize: 11 }}>check_circle</span>Published</span>}
                         {isDraft && <span className="badge" style={{ background: '#fefce8', color: '#d97706' }}><span className="msym" style={{ fontSize: 11 }}>edit_note</span>Draft</span>}
-
                         {supName && <span className="badge" style={{ background: '#f5f3ff', color: '#7c3aed' }}><span className="msym" style={{ fontSize: 11 }}>person</span>{supName}</span>}
                         {routes.length > 0 && !isCancelled && (
                           <span className="badge" style={{ background: unassigned > 0 ? '#fef2f2' : '#f0fdf4', color: unassigned > 0 ? '#ba1a1a' : '#00450d' }}>
@@ -711,7 +769,6 @@ export default function DESchedulesPage() {
                         )}
                       </div>
 
-                      {/* Meta */}
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', fontSize: 12, color: isCancelled ? '#94a3b8' : '#717a6d' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span className="msym" style={{ fontSize: 13 }}>calendar_today</span>{schedule.collection_day} · {schedule.collection_time}</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span className="msym" style={{ fontSize: 13 }}>event</span>{new Date(schedule.scheduled_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
@@ -723,7 +780,6 @@ export default function DESchedulesPage() {
                         {schedule.notes && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontStyle: 'italic' }}><span className="msym" style={{ fontSize: 13 }}>notes</span>{schedule.notes}</span>}
                       </div>
 
-                      {/* Street chips */}
                       {streetsData && streetCount > 0 && !isCancelled && (
                         <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                           {Object.values(streetsData).flat().map(street => (
@@ -732,7 +788,6 @@ export default function DESchedulesPage() {
                         </div>
                       )}
 
-                      {/* Cancellation note */}
                       {isCancelled && schedule.cancellation_note && (
                         <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#fef2f2', border: '1px solid rgba(186,26,26,0.12)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                           <span className="msym" style={{ fontSize: 13, color: '#ba1a1a', flexShrink: 0, marginTop: 1 }}>info</span>
@@ -750,7 +805,6 @@ export default function DESchedulesPage() {
                         </div>
                       )}
 
-                      {/* Routes expand — not for cancelled */}
                       {routes.length > 0 && !isCancelled && (
                         <button onClick={() => setExpandedSchedule(isExpanded ? null : schedule.id)}
                           style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 99, border: `1.5px solid ${isExpanded ? '#00450d' : 'rgba(0,69,13,0.15)'}`, background: isExpanded ? '#00450d' : 'white', color: isExpanded ? 'white' : '#00450d', fontSize: 11, fontWeight: 700, fontFamily: 'Manrope,sans-serif', cursor: 'pointer', transition: 'all 0.2s' }}>
@@ -759,7 +813,14 @@ export default function DESchedulesPage() {
                         </button>
                       )}
 
-                      {/* Archived → Restore */}
+                      {/* Edit button — available for draft and published */}
+                      {(isDraft || isPublished) && !isArchived && (
+                        <button onClick={() => openEdit(schedule)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 99, border: '1.5px solid rgba(29,78,216,0.2)', background: editingSchedule?.id === schedule.id ? '#1d4ed8' : 'white', color: editingSchedule?.id === schedule.id ? 'white' : '#1d4ed8', fontSize: 11, fontWeight: 700, fontFamily: 'Manrope,sans-serif', cursor: 'pointer', transition: 'all 0.2s' }}>
+                          <span className="msym" style={{ fontSize: 13 }}>edit</span>Edit
+                        </button>
+                      )}
+
                       {isArchived && (
                         <button onClick={() => restoreSchedule(schedule.id)}
                           style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 99, border: '1.5px solid rgba(0,69,13,0.2)', color: '#00450d', background: 'white', fontSize: 11, fontWeight: 700, fontFamily: 'Manrope,sans-serif', cursor: 'pointer' }}>
@@ -767,7 +828,6 @@ export default function DESchedulesPage() {
                         </button>
                       )}
 
-                      {/* Cancelled → Restore */}
                       {isCancelled && (
                         <button onClick={() => restoreSchedule(schedule.id)}
                           style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 99, border: '1.5px solid rgba(0,69,13,0.2)', color: '#00450d', background: 'white', fontSize: 11, fontWeight: 700, fontFamily: 'Manrope,sans-serif', cursor: 'pointer' }}>
@@ -775,7 +835,6 @@ export default function DESchedulesPage() {
                         </button>
                       )}
 
-                      {/* Draft → Publish + Delete */}
                       {isDraft && (
                         <>
                           <button onClick={() => {
@@ -791,7 +850,6 @@ export default function DESchedulesPage() {
                         </>
                       )}
 
-                      {/* Published → Cancel + Archive */}
                       {isPublished && (
                         <>
                           <button onClick={() => setCancelTarget(schedule)}
@@ -808,7 +866,6 @@ export default function DESchedulesPage() {
                     </div>
                   </div>
 
-                  {/* Expanded routes */}
                   {isExpanded && routes.length > 0 && (
                     <div className="slide-down" style={{ marginTop: 14 }}>
                       <div className="divider" />
@@ -845,7 +902,7 @@ export default function DESchedulesPage() {
           <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: '#f9fdf9', border: '1px solid rgba(0,69,13,0.08)' }}>
             <span className="msym" style={{ color: '#00450d', fontSize: 15, flexShrink: 0 }}>campaign</span>
             <p style={{ fontSize: 12, color: '#717a6d', margin: 0 }}>
-              Publishing notifies residents, commercial establishments, supervisors and contractors in <strong style={{ color: '#374151' }}>{profile?.district}</strong>. Cancelling notifies all users with the reason provided. Published schedules can be cancelled or archived but not deleted.
+              Publishing notifies residents, commercial establishments, supervisors and contractors in <strong style={{ color: '#374151' }}>{profile?.district}</strong>. Cancelling notifies all users with the reason provided. Published schedules can be edited, cancelled or archived but not deleted.
             </p>
           </div>
         )}
