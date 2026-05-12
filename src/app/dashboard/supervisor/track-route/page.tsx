@@ -110,15 +110,24 @@ export default function SupervisorTrackRoutePage() {
         const { data: stopsData } = await supabase.from('collection_stops').select('*')
             .eq('route_id', routeId).order('stop_order', { ascending: true })
         setStops(stopsData || [])
-        const { data: locData } = await supabase.from('vehicle_locations').select('*')
-            .eq('route_id', routeId).order('updated_at', { ascending: false }).limit(1).maybeSingle()
+        // Get the driver_id for this route first, then find their location
+        const selectedR = routes.find(r => r.id === routeId)
+        const { data: assignment } = await supabase
+            .from('driver_assignments').select('driver_id')
+            .eq('route_id', routeId).limit(1).maybeSingle()
+
+        const driverId = assignment?.driver_id
+        const { data: locData } = driverId
+            ? await supabase.from('vehicle_locations').select('*')
+                .eq('driver_id', driverId).order('updated_at', { ascending: false }).limit(1).maybeSingle()
+            : { data: null }
         setVehicleLocation(locData)
         if (!mapsError && mapInstanceRef.current) updateMapMarkers(stopsData || [], locData)
         setLoadingRoute(false)
         if (intervalRef.current) clearInterval(intervalRef.current)
         intervalRef.current = setInterval(async () => {
             const { data: newLoc } = await supabase.from('vehicle_locations').select('*')
-                .eq('route_id', routeId).order('updated_at', { ascending: false }).limit(1).maybeSingle()
+                .eq('driver_id', driverId).order('updated_at', { ascending: false }).limit(1).maybeSingle()
             if (newLoc) {
                 setVehicleLocation(newLoc)
                 if (mapInstanceRef.current && vehicleMarkerRef.current)
