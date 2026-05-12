@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 import { logCollectionOnChain } from '@/lib/blockchain'
+import { GoogleMap, useJsApiLoader, Marker, Polyline, InfoWindow } from '@react-google-maps/api'
 
 const DRIVER_NAV = [
   { label: 'Home', href: '/dashboard/driver', icon: 'dashboard' },
@@ -42,6 +43,11 @@ export default function DriverRoutesPage() {
   const [noteText, setNoteText] = useState('')
   const [streetNotes, setStreetNotes] = useState<Record<string, string>>({})
   const locationIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [selectedMarker, setSelectedMarker] = useState<string | null>(null)
+  const [mapCenter, setMapCenter] = useState({ lat: 6.9271, lng: 79.8612 })
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
+  })
 
   useEffect(() => { loadData() }, [])
 
@@ -351,6 +357,59 @@ export default function DriverRoutesPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* In-app Map */}
+          {isLoaded && streets.length > 0 && (
+            <div className="a3 card" style={{ marginBottom: 20, overflow: 'hidden' }}>
+              <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(0,69,13,0.06)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="msf" style={{ fontSize: 16, color: '#00450d' }}>map</span>
+                <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 700, fontSize: 15, color: '#181c22', margin: 0 }}>Route Map</h3>
+                <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 4 }}>Tap a pin to navigate</span>
+              </div>
+              <GoogleMap
+                mapContainerStyle={{ width: '100%', height: '340px' }}
+                center={mapCenter}
+                zoom={14}
+              >
+                {streets.map((street, idx) => {
+                  const status = streetStatuses[street] || 'pending'
+                  return (
+                    <Marker
+                      key={street}
+                      position={mapCenter} // fallback — replace with real coords if available
+                      label={{ text: String(idx + 1), color: 'white', fontWeight: 'bold', fontSize: '11px' }}
+                      title={street}
+                      icon={{
+                        path: (window as any).google.maps.SymbolPath.CIRCLE,
+                        scale: 13,
+                        fillColor: status === 'collected' ? '#00450d' : status === 'skipped' ? '#ba1a1a' : '#1565c0',
+                        fillOpacity: 1,
+                        strokeColor: 'white',
+                        strokeWeight: 2,
+                      }}
+                      onClick={() => setSelectedMarker(street)}
+                    >
+                      {selectedMarker === street && (
+                        <InfoWindow onCloseClick={() => setSelectedMarker(null)}>
+                          <div style={{ fontFamily: 'Manrope,sans-serif', minWidth: 160 }}>
+                            <p style={{ fontWeight: 700, fontSize: 13, margin: '0 0 4px' }}>Stop {idx + 1}</p>
+                            <p style={{ fontSize: 12, color: '#555', margin: '0 0 8px' }}>{street}</p>
+                            {status === 'pending' && isActive && (
+                              <button
+                                onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(street + ', ' + (route?.ward || '') + ', Colombo, Sri Lanka')}&travelmode=driving`, '_blank')}
+                                style={{ padding: '5px 12px', background: '#1565c0', color: 'white', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                                Navigate Here
+                              </button>
+                            )}
+                          </div>
+                        </InfoWindow>
+                      )}
+                    </Marker>
+                  )
+                })}
+              </GoogleMap>
             </div>
           )}
 
