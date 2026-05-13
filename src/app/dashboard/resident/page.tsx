@@ -200,7 +200,10 @@ export default function ResidentDashboardPage() {
       // Load active trucks in resident's district
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       const { data: locs } = await supabase
-        .from('vehicle_locations').select('*').gte('updated_at', twentyFourHoursAgo)
+        .from('vehicle_locations')
+        .select('*, routes!inner(status)')
+        .gte('updated_at', twentyFourHoursAgo)
+        .eq('routes.status', 'active')
 
       if (locs && locs.length > 0) {
         // Enrich with route + stop progress
