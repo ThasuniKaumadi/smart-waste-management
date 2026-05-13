@@ -37,7 +37,7 @@ export default function EngineerRoutesPage() {
         setProfile(p)
         const { data: routesData } = await supabase
             .from('routes')
-            .select('*, contractor:contractor_id(full_name, organisation_name), district_engineer:district_engineer_id(full_name)')
+            .select('*, contractor:contractor_id(full_name, organisation_name)')
             .order('created_at', { ascending: false })
         setRoutes(routesData || [])
         setLoading(false)
