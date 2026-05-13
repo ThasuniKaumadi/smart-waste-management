@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
@@ -197,7 +197,7 @@ export default function DriverDisposalPage() {
                         .eq('id', newRecord.id)
                 }
             } catch (e) {
-                // Blockchain recording failed silently — record still saved
+                // Blockchain recording failed silently â€” record still saved
                 console.log('Blockchain recording skipped:', e)
             }
         }
@@ -393,7 +393,7 @@ export default function DriverDisposalPage() {
                                                 </span>
                                             </div>
                                             <p className="text-xs" style={{ color: '#717a6d' }}>
-                                                {record.ward || record.district || 'Unknown'} · {record.vehicle_number || 'No vehicle'} · {new Date(record.created_at).toLocaleDateString('en-GB')}
+                                                {record.ward || record.district || 'Unknown'} Â· {record.vehicle_number || 'No vehicle'} Â· {new Date(record.created_at).toLocaleDateString('en-GB')}
                                             </p>
                                             {record.blockchain_tx && (
                                                 <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: '#7c3aed' }}>
@@ -591,7 +591,7 @@ export default function DriverDisposalPage() {
                                             <option value="">None</option>
                                             {routes.map(r => (
                                                 <option key={r.id} value={r.id}>
-                                                    {r.route_name} — {r.ward || r.district}
+                                                    {r.route_name} â€” {r.ward || r.district}
                                                 </option>
                                             ))}
                                         </select>
