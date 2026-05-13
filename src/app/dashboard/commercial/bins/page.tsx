@@ -1,4 +1,4 @@
-ï»¿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
@@ -73,7 +73,7 @@ export default function CommercialBinsPage() {
             const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
             setProfile(p)
             const [binsRes, requestsRes] = await Promise.all([
-                supabase.from('collection_stops').select('*').eq('commercial_id', user.id).eq('is_commercial', true).order('created_at', { ascending: true }),
+                supabase.from('commercial_bin_requests').select('*').eq('commercial_id', user.id).eq('status', 'approved').order('created_at', { ascending: true }),
                 supabase.from('commercial_bin_requests').select('*').eq('commercial_id', user.id).order('created_at', { ascending: false }),
             ])
             setBins(binsRes.data ?? [])
@@ -171,7 +171,7 @@ export default function CommercialBinsPage() {
                     {submitSuccess && (
                         <div className="slide-in" style={{ borderRadius: '14px', padding: '14px 18px', marginBottom: '20px', background: '#f0fdf4', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <span className="msf" style={{ color: '#00450d', fontSize: '20px' }}>check_circle</span>
-                            <p style={{ fontSize: '13px', fontWeight: 600, color: '#00450d', fontFamily: 'Manrope,sans-serif' }}>Request submitted â€” your District Engineer will review it shortly.</p>
+                            <p style={{ fontSize: '13px', fontWeight: 600, color: '#00450d', fontFamily: 'Manrope,sans-serif' }}>Request submitted — your District Engineer will review it shortly.</p>
                         </div>
                     )}
 
@@ -185,7 +185,7 @@ export default function CommercialBinsPage() {
                         </div>
                     )}
 
-                    {/* Main layout â€” two columns when form is open */}
+                    {/* Main layout — two columns when form is open */}
                     <div className="a2" style={{ display: 'grid', gridTemplateColumns: showForm ? '1fr 360px' : '1fr', gap: '20px', alignItems: 'start' }}>
 
                         {/* Left: inventory */}
@@ -258,7 +258,7 @@ export default function CommercialBinsPage() {
                                                         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                                                             <div>
                                                                 <p style={{ fontSize: '32px', fontWeight: 900, color: w.dark, fontFamily: 'Manrope,sans-serif', lineHeight: 1 }}>{qty}</p>
-                                                                <p style={{ fontSize: '11px', color: w.color, opacity: 0.8 }}>bin{qty > 1 ? 's' : ''} Â· {bin.frequency?.replace(/_/g, ' ') || 'scheduled'}</p>
+                                                                <p style={{ fontSize: '11px', color: w.color, opacity: 0.8 }}>bin{qty > 1 ? 's' : ''} · {bin.frequency?.replace(/_/g, ' ') || 'scheduled'}</p>
                                                             </div>
                                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                                                                 <span style={{ fontSize: '9px', fontWeight: 700, padding: '3px 8px', borderRadius: '99px', background: 'white', color: w.color, fontFamily: 'Manrope,sans-serif', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
@@ -267,7 +267,7 @@ export default function CommercialBinsPage() {
                                                                 {bin.blockchain_tx && (
                                                                     <a href={`https://amoy.polygonscan.com/tx/${bin.blockchain_tx}`} target="_blank" rel="noopener noreferrer"
                                                                         style={{ fontSize: '9px', fontWeight: 700, padding: '3px 8px', borderRadius: '99px', background: 'white', color: '#7c3aed', fontFamily: 'Manrope,sans-serif', textDecoration: 'none' }}>
-                                                                        Chain â†—
+                                                                        Chain ?
                                                                     </a>
                                                                 )}
                                                             </div>
@@ -303,8 +303,8 @@ export default function CommercialBinsPage() {
                                                     <div style={{ flex: 1, minWidth: 0 }}>
                                                         <p style={{ fontSize: '13px', fontWeight: 600, color: '#181c22' }}>{rt?.label || req.request_type}</p>
                                                         <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                                                            {req.quantity && req.quantity > 1 && `${req.quantity}Ã— `}{req.bin_size || ''}{req.waste_type && ` ${req.waste_type}`}
-                                                            {' Â· '}{new Date(req.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                            {req.quantity && req.quantity > 1 && `${req.quantity}× `}{req.bin_size || ''}{req.waste_type && ` ${req.waste_type}`}
+                                                            {' · '}{new Date(req.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                         </p>
                                                         {req.admin_notes && <p style={{ fontSize: '11px', color: '#00450d', fontWeight: 600, marginTop: '3px' }}>DE: {req.admin_notes}</p>}
                                                     </div>
@@ -317,7 +317,7 @@ export default function CommercialBinsPage() {
                                     </div>
                                     <div style={{ padding: '12px 22px', borderTop: '1px solid rgba(0,69,13,0.06)', background: '#f9f9ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <span className="msf" style={{ color: '#94a3b8', fontSize: '14px' }}>info</span>
-                                        <p style={{ fontSize: '11px', color: '#717a6d' }}>Changes take effect from the next billing cycle Â· CMC EcoLedger 2026</p>
+                                        <p style={{ fontSize: '11px', color: '#717a6d' }}>Changes take effect from the next billing cycle · CMC EcoLedger 2026</p>
                                     </div>
                                 </div>
                             )}
@@ -348,7 +348,7 @@ export default function CommercialBinsPage() {
                                     </div>
                                 </div>
 
-                                {/* Current bin â€” remove/change */}
+                                {/* Current bin — remove/change */}
                                 {(reqType === 'remove' || reqType === 'change_size' || reqType === 'change_type') && (
                                     <div style={{ marginBottom: '18px', paddingBottom: '18px', borderBottom: '1px dashed rgba(0,69,13,0.1)' }}>
                                         <span className="field-label">Current bin</span>
@@ -370,7 +370,7 @@ export default function CommercialBinsPage() {
                                     </div>
                                 )}
 
-                                {/* New waste type â€” add/change_type */}
+                                {/* New waste type — add/change_type */}
                                 {(reqType === 'add' || reqType === 'change_type') && (
                                     <div style={{ marginBottom: '18px' }}>
                                         <span className="field-label">{reqType === 'change_type' ? 'New type' : 'Waste type'}</span>
@@ -387,7 +387,7 @@ export default function CommercialBinsPage() {
                                     </div>
                                 )}
 
-                                {/* Bin size â€” add/change_size */}
+                                {/* Bin size — add/change_size */}
                                 {(reqType === 'add' || reqType === 'change_size') && (
                                     <div style={{ marginBottom: '18px' }}>
                                         <span className="field-label">{reqType === 'change_size' ? 'New size' : 'Bin size'}</span>
@@ -396,17 +396,17 @@ export default function CommercialBinsPage() {
                                                 <button key={s} className={`size-pill ${binSize === s ? 'on' : ''}`} onClick={() => setBinSize(s)}>{s}</button>
                                             ))}
                                         </div>
-                                        <p style={{ fontSize: '10px', color: '#94a3b8' }}>120L cafÃ© Â· 240L restaurant Â· 660L hotel Â· 1100L supermarket</p>
+                                        <p style={{ fontSize: '10px', color: '#94a3b8' }}>120L café · 240L restaurant · 660L hotel · 1100L supermarket</p>
                                     </div>
                                 )}
 
-                                {/* Quantity â€” add/remove */}
+                                {/* Quantity — add/remove */}
                                 {(reqType === 'add' || reqType === 'remove') && (
                                     <div style={{ marginBottom: '18px' }}>
                                         <span className="field-label">Quantity</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                             <button onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                                                style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1.5px solid rgba(0,69,13,0.15)', background: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00450d', fontWeight: 700 }}>âˆ’</button>
+                                                style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1.5px solid rgba(0,69,13,0.15)', background: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00450d', fontWeight: 700 }}>-</button>
                                             <span style={{ fontSize: '20px', fontWeight: 900, color: '#181c22', fontFamily: 'Manrope,sans-serif', minWidth: '24px', textAlign: 'center' }}>{quantity}</span>
                                             <button onClick={() => setQuantity(q => Math.min(10, q + 1))}
                                                 style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1.5px solid rgba(0,69,13,0.15)', background: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00450d', fontWeight: 700 }}>+</button>
